@@ -1,3 +1,4 @@
+// app/login/page.js
 'use client';
 
 import { useState, useEffect } from "react";
@@ -5,17 +6,20 @@ import { useRouter } from "next/navigation";
 import { useForm } from 'react-hook-form';
 import Image from 'next/image';
 import { toast } from 'react-toastify';
-import { FaEnvelope, FaIdCard, FaSpinner, FaCheckCircle } from 'react-icons/fa';
+import { FaEnvelope, FaIdCard, FaSpinner, FaCheckCircle, FaUserShield, FaUserGraduate } from 'react-icons/fa';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
 import { supabase } from '@/lib/supabaseClient';
 import { logOtpGeneration, getClientIP } from '@/utils/auditLog';
+import { useAdminAuth } from '@/hooks/useAdminAuth'; // Add this import
 
 export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [clientIP, setClientIP] = useState('unknown');
   const [alreadyVoted, setAlreadyVoted] = useState(false);
+  const [userType, setUserType] = useState(null); // 'voter' or 'admin'
   const router = useRouter();
+  const { login: adminLogin } = useAdminAuth(); // Add this line
 
   const {
     register,
@@ -49,74 +53,92 @@ export default function Login() {
     getIP();
   }, []);
 
-  // Check if voter has already voted when email/schoolId changes
-// In the Login component, update the checkIfVoted function
-useEffect(() => {
-  const checkIfVoted = async () => {
-    if (watchedEmail && watchedSchoolId) {
-      try {
-        // First find the voter
-        const { data: voter, error: voterError } = await supabase
-          .from('voters')
-          .select('id, has_voted, voted_at') // Include has_voted and voted_at
-          .eq('email', watchedEmail.toLowerCase())
-          .eq('school_id', watchedSchoolId)
-          .maybeSingle();
+  // Check user type (admin or voter) when email/schoolId changes
+  useEffect(() => {
+    const checkUserType = async () => {
+      if (watchedEmail && watchedSchoolId) {
+        try {
+          const cleanEmail = watchedEmail.toLowerCase().trim();
+          const cleanSchoolId = watchedSchoolId.trim().padStart(8, '0');
+          
+          // First check if user is admin
+          const { data: admin, error: adminError } = await supabase
+            .from('admins')
+            .select('*')
+            .eq('email', cleanEmail)
+            .eq('school_id', cleanSchoolId)
+            .maybeSingle();
 
-        if (voter && !voterError) {
-          // Check both sources: has_voted flag OR existing votes
-          let hasVoted = false;
-          
-          // Check 1: has_voted column
-          if (voter.has_voted === true) {
-            hasVoted = true;
-          } else {
-            // Check 2: votes table as fallback
-            const { data: existingVote } = await supabase
-              .from('votes')
-              .select('id')
-              .eq('voter_id', voter.id)
-              .maybeSingle();
+          if (admin && !adminError) {
+            setUserType('admin');
+            setAlreadyVoted(false);
+            return;
+          }
+
+          // If not admin, check if voter exists
+          const { data: voter, error: voterError } = await supabase
+            .from('voters')
+            .select('id, has_voted, voted_at, email, school_id, name')
+            .eq('email', cleanEmail)
+            .eq('school_id', cleanSchoolId)
+            .maybeSingle();
+
+          if (voter && !voterError) {
+            setUserType('voter');
             
-            hasVoted = !!existingVote;
+            // Check if voter has already voted
+            let hasVoted = false;
             
-            // If votes exist but has_voted is false, update it
-            if (hasVoted && !voter.has_voted) {
-              await supabase
-                .from('voters')
-                .update({ 
-                  has_voted: true,
-                  voted_at: new Date().toISOString()
-                })
-                .eq('id', voter.id);
+            if (voter.has_voted === true) {
+              hasVoted = true;
+            } else {
+              // Check votes table as fallback
+              const { data: existingVote } = await supabase
+                .from('votes')
+                .select('id')
+                .eq('voter_id', voter.id)
+                .maybeSingle();
+              
+              hasVoted = !!existingVote;
+              
+              if (hasVoted && !voter.has_voted) {
+                await supabase
+                  .from('voters')
+                  .update({ 
+                    has_voted: true,
+                    voted_at: new Date().toISOString()
+                  })
+                  .eq('id', voter.id);
+              }
             }
+            
+            setAlreadyVoted(hasVoted);
+            
+            if (hasVoted) {
+              localStorage.setItem('has_voted', 'true');
+              localStorage.setItem('voted_voter_id', voter.id);
+            }
+          } else {
+            setUserType(null);
+            setAlreadyVoted(false);
           }
-          
-          setAlreadyVoted(hasVoted);
-          
-          if (hasVoted) {
-            // Store in localStorage for quick access
-            localStorage.setItem('has_voted', 'true');
-            localStorage.setItem('voted_voter_id', voter.id);
-          }
-        } else {
+        } catch (error) {
+          console.error('Error checking user type:', error);
+          setUserType(null);
           setAlreadyVoted(false);
         }
-      } catch (error) {
-        console.error('Error checking vote status:', error);
+      } else {
+        setUserType(null);
         setAlreadyVoted(false);
       }
-    } else {
-      setAlreadyVoted(false);
-    }
-  };
+    };
 
-  const timeoutId = setTimeout(() => {
-    checkIfVoted();
-  }, 500);
+    const timeoutId = setTimeout(() => {
+      checkUserType();
+    }, 500);
 
-  return () => clearTimeout(timeoutId);
-}, [watchedEmail, watchedSchoolId]);
+    return () => clearTimeout(timeoutId);
+  }, [watchedEmail, watchedSchoolId]);
 
   // Hash function for OTP
   const hashCode = async (code) => {
@@ -127,374 +149,206 @@ useEffect(() => {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   };
 
-  // Generate and send OTP to voter email
-// In your login page, update the sendOtpCode function
-// Generate and send OTP to voter email
-// Generate and send OTP to voter email
-// Generate and send OTP to voter email
-// Generate and send OTP to voter email
-const sendOtpCode = async (email, schoolId) => {
-  try {
-    // First, validate inputs
-    if (!email || !schoolId) {
-      throw new Error('Email and School ID are required');
-    }
-
-    // Clean and normalize inputs
-    const cleanEmail = email.toLowerCase().trim();
-    const cleanSchoolId = schoolId.trim().padStart(8, '0'); // Ensure 8 digits with leading zeros
-    
-    console.log('Looking for voter with:', { 
-      email: cleanEmail, 
-      schoolId: cleanSchoolId 
-    });
-
-    // Try multiple strategies to find the voter
-    let voter = null;
-    let voterError = null;
-    
-    // Strategy 1: Exact match
-    const { data: exactMatch, error: exactError } = await supabase
-      .from('voters')
-      .select('*')
-      .eq('email', cleanEmail)
-      .eq('school_id', cleanSchoolId)
-      .maybeSingle();
-    
-    if (exactMatch) {
-      voter = exactMatch;
-      voterError = exactError;
-      console.log('Found voter with exact match');
-    } 
-    
-    // Strategy 2: Try with school_id only (if exact match failed)
-    if (!voter) {
-      console.log('Exact match failed, trying school_id only...');
-      const { data: schoolIdMatch, error: schoolIdError } = await supabase
-        .from('voters')
-        .select('*')
-        .eq('school_id', cleanSchoolId)
-        .maybeSingle();
+  // Handle admin login
+  const handleAdminLogin = async (email, schoolId) => {
+    try {
+      const result = await adminLogin(email, schoolId);
       
-      if (schoolIdMatch) {
-        voter = schoolIdMatch;
-        voterError = schoolIdError;
-        console.log('Found voter by school_id:', schoolIdMatch.email);
+      if (result.success) {
+        toast.success('✅ Welcome Admin! Redirecting to admin panel...');
+        setTimeout(() => {
+          router.push('/admin/manage-voters');
+        }, 1500);
+      } else {
+        toast.error(result.error || 'Invalid admin credentials');
       }
+    } catch (error) {
+      console.error('Admin login error:', error);
+      toast.error('Error during admin login');
     }
-    
-    // Strategy 3: Try with email only (if previous strategies failed)
-    if (!voter) {
-      console.log('School ID match failed, trying email only...');
-      // Try exact email first
-      let { data: emailMatch, error: emailError } = await supabase
+  };
+
+  // Generate and send OTP to voter email
+  const sendOtpCode = async (email, schoolId) => {
+    try {
+      const cleanEmail = email.toLowerCase().trim();
+      const cleanSchoolId = schoolId.trim().padStart(8, '0');
+
+      // Check if voter exists
+      const { data: voter, error: voterError } = await supabase
         .from('voters')
         .select('*')
         .eq('email', cleanEmail)
+        .eq('school_id', cleanSchoolId)
         .maybeSingle();
-      
-      // If not found, try partial email match (in case of @regent.edu vs @regent.edu.gh)
-      if (!emailMatch) {
-        console.log('Exact email not found, trying partial match...');
-        const emailPrefix = cleanEmail.split('@')[0];
-        const { data: partialMatch } = await supabase
-          .from('voters')
-          .select('*')
-          .ilike('email', `${emailPrefix}@%`)
-          .maybeSingle();
+
+      if (voterError || !voter) {
+        await logOtpGeneration({
+          voter_id: null,
+          email: email,
+          ip_address: clientIP,
+          success: false
+        });
+        throw new Error('Voter not found. Please check your email and school ID.');
+      }
+
+      // Check if voter has already voted
+      if (voter.has_voted === true) {
+        await logOtpGeneration({
+          voter_id: voter.id,
+          email: email,
+          ip_address: clientIP,
+          success: false,
+          error: 'Already voted'
+        });
         
-        if (partialMatch) {
-          emailMatch = partialMatch;
-          console.log('Found voter by partial email:', partialMatch.email);
-        }
+        localStorage.setItem('has_voted', 'true');
+        localStorage.setItem('voted_voter_id', voter.id);
+        
+        throw new Error('❌ You have already cast your vote. Voting is only allowed once per voter.');
       }
-      
-      if (emailMatch) {
-        voter = emailMatch;
-        voterError = emailError;
+
+      // Check votes table as fallback
+      const { data: existingVote } = await supabase
+        .from('votes')
+        .select('id')
+        .eq('voter_id', voter.id)
+        .maybeSingle();
+
+      if (existingVote) {
+        await supabase
+          .from('voters')
+          .update({ 
+            has_voted: true,
+            voted_at: new Date().toISOString()
+          })
+          .eq('id', voter.id);
+        
+        throw new Error('❌ You have already cast your vote. Voting is only allowed once per voter.');
       }
-    }
 
-    console.log('Voter query result:', { voter, error: voterError });
-
-    // Handle database errors
-    if (voterError) {
-      console.error('Database error:', voterError);
-      await logOtpGeneration({
-        voter_id: null,
-        email: email,
-        ip_address: clientIP,
-        success: false,
-        error: 'Database error'
-      });
-      throw new Error('System error. Please try again later.');
-    }
-
-    // Check if voter exists
-    if (!voter) {
-      console.log('No voter found with any strategy');
+      // Generate 6-digit OTP
+      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
       
-      await logOtpGeneration({
-        voter_id: null,
-        email: email,
-        ip_address: clientIP,
-        success: false,
-        error: 'Voter not found'
-      });
+      // Hash the OTP before storing
+      const hashedOtp = await hashCode(otpCode);
       
-      // Provide helpful error message
-      let errorMessage = '❌ Voter not found. ';
-      
-      // Check if school ID format is correct
-      if (cleanSchoolId.length !== 8) {
-        errorMessage += 'School ID must be 8 digits. ';
-      }
-      
-      // Check if email domain is correct
-      if (!cleanEmail.includes('@regent.edu.gh') && !cleanEmail.includes('@regent.edu')) {
-        errorMessage += 'Email must be a Regent University email (@regent.edu.gh). ';
-      }
-      
-      errorMessage += 'Please check your credentials and try again.';
-      
-      throw new Error(errorMessage);
-    }
-
-    console.log('Voter found:', { 
-      id: voter.id, 
-      email: voter.email, 
-      school_id: voter.school_id,
-      has_voted: voter.has_voted 
-    });
-
-    // Show warning if email doesn't match exactly (user might have entered wrong email)
-    if (voter.email !== cleanEmail) {
-      console.warn('Email mismatch:', { entered: cleanEmail, actual: voter.email });
-      toast.info(`ℹ️ Using account for ${voter.email}`, {
-        autoClose: 3000,
-      });
-    }
-    
-    // Show warning if school ID doesn't match exactly
-    if (voter.school_id !== cleanSchoolId) {
-      console.warn('School ID mismatch:', { entered: cleanSchoolId, actual: voter.school_id });
-      toast.info(`ℹ️ School ID corrected to ${voter.school_id}`, {
-        autoClose: 3000,
-      });
-    }
-
-    // Check if voter has already voted
-    if (voter.has_voted === true) {
-      console.log('Voter has already voted');
-      
-      await logOtpGeneration({
-        voter_id: voter.id,
-        email: email,
-        ip_address: clientIP,
-        success: false,
-        error: 'Already voted'
-      });
-      
-      // Store that this voter has voted
-      localStorage.setItem('has_voted', 'true');
-      localStorage.setItem('voted_voter_id', voter.id);
-      localStorage.setItem('voted_voter_email', voter.email);
-      
-      throw new Error('❌ You have already cast your vote. Voting is only allowed once per voter.');
-    }
-
-    // Also check the votes table as a fallback (in case has_voted is out of sync)
-    const { data: existingVote, error: voteCheckError } = await supabase
-      .from('votes')
-      .select('id')
-      .eq('voter_id', voter.id)
-      .maybeSingle();
-
-    console.log('Existing vote check:', { existingVote, voteCheckError });
-
-    if (existingVote) {
-      console.log('Found vote record but has_voted was false, fixing...');
-      
-      // Fix the out-of-sync issue by updating the voters table
-      const { error: updateError } = await supabase
-        .from('voters')
-        .update({ 
-          has_voted: true,
-          voted_at: new Date().toISOString()
-        })
-        .eq('id', voter.id);
-      
-      if (updateError) {
-        console.error('Failed to update voter status:', updateError);
-      }
-      
-      await logOtpGeneration({
-        voter_id: voter.id,
-        email: email,
-        ip_address: clientIP,
-        success: false,
-        error: 'Already voted (votes table check)'
-      });
-      
-      throw new Error('❌ You have already cast your vote. Voting is only allowed once per voter.');
-    }
-
-    // Check if there's a pending OTP that hasn't expired
-    const { data: existingOtp, error: otpCheckError } = await supabase
-      .from('otp_codes')
-      .select('*')
-      .eq('voter_id', voter.id)
-      .eq('used', false)
-      .gt('expires_at', new Date().toISOString())
-      .maybeSingle();
-
-    // If there's a valid OTP, we could either reuse it or generate a new one
-    // Here we'll generate a new one and delete the old
-    if (existingOtp) {
-      console.log('Deleting existing OTP:', existingOtp.id);
-      // Delete old OTP
+      // Delete any existing OTP for this voter
       await supabase
         .from('otp_codes')
         .delete()
-        .eq('id', existingOtp.id);
-    }
-
-    // Generate 6-digit OTP
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    console.log('Generated OTP for', voter.email, ':', otpCode);
-    
-    // Hash the OTP before storing
-    const hashedOtp = await hashCode(otpCode);
-    
-    // Insert new OTP (using the actual email from database to maintain consistency)
-    const { error: otpError } = await supabase
-      .from('otp_codes')
-      .insert({
-        voter_id: voter.id,
-        email: voter.email, // Use the actual email from database
-        school_id: voter.school_id, // Use the actual school_id from database
-        code_hash: hashedOtp,
-        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-        used: false
-      });
-
-    if (otpError) {
-      console.error('OTP insert error:', otpError);
-      throw new Error('Failed to generate OTP. Please try again.');
-    }
-
-    // Send OTP via Next.js API route
-    try {
-      console.log('Sending OTP request to API...');
-      const response = await fetch('/api/send-otp', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: voter.email, // Use the actual email from database
-          otp: otpCode,
-          name: voter.name,
-          expiresIn: 10
-        }),
-      });
-
-      console.log('API Response status:', response.status);
+        .eq('voter_id', voter.id);
       
-      // Get the response text first to see what's coming back
-      const responseText = await response.text();
-      console.log('API Response text:', responseText);
-      
-      let result;
+      // Insert new OTP
+      const { error: otpError } = await supabase
+        .from('otp_codes')
+        .insert({
+          voter_id: voter.id,
+          email: cleanEmail,
+          school_id: cleanSchoolId,
+          code_hash: hashedOtp,
+          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          used: false
+        });
+
+      if (otpError) throw otpError;
+
+      // Send OTP via Next.js API route
       try {
-        result = JSON.parse(responseText);
-      } catch (e) {
-        console.error('Failed to parse JSON:', e);
-        result = { success: false, error: 'Invalid response from server' };
+        const response = await fetch('/api/send-otp', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: cleanEmail,
+            otp: otpCode,
+            name: voter.name,
+            expiresIn: 10
+          }),
+        });
+
+        const responseText = await response.text();
+        let result;
+        try {
+          result = JSON.parse(responseText);
+        } catch (e) {
+          result = { success: false, error: 'Invalid response from server' };
+        }
+
+        if (!response.ok || !result.success) {
+          toast.info(`🔑 Test OTP: ${otpCode} (Check console for details)`);
+        } else {
+          toast.success(`✅ OTP sent to ${email}. Check your inbox.`);
+        }
+      } catch (emailError) {
+        toast.info(`🔑 Test OTP: ${otpCode}`);
       }
 
-      if (!response.ok || !result.success) {
-        console.error('API Error:', result);
-        // Fallback: show OTP in console
-        toast.info(`🔑 Test OTP: ${otpCode} (Check console for details)`);
-        console.log(`OTP for ${voter.email}: ${otpCode}`);
-      } else {
-        toast.success(`✅ OTP sent to ${voter.email}. Check your inbox.`);
-      }
-    } catch (emailError) {
-      console.error('Fetch error:', emailError);
-      toast.info(`🔑 Test OTP: ${otpCode}`);
-      console.log(`OTP for ${voter.email}: ${otpCode}`);
+      // Store voter info in localStorage for OTP verification page
+      localStorage.setItem('temp_voter_email', cleanEmail);
+      localStorage.setItem('temp_voter_school_id', cleanSchoolId);
+      localStorage.setItem('temp_voter_id', voter.id);
+      localStorage.setItem('temp_voter_name', voter.name);
+
+      // Log successful OTP generation
+      await logOtpGeneration({
+        voter_id: voter.id,
+        email: email,
+        ip_address: clientIP,
+        success: true
+      });
+
+      return { success: true, message: `OTP sent to ${email}. Valid for 10 minutes.` };
+    } catch (error) {
+      console.error('Send OTP error:', error);
+      return { success: false, error: error.message };
     }
+  };
 
-    // Store voter info in localStorage for OTP verification page
-    localStorage.setItem('temp_voter_email', voter.email);
-    localStorage.setItem('temp_voter_school_id', voter.school_id);
-    localStorage.setItem('temp_voter_id', voter.id);
-    localStorage.setItem('temp_voter_name', voter.name);
-    localStorage.setItem('temp_otp_expiry', Date.now() + 10 * 60 * 1000);
-
-    // Log successful OTP generation
-    await logOtpGeneration({
-      voter_id: voter.id,
-      email: voter.email,
-      ip_address: clientIP,
-      success: true
-    });
-
-    return { success: true, message: `OTP sent to ${voter.email}. Valid for 10 minutes.` };
-  } catch (error) {
-    console.error('Send OTP error:', error);
-    // Return the error message to be displayed
-    return { success: false, error: error.message };
-  }
-};
   // Main form submission handler
-// Main form submission handler
-const onSubmit = async (formData) => {
-  // Double-check if already voted before proceeding
-  if (alreadyVoted) {
-    toast.error('❌ You have already voted. Voting is allowed only once per voter.', {
-      position: "top-center",
-      autoClose: 5000,
-    });
-    
-    // Redirect to results page after a delay
-    setTimeout(() => {
-      router.push('/election-result');
-    }, 3000);
-    return;
-  }
+  const onSubmit = async (formData) => {
+    setIsLoading(true);
+    const { email, schoolId } = formData;
 
-  setIsLoading(true);
-  const { email, schoolId } = formData;
-
-  try {
-    const result = await sendOtpCode(email, schoolId);
-    
-    if (result.success) {
-      toast.success(result.message);
-      setTimeout(() => {
-        router.push("/verify-otp");
-      }, 1500);
-    } else {
-      // Show the error message from the result
-      toast.error(result.error);
-      
-      // If the error is about already voted, redirect to results
-      if (result.error && result.error.includes('already voted')) {
-        setTimeout(() => {
-          router.push('/election-result');
-        }, 3000);
+    try {
+      // Check if user is admin
+      if (userType === 'admin') {
+        await handleAdminLogin(email, schoolId);
+      } 
+      // Check if user is voter
+      else if (userType === 'voter') {
+        if (alreadyVoted) {
+          toast.error('❌ You have already voted. Voting is allowed only once per voter.', {
+            position: "top-center",
+            autoClose: 5000,
+          });
+          
+          setTimeout(() => {
+            router.push('/election-result');
+          }, 3000);
+          return;
+        }
+        
+        const result = await sendOtpCode(email, schoolId);
+        
+        if (result.success) {
+          setTimeout(() => {
+            router.push("/verify-otp");
+          }, 1500);
+        } else {
+          toast.error(result.error);
+        }
+      } 
+      else {
+        toast.error('❌ Invalid credentials. You are not registered as a voter or admin.');
       }
+    } catch (err) {
+      toast.error(err.message || "Error processing request");
+    } finally {
+      setIsLoading(false);
     }
-  } catch (err) {
-    console.error('Submission error:', err);
-    toast.error(err.message || "Error processing request");
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#02140f] via-[#063d2e] to-[#0b2545] flex items-center justify-center p-4 relative overflow-hidden">
@@ -544,16 +398,31 @@ const onSubmit = async (formData) => {
             </p>
           </div>
 
-          {/* Already Voted Warning */}
-          {alreadyVoted && (
-            <div data-aos="fade-up" data-aos-delay="350" className="mb-4 p-3 bg-amber-500/20 border border-amber-400/50 rounded-xl">
-              <div className="flex items-center gap-2 text-amber-200">
-                <FaCheckCircle className="text-amber-300" />
-                <p className="text-sm font-medium">You have already voted</p>
+          {/* User Type Indicator */}
+          {userType && (
+            <div data-aos="fade-up" data-aos-delay="350" className={`mb-4 p-3 rounded-xl ${
+              userType === 'admin' 
+                ? 'bg-purple-500/20 border border-purple-400/50' 
+                : 'bg-blue-500/20 border border-blue-400/50'
+            }`}>
+              <div className="flex items-center gap-2">
+                {userType === 'admin' ? (
+                  <>
+                    <FaUserShield className="text-purple-300" />
+                    <p className="text-sm font-medium text-purple-200">Admin Access Detected</p>
+                  </>
+                ) : (
+                  <>
+                    <FaUserGraduate className="text-blue-300" />
+                    <p className="text-sm font-medium text-blue-200">Voter Access Detected</p>
+                  </>
+                )}
               </div>
-              <p className="text-xs text-amber-200/80 mt-1">
-                Voting is allowed only once per voter. Redirecting to results...
-              </p>
+              {userType === 'voter' && alreadyVoted && (
+                <p className="text-xs text-amber-200/80 mt-1">
+                  You have already voted. Redirecting to results...
+                </p>
+              )}
             </div>
           )}
 
@@ -573,11 +442,10 @@ const onSubmit = async (formData) => {
                 type="email"
                 placeholder="Enter your university email"
                 className={`w-full pl-10 pr-4 py-3 bg-white/5 border rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 transition ${
-                  alreadyVoted 
+                  alreadyVoted && userType === 'voter'
                     ? 'border-amber-400/50 focus:ring-amber-400' 
                     : 'border-white/10 focus:ring-green-400'
                 }`}
-                disabled={alreadyVoted}
               />
               {errors.email && <p className="text-red-400 text-xs mt-1">{errors.email.message}</p>}
             </div>
@@ -596,11 +464,10 @@ const onSubmit = async (formData) => {
                 type="text"
                 placeholder="Enter your School ID"
                 className={`w-full pl-10 pr-4 py-3 bg-white/5 border rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 transition ${
-                  alreadyVoted 
+                  alreadyVoted && userType === 'voter'
                     ? 'border-amber-400/50 focus:ring-amber-400' 
                     : 'border-white/10 focus:ring-green-400'
                 }`}
-                disabled={alreadyVoted}
               />
               {errors.schoolId && <p className="text-red-400 text-xs mt-1">{errors.schoolId.message}</p>}
             </div>
@@ -609,9 +476,11 @@ const onSubmit = async (formData) => {
             <div data-aos="fade-up" data-aos-delay="600">
               <button
                 type="submit"
-                disabled={isLoading || alreadyVoted}
+                disabled={isLoading || (userType === 'voter' && alreadyVoted)}
                 className={`w-full py-3 rounded-xl font-semibold text-white transition-all duration-300 shadow-lg hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 ${
-                  alreadyVoted
+                  userType === 'admin'
+                    ? 'bg-gradient-to-r from-purple-700 to-purple-600 hover:from-purple-600 hover:to-purple-500'
+                    : alreadyVoted && userType === 'voter'
                     ? 'bg-gradient-to-r from-amber-600 to-amber-500 cursor-not-allowed'
                     : 'bg-gradient-to-r from-green-700 to-emerald-600 hover:from-green-600 hover:to-emerald-500 hover:shadow-green-500/30'
                 }`}
@@ -621,7 +490,12 @@ const onSubmit = async (formData) => {
                     <FaSpinner className="animate-spin" />
                     Processing...
                   </div>
-                ) : alreadyVoted ? (
+                ) : userType === 'admin' ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <FaUserShield />
+                    Access Admin Panel
+                  </div>
+                ) : alreadyVoted && userType === 'voter' ? (
                   <div className="flex items-center justify-center gap-2">
                     <FaCheckCircle />
                     Already Voted
@@ -635,16 +509,27 @@ const onSubmit = async (formData) => {
 
           {/* Info */}
           <div data-aos="fade-up" data-aos-delay="700" className="mt-6 text-xs text-white/60 text-center space-y-1">
-            {!alreadyVoted ? (
+            {userType === 'admin' ? (
+              <>
+                <p>🔐 Admin authentication required</p>
+                <p>👑 Access to voter management system</p>
+                <p>📊 View and manage election data</p>
+              </>
+            ) : userType === 'voter' && !alreadyVoted ? (
               <>
                 <p>🔐 Secure OTP authentication</p>
                 <p>⏳ Code valid for 10 minutes</p>
                 <p>📧 Check spam if not received</p>
               </>
-            ) : (
+            ) : userType === 'voter' && alreadyVoted ? (
               <>
                 <p>✅ Thank you for participating in the election</p>
                 <p>📊 View results to see the outcome</p>
+              </>
+            ) : (
+              <>
+                <p>🔐 Enter your credentials to continue</p>
+                <p>👥 Both voters and admins can log in here</p>
               </>
             )}
           </div>

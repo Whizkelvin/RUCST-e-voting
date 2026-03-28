@@ -1,5 +1,6 @@
 import { Inter, Poppins, Space_Grotesk } from 'next/font/google';
 import './globals.css';
+import { AdminAuthProvider } from '@/hooks/useAdminAuth';
 
 // Configure Google Fonts
 const inter = Inter({ 
@@ -29,7 +30,11 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${inter.variable} ${poppins.variable} ${spaceGrotesk.variable}`}>
-      <body className="font-sans">{children}</body>
+      <body className="font-sans">
+        <AdminAuthProvider>
+          {children}
+        </AdminAuthProvider>
+      </body>
     </html>
   );
 }

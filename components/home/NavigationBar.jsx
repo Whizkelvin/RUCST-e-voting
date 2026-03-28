@@ -1,15 +1,18 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { FaChevronRight } from 'react-icons/fa';
+import { FaChevronRight, FaUserPlus } from 'react-icons/fa';
 import { GiStairsGoal, GiVote, GiChart } from 'react-icons/gi';
 
 const NavigationBar = ({ isVotingActive }) => {
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     AOS.init({
@@ -25,6 +28,9 @@ const NavigationBar = ({ isVotingActive }) => {
       router.push('/election-result');
     }
   };
+
+  // Helper to check if link is active
+  const isActive = (path) => pathname === path;
 
   return (
     <nav className="bg-white/90 backdrop-blur-lg shadow-lg border-b border-gray-100 py-3 fixed top-0 z-50 w-full">
@@ -67,15 +73,22 @@ const NavigationBar = ({ isVotingActive }) => {
           </div>
           
           <div className="hidden md:flex items-center space-x-8">
-            <a 
+            {/* How It Works - using Link for client-side navigation */}
+            <Link 
               data-aos="fade-down"
               data-aos-delay="100"
-              href="/how-it-works" 
-              className="text-gray-700 hover:text-green-950 transition-all duration-300 hover:font-medium flex items-center space-x-1"
+              href="/how-to-vote"
+              className={`transition-all duration-300 hover:font-medium flex items-center space-x-1 ${
+                isActive('/how-to-vote') 
+                  ? 'text-green-950 font-semibold' 
+                  : 'text-gray-700 hover:text-green-950'
+              }`}
             >
               <GiStairsGoal className="w-4 h-4" />
-              <span>How It Works</span>
-            </a>
+              <span>How To Vote</span>
+            </Link>
+            
+            {/* Elections - scroll to section (keeping as anchor for hash links) */}
             <a 
               data-aos="fade-down"
               data-aos-delay="200"
@@ -85,6 +98,23 @@ const NavigationBar = ({ isVotingActive }) => {
               <GiVote className="w-4 h-4" />
               <span>Elections</span>
             </a>
+            
+            {/* Become a Candidate - using Link for client-side navigation */}
+            <Link 
+              data-aos="fade-down"
+              data-aos-delay="250"
+              href="/candidate-nomination"
+              className={`transition-all duration-300 hover:font-medium flex items-center space-x-1 ${
+                isActive('/candidate-nomination') 
+                  ? 'text-green-950 font-semibold' 
+                  : 'text-gray-700 hover:text-green-950'
+              }`}
+            >
+              <FaUserPlus className="w-4 h-4" />
+              <span>Become a Candidate</span>
+            </Link>
+            
+            {/* Candidate only - scroll to section (keeping as anchor for hash links) */}
             <a 
               data-aos="fade-down"
               data-aos-delay="300"
@@ -92,7 +122,7 @@ const NavigationBar = ({ isVotingActive }) => {
               className="text-gray-700 hover:text-green-950 transition-all duration-300 hover:font-medium flex items-center space-x-1"
             >
               <GiChart className="w-4 h-4" />
-              <span>Live Progress</span>
+              <span>Candidate only</span>
             </a>
           </div>
           
