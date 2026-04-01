@@ -4,8 +4,149 @@
 import { useState, useEffect, createContext, useContext } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
+import { toast } from 'react-toastify';
 
 const AdminAuthContext = createContext();
+
+export function AdminAuthProvider({ children }) {
+  const [admin, setAdmin] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    checkAuth();
+    
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        fetchAdminProfile(session.user);
+      } else {
+        setAdmin(null);
+        setIsAuthenticated(false);
+      }
+    });
+    
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const checkAuth = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        await fetchAdminProfile(session.user);
+      } else {
+        setAdmin(null);
+        setIsAuthenticated(false);
+      }
+    } catch (error) {
+      console.error('Auth check error:', error);
+      setAdmin(null);
+      setIsAuthenticated(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAdminProfile = async (user) => {
+    try {
+      // First check user_roles table
+      const { data: roleData, error: roleError } = await supabase
+        .from('user_roles')
+        .select('*')
+        .eq('email', user.email)
+        .eq('is_active', true)
+        .maybeSingle();
+      
+      if (roleData && !roleError) {
+        setAdmin({
+          ...roleData,
+          id: user.id,
+          email: user.email
+        });
+        setIsAuthenticated(true);
+        return;
+      }
+      
+      // Then check admins table
+      const { data: adminData, error: adminError } = await supabase
+        .from('admins')
+        .select('*')
+        .eq('email', user.email)
+        .maybeSingle();
+      
+      if (adminData && !adminError) {
+        setAdmin({
+          ...adminData,
+          id: user.id,
+          email: user.email
+        });
+        setIsAuthenticated(true);
+        return;
+      }
+      
+      // If no role found but user is authenticated, they might be a voter
+      // Don't set as admin
+      setAdmin(null);
+      setIsAuthenticated(false);
+      
+    } catch (error) {
+      console.error('Error fetching admin profile:', error);
+      setAdmin(null);
+      setIsAuthenticated(false);
+    }
+  };
+
+  const login = async (email, schoolId) => {
+    try {
+      // Sign in with Supabase Auth
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.toLowerCase().trim(),
+        password: schoolId.trim()
+      });
+      
+      if (error) throw error;
+      
+      // After successful login, fetch the profile
+      await fetchAdminProfile(data.user);
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Login error:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setAdmin(null);
+      setIsAuthenticated(false);
+      localStorage.removeItem('user_role');
+      localStorage.removeItem('user_email');
+      localStorage.removeItem('user_id');
+      localStorage.removeItem('user_details');
+      router.push('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  const value = {
+    admin,
+    isAuthenticated,
+    loading,
+    login,
+    logout
+  };
+
+  return (
+    <AdminAuthContext.Provider value={value}>
+      {children}
+    </AdminAuthContext.Provider>
+  );
+}
 
 export const useAdminAuth = () => {
   const context = useContext(AdminAuthContext);
@@ -13,113 +154,4 @@ export const useAdminAuth = () => {
     throw new Error('useAdminAuth must be used within AdminAuthProvider');
   }
   return context;
-};
-
-export const AdminAuthProvider = ({ children }) => {
-  const [admin, setAdmin] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const router = useRouter();
-
-  useEffect(() => {
-    checkAdminAuth();
-  }, []);
-
-  const checkAdminAuth = async () => {
-    try {
-      // Check if admin session exists in localStorage
-      const adminSession = localStorage.getItem('admin_session');
-      
-      if (adminSession) {
-        const session = JSON.parse(adminSession);
-        
-        // Check if session is still valid (not expired)
-        if (session.expiresAt && new Date(session.expiresAt) > new Date()) {
-          setAdmin(session.admin);
-          setIsAuthenticated(true);
-        } else {
-          // Session expired, logout
-          localStorage.removeItem('admin_session');
-        }
-      }
-    } catch (error) {
-      console.error('Admin auth check error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const login = async (email, schoolId) => {
-    try {
-      console.log('Attempting admin login for:', email);
-      
-      // Query the admins table in Supabase
-      const { data: adminData, error: adminError } = await supabase
-        .from('admins')
-        .select('*')
-        .eq('email', email.toLowerCase().trim())
-        .eq('school_id', schoolId.trim().padStart(8, '0'))
-        .maybeSingle();
-
-      console.log('Admin query result:', { adminData, adminError });
-
-      if (adminError) {
-        console.error('Database error:', adminError);
-        return { success: false, error: 'Database error occurred' };
-      }
-
-      if (!adminData) {
-        return { success: false, error: 'Invalid admin credentials. Please check your email and school ID.' };
-      }
-
-      // Create session (valid for 24 hours)
-      const adminSession = {
-        admin: adminData,
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        loggedInAt: new Date().toISOString()
-      };
-
-      // Store in localStorage
-      localStorage.setItem('admin_session', JSON.stringify(adminSession));
-      
-      setAdmin(adminData);
-      setIsAuthenticated(true);
-      
-      console.log('Admin login successful:', adminData.email);
-      
-      return { success: true, admin: adminData };
-      
-    } catch (error) {
-      console.error('Admin login error:', error);
-      return { success: false, error: error.message };
-    }
-  };
-
-  const logout = () => {
-    localStorage.removeItem('admin_session');
-    setAdmin(null);
-    setIsAuthenticated(false);
-    router.push('/');
-  };
-
-  const requireAuth = () => {
-    if (!isAuthenticated && !loading) {
-      router.push('/');
-      return false;
-    }
-    return true;
-  };
-
-  return (
-    <AdminAuthContext.Provider value={{
-      admin,
-      loading,
-      isAuthenticated,
-      login,
-      logout,
-      requireAuth
-    }}>
-      {children}
-    </AdminAuthContext.Provider>
-  );
 };
