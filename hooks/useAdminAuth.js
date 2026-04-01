@@ -1,10 +1,8 @@
-// hooks/useAdminAuth.js
 'use client';
 
 import { useState, useEffect, createContext, useContext } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
-import { toast } from 'react-toastify';
 
 const AdminAuthContext = createContext();
 
@@ -16,7 +14,7 @@ export function AdminAuthProvider({ children }) {
 
   useEffect(() => {
     checkAuth();
-    
+
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) {
@@ -26,14 +24,14 @@ export function AdminAuthProvider({ children }) {
         setIsAuthenticated(false);
       }
     });
-    
+
     return () => subscription.unsubscribe();
   }, []);
 
   const checkAuth = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (session) {
         await fetchAdminProfile(session.user);
       } else {
@@ -58,7 +56,7 @@ export function AdminAuthProvider({ children }) {
         .eq('email', user.email)
         .eq('is_active', true)
         .maybeSingle();
-      
+
       if (roleData && !roleError) {
         setAdmin({
           ...roleData,
@@ -66,16 +64,21 @@ export function AdminAuthProvider({ children }) {
           email: user.email
         });
         setIsAuthenticated(true);
+        
+        // Store in localStorage for quick access
+        localStorage.setItem('user_role', roleData.role);
+        localStorage.setItem('user_email', user.email);
+        localStorage.setItem('user_id', user.id);
         return;
       }
-      
+
       // Then check admins table
       const { data: adminData, error: adminError } = await supabase
         .from('admins')
         .select('*')
         .eq('email', user.email)
         .maybeSingle();
-      
+
       if (adminData && !adminError) {
         setAdmin({
           ...adminData,
@@ -83,34 +86,51 @@ export function AdminAuthProvider({ children }) {
           email: user.email
         });
         setIsAuthenticated(true);
+        
+        // Store in localStorage for quick access
+        localStorage.setItem('user_role', 'admin');
+        localStorage.setItem('user_email', user.email);
+        localStorage.setItem('user_id', user.id);
         return;
       }
-      
-      // If no role found but user is authenticated, they might be a voter
-      // Don't set as admin
+
+      // If authenticated but not admin, sign out
+      await supabase.auth.signOut();
       setAdmin(null);
       setIsAuthenticated(false);
-      
+      throw new Error('Unauthorized: Not an admin user');
+
     } catch (error) {
       console.error('Error fetching admin profile:', error);
       setAdmin(null);
       setIsAuthenticated(false);
+      throw error;
     }
   };
 
   const login = async (email, schoolId) => {
     try {
+      // Validate inputs
+      if (!email || !schoolId) {
+        throw new Error('Email and School ID are required');
+      }
+
       // Sign in with Supabase Auth
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase().trim(),
         password: schoolId.trim()
       });
-      
-      if (error) throw error;
-      
+
+      if (error) {
+        if (error.message === 'Invalid login credentials') {
+          throw new Error('Invalid email or School ID');
+        }
+        throw error;
+      }
+
       // After successful login, fetch the profile
       await fetchAdminProfile(data.user);
-      
+
       return { success: true };
     } catch (error) {
       console.error('Login error:', error);
@@ -123,10 +143,13 @@ export function AdminAuthProvider({ children }) {
       await supabase.auth.signOut();
       setAdmin(null);
       setIsAuthenticated(false);
+      
+      // Clear localStorage
       localStorage.removeItem('user_role');
       localStorage.removeItem('user_email');
       localStorage.removeItem('user_id');
       localStorage.removeItem('user_details');
+      
       router.push('/');
     } catch (error) {
       console.error('Logout error:', error);
