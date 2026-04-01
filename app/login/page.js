@@ -1,108 +1,83 @@
-import React, { useState } from 'react';
-import './Login.css';
+import { useState } from 'react';
+import { useRouter } from 'next/router';
 
 const LoginPage = () => {
-    const [isDarkMode, setIsDarkMode] = useState(false);
-    const [passwordVisible, setPasswordVisible] = useState(false);
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
-    const toggleTheme = () => {
-        setIsDarkMode(!isDarkMode);
-    };
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
-    const togglePasswordVisibility = () => {
-        setPasswordVisible(!passwordVisible);
-    };
+    // Simulate a login request
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    return (
-        <div className={`login-container ${isDarkMode ? 'dark' : 'light'}`}>  
-            <div className='theme-toggle'>
-                <label className='switch'>
-                    <input type='checkbox' onChange={toggleTheme} />
-                    <span className='slider'></span>
-                </label>
-                <span>{isDarkMode ? 'Dark Mode' : 'Light Mode'}</span>
-            </div>
-            <h1>Login</h1>
-            <form>
-                <div className='input-group'>
-                    <label htmlFor='username'>Username</label>
-                    <input type='text' id='username' required />
-                </div>
-                <div className='input-group'>
-                    <label htmlFor='password'>Password</label>
-                    <input type={passwordVisible ? 'text' : 'password'} id='password' required />
-                    <button type='button' onClick={togglePasswordVisibility} className='toggle-visibility'>
-                        {passwordVisible ? 'Hide' : 'Show'}
-                    </button>
-                </div>
-                <button type='submit' className='login-button'>Log In</button>
-            </form>
+    if (email === 'user@example.com' && password === 'password') {
+      router.push('/dashboard'); // Navigate to dashboard on success
+    } else {
+      setError('Invalid email or password');
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
+      <h1 className="text-4xl mb-6">Login</h1>
+      <form onSubmit={handleSubmit} className="w-full max-w-xs">
+        <div className="mb-4">
+          <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
+            Email
+          </label>
+          <input
+            type="email"
+            id="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            required
+          />
         </div>
-    );
+        <div className="mb-4">
+          <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
+            Password
+          </label>
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              id="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              required
+            />
+            <button
+              type="button"
+              className="absolute right-2 top-2"
+              onClick={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
+        </div>
+        {error && <p className="text-red-500 text-xs italic mb-4">{error}</p>}
+        <button
+          type="submit"
+          className={`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+          disabled={loading}
+        >
+          {loading ? 'Loading...' : 'Login'}
+        </button>
+      </form>
+      <p className="mt-4">
+        Don't have an account? <a href="/register" className="text-blue-500 hover:text-blue-700">Register</a>
+      </p>
+    </div>
+  );
 };
 
 export default LoginPage;
-
-/* CSS Styles */
-/* Login.css */
-.login-container {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 15px;
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    padding: 20px;
-    max-width: 400px;
-    margin: auto;
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-    transition: background 0.3s ease;
-}
-
-.dark {
-    background: rgba(0, 0, 0, 0.8);
-    color: white;
-}
-
-.light {
-    color: black;
-}
-
-.theme-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
-}
-
-.input-group {
-    margin-bottom: 15px;
-}
-
-.login-button {
-    width: 100%;
-    padding: 10px;
-    background-color: #007bff;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.3s;
-}
-
-.login-button:hover {
-    background-color: #0056b3;
-}
-
-.toggle-visibility {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: inherit;
-    padding-left: 10px;
-}
-
-@media (max-width: 600px) {
-    .login-container {
-        padding: 15px;
-        width: 90%;
-    }
-}
