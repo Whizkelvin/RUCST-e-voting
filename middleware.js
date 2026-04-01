@@ -1,19 +1,37 @@
-// middleware.js
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
-export function middleware(request) {
+export async function middleware(request) {
   const path = request.nextUrl.pathname;
+  const isAdminPath = path.startsWith('/admin');
+  const isLoginPath = path === '/login';
   
-  // Skip middleware for admin routes - let the layout handle auth
-  if (path.startsWith('/admin')) {
-    return NextResponse.next();
+  // Create Supabase client
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+  
+  // Get session from cookies
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  // If accessing admin routes without session
+  if (isAdminPath && !session) {
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('redirect', path);
+    return NextResponse.redirect(loginUrl);
   }
   
-  // Add other middleware logic here if needed for other routes
+  // If accessing login page with active session, redirect to admin dashboard
+  if (isLoginPath && session) {
+    // Optional: Check if user has admin role
+    // You might want to check user metadata or make a quick DB call
+    return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+  }
   
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/admin/:path*'], // Only run on admin routes, but we're letting them through
+  matcher: ['/admin/:path*', '/login'],
 };
