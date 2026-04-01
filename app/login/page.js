@@ -91,10 +91,10 @@ export default function Login() {
           light: 'emerald'
         }
       },
-      it_admin: {
+      admin: {
         name: 'IT Administrator',
         icon: FaUserCog,
-        redirectPath: '/admin/it-admin-dashboard',
+        redirectPath: '/admin/manage-voters',
         color: 'cyan',
         colorClass: {
           dark: 'cyan',
