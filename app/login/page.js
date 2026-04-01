@@ -26,7 +26,6 @@ import AOS from 'aos';
 import 'aos/dist/aos.css';
 import { supabase } from '@/lib/supabaseClient';
 import { logOtpGeneration, getClientIP } from '@/utils/auditLog';
-import { ADMIN_ROLES, getRoleConfig } from '@/config/roles';
 
 export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
@@ -39,7 +38,6 @@ export default function Login() {
   const [mounted, setMounted] = useState(false);
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [lockoutUntil, setLockoutUntil] = useState(null);
-  const [sessionTimeout, setSessionTimeout] = useState(null);
   const formRef = useRef(null);
   const router = useRouter();
 
@@ -60,6 +58,108 @@ export default function Login() {
   const watchedEmail = watch('email');
   const watchedSchoolId = watch('schoolId');
 
+  // Role configuration (built-in)
+  const getRoleConfig = useCallback((role) => {
+    const roleMap = {
+      dean: {
+        name: 'Dean of Students',
+        icon: FaUniversity,
+        redirectPath: '/admin/dean-dashboard',
+        color: 'purple',
+        colorClass: {
+          dark: 'purple',
+          light: 'purple'
+        }
+      },
+      electoral_commission: {
+        name: 'Electoral Commission',
+        icon: FaUserShield,
+        redirectPath: '/admin/electoral-commission-dashboard',
+        color: 'emerald',
+        colorClass: {
+          dark: 'emerald',
+          light: 'emerald'
+        }
+      },
+      ec: {
+        name: 'Electoral Commission',
+        icon: FaUserShield,
+        redirectPath: '/admin/electoral-commission-dashboard',
+        color: 'emerald',
+        colorClass: {
+          dark: 'emerald',
+          light: 'emerald'
+        }
+      },
+      it_admin: {
+        name: 'IT Administrator',
+        icon: FaUserCog,
+        redirectPath: '/admin/it-admin-dashboard',
+        color: 'cyan',
+        colorClass: {
+          dark: 'cyan',
+          light: 'cyan'
+        }
+      },
+      hod: {
+        name: 'Head of Department',
+        icon: FaChalkboardTeacher,
+        redirectPath: '/admin/hod-dashboard',
+        color: 'green',
+        colorClass: {
+          dark: 'green',
+          light: 'green'
+        }
+      }
+    };
+    
+    return roleMap[role] || null;
+  }, []);
+
+  // Get redirect path based on role
+  const getRedirectPath = useCallback((role) => {
+    const roleConfig = getRoleConfig(role);
+    if (roleConfig) {
+      return roleConfig.redirectPath;
+    }
+    return '/admin/manage-voters';
+  }, [getRoleConfig]);
+
+  // Get role icon
+  const getRoleIcon = useCallback(() => {
+    const roleConfig = getRoleConfig(adminRole);
+    if (roleConfig) {
+      const IconComponent = roleConfig.icon;
+      return <IconComponent className={`text-${roleConfig.color}-400 text-lg`} />;
+    }
+    return <FaUserShield className="text-purple-400 text-lg" />;
+  }, [adminRole, getRoleConfig]);
+
+  // Get role name
+  const getRoleName = useCallback(() => {
+    const roleConfig = getRoleConfig(adminRole);
+    return roleConfig ? roleConfig.name : 'Administrator';
+  }, [adminRole, getRoleConfig]);
+
+  // Get role color class
+  const getRoleColorClass = useCallback((type = 'bg') => {
+    const roleConfig = getRoleConfig(adminRole);
+    const color = roleConfig ? roleConfig.color : 'purple';
+    
+    switch(type) {
+      case 'bg':
+        return `bg-${color}-500/20`;
+      case 'border':
+        return `border-${color}-400/50`;
+      case 'text':
+        return `text-${color}-200`;
+      case 'text-dark':
+        return `text-${color}-700`;
+      default:
+        return '';
+    }
+  }, [adminRole, getRoleConfig]);
+
   // Check rate limit
   const checkRateLimit = useCallback(() => {
     if (lockoutUntil && new Date() < new Date(lockoutUntil)) {
@@ -72,7 +172,7 @@ export default function Login() {
     }
     
     if (loginAttempts >= 5) {
-      const lockoutTime = new Date(Date.now() + 15 * 60000); // 15 minutes lockout
+      const lockoutTime = new Date(Date.now() + 15 * 60000);
       setLockoutUntil(lockoutTime);
       toast.error('Too many failed attempts. Account locked for 15 minutes.', {
         position: "top-center",
@@ -83,15 +183,6 @@ export default function Login() {
     
     return true;
   }, [loginAttempts, lockoutUntil]);
-
-  // Get redirect path based on role
-  const getRedirectPath = useCallback((role) => {
-    const roleConfig = getRoleConfig(role);
-    if (roleConfig) {
-      return roleConfig.redirectPath;
-    }
-    return '/admin/manage-voters';
-  }, []);
 
   // Check existing session
   useEffect(() => {
@@ -105,7 +196,6 @@ export default function Login() {
       if (lastActivity) {
         const inactiveTime = Date.now() - parseInt(lastActivity);
         if (inactiveTime > 30 * 60 * 1000) {
-          // Session expired
           localStorage.removeItem('is_authenticated');
           localStorage.removeItem('user_role');
           localStorage.removeItem('user_email');
@@ -140,7 +230,9 @@ export default function Login() {
   // Update last activity
   useEffect(() => {
     const updateActivity = () => {
-      localStorage.setItem('last_activity', Date.now().toString());
+      if (localStorage.getItem('is_authenticated') === 'true') {
+        localStorage.setItem('last_activity', Date.now().toString());
+      }
     };
     
     window.addEventListener('click', updateActivity);
@@ -363,7 +455,6 @@ export default function Login() {
         autoClose: 2000
       });
       
-      // Reset login attempts on successful login
       setLoginAttempts(0);
       setLockoutUntil(null);
       
@@ -380,7 +471,7 @@ export default function Login() {
     } finally {
       setIsLoading(false);
     }
-  }, [router, setLoginAttempts]);
+  }, [router, setLoginAttempts, getRoleConfig]);
 
   const handleVoterLogin = useCallback(async (email, schoolId) => {
     setIsLoading(true);
@@ -443,7 +534,6 @@ export default function Login() {
       const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
       const hashedOtp = await hashCode(otpCode);
       
-      // Clear existing OTPs
       await supabase.from('otp_codes').delete().eq('voter_id', voter.id);
       
       const { error: otpError } = await supabase
@@ -459,7 +549,6 @@ export default function Login() {
       
       if (otpError) throw otpError;
       
-      // Send OTP email with fallback
       try {
         const response = await fetch('/api/send-otp', {
           method: 'POST',
@@ -494,7 +583,6 @@ export default function Login() {
         });
       }
       
-      // Store voter session data
       localStorage.setItem('temp_voter_email', cleanEmail);
       localStorage.setItem('temp_voter_school_id', cleanSchoolId);
       localStorage.setItem('temp_voter_id', voter.id);
@@ -550,20 +638,6 @@ export default function Login() {
       setLoginAttempts(prev => prev + 1);
     }
   }, [loginStatus, handleVoterLogin, handleAdminLogin, checkRateLimit, setLoginAttempts]);
-
-  const getRoleIcon = useCallback(() => {
-    const roleConfig = getRoleConfig(adminRole);
-    if (roleConfig) {
-      const IconComponent = roleConfig.icon;
-      return <IconComponent className={`text-${roleConfig.color.light}-400 text-lg`} />;
-    }
-    return <FaUserShield className="text-purple-400 text-lg" />;
-  }, [adminRole]);
-
-  const getRoleName = useCallback(() => {
-    const roleConfig = getRoleConfig(adminRole);
-    return roleConfig ? roleConfig.name : 'Administrator';
-  }, [adminRole]);
 
   // Keyboard shortcut for testing (Ctrl+Shift+D)
   useEffect(() => {
@@ -634,6 +708,30 @@ export default function Login() {
   }), []);
 
   const currentTheme = themeStyles[theme];
+
+  // Get admin status card class
+  const getAdminStatusClass = useCallback(() => {
+    switch(adminRole) {
+      case 'dean': return currentTheme.statusCard.admin.dean;
+      case 'electoral_commission':
+      case 'ec': return currentTheme.statusCard.admin.electoral;
+      case 'it_admin': return currentTheme.statusCard.admin.it_admin;
+      case 'hod': return currentTheme.statusCard.admin.hod;
+      default: return currentTheme.statusCard.admin.default;
+    }
+  }, [adminRole, currentTheme]);
+
+  // Get admin text color
+  const getAdminTextColor = useCallback(() => {
+    switch(adminRole) {
+      case 'dean': return theme === 'dark' ? 'text-purple-200' : 'text-purple-700';
+      case 'electoral_commission':
+      case 'ec': return theme === 'dark' ? 'text-emerald-200' : 'text-emerald-700';
+      case 'it_admin': return theme === 'dark' ? 'text-cyan-200' : 'text-cyan-700';
+      case 'hod': return theme === 'dark' ? 'text-green-200' : 'text-green-700';
+      default: return theme === 'dark' ? 'text-purple-200' : 'text-purple-700';
+    }
+  }, [adminRole, theme]);
 
   if (!mounted) {
     return null;
@@ -748,22 +846,10 @@ export default function Login() {
           )}
 
           {loginStatus === 'admin' && !isDetectingRole && (
-            <div className={`mb-4 p-3 rounded-xl ${
-              adminRole === 'dean' ? currentTheme.statusCard.admin.dean :
-              adminRole === 'electoral_commission' || adminRole === 'ec' ? currentTheme.statusCard.admin.electoral :
-              adminRole === 'it_admin' ? currentTheme.statusCard.admin.it_admin :
-              adminRole === 'hod' ? currentTheme.statusCard.admin.hod :
-              currentTheme.statusCard.admin.default
-            }`}>
+            <div className={`mb-4 p-3 rounded-xl ${getAdminStatusClass()}`}>
               <div className="flex items-center gap-2">
                 {getRoleIcon()}
-                <p className={`text-sm font-medium ${
-                  adminRole === 'dean' ? (theme === 'dark' ? 'text-purple-200' : 'text-purple-700') :
-                  adminRole === 'electoral_commission' || adminRole === 'ec' ? (theme === 'dark' ? 'text-emerald-200' : 'text-emerald-700') :
-                  adminRole === 'it_admin' ? (theme === 'dark' ? 'text-cyan-200' : 'text-cyan-700') :
-                  adminRole === 'hod' ? (theme === 'dark' ? 'text-green-200' : 'text-green-700') :
-                  (theme === 'dark' ? 'text-purple-200' : 'text-purple-700')
-                }`}>
+                <p className={`text-sm font-medium ${getAdminTextColor()}`}>
                   {getRoleName()} Detected
                 </p>
               </div>
