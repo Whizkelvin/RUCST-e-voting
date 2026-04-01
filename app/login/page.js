@@ -1,81 +1,92 @@
-import { useState } from 'react';
-import { useRouter } from 'next/router';
+// Import necessary modules
+import React, { useState } from 'react';
+import { useHistory } from 'react-router-dom';
 
+// Login component
 const LoginPage = () => {
-  const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [role, setRole] = useState('user'); // default to user
+  const history = useHistory();
 
-  const handleSubmit = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
+    // Call to backend for login verification
+    const response = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, role }),
+    });
 
-    // Simulate a login request
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    if (email === 'user@example.com' && password === 'password') {
-      router.push('/dashboard'); // Navigate to dashboard on success
+    if (response.ok) {
+      const { otpRequired } = await response.json();
+      if (otpRequired) {
+        // Proceed to handle OTP verification
+        await verifyOtp();
+      } else {
+        // Successful login, redirect based on role
+        redirectUser(role);
+      }
     } else {
-      setError('Invalid email or password');
+      // Handle login error
+      alert('Login failed. Please check your credentials.');
     }
-    setLoading(false);
+  };
+
+  const verifyOtp = async () => {
+    const response = await fetch('/api/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, otp }),
+    });
+
+    if (response.ok) {
+      alert('OTP verified successfully');
+      redirectUser(role);
+    } else {
+      alert('OTP verification failed.');
+    }
+  };
+
+  const redirectUser = (role) => {
+    if (role === 'admin') {
+      history.push('/admin-dashboard');
+    } else {
+      history.push('/user-dashboard');
+    }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
-      <h1 className="text-4xl mb-6">Login</h1>
-      <form onSubmit={handleSubmit} className="w-full max-w-xs">
-        <div className="mb-4">
-          <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
-            Email
-          </label>
-          <input
-            type="email"
-            id="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-            required
-          />
-        </div>
-        <div className="mb-4">
-          <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
-            Password
-          </label>
-          <div className="relative">
-            <input
-              type={showPassword ? 'text' : 'password'}
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              required
-            />
-            <button
-              type="button"
-              className="absolute right-2 top-2"
-              onClick={() => setShowPassword(!showPassword)}
-            >
-              {showPassword ? 'Hide' : 'Show'}
-            </button>
-          </div>
-        </div>
-        {error && <p className="text-red-500 text-xs italic mb-4">{error}</p>}
-        <button
-          type="submit"
-          className={`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-          disabled={loading}
-        >
-          {loading ? 'Loading...' : 'Login'}
-        </button>
+    <div>
+      <h2>Login</h2>
+      <form onSubmit={handleLogin}>
+        <input
+          type="text"
+          placeholder="Username"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          required
+        />
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
+        <select value={role} onChange={(e) => setRole(e.target.value)}>
+          <option value="user">User</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button type="submit">Login</button>
       </form>
-      <p className="mt-4">
-        Don't have an account? <a href="/register" className="text-blue-500 hover:text-blue-700">Register</a>
-      </p>
+      <input
+        type="text"
+        placeholder="Enter OTP if required"
+        value={otp}
+        onChange={(e) => setOtp(e.target.value)}
+      />
     </div>
   );
 };
