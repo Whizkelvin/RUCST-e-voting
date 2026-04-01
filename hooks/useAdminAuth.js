@@ -1,5 +1,6 @@
 // hooks/useAdminAuth.js
-"use client"
+'use client';
+
 import { useState, useEffect, createContext, useContext } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
@@ -26,43 +27,19 @@ export const AdminAuthProvider = ({ children }) => {
 
   const checkAdminAuth = async () => {
     try {
-      // Check cookie first (for middleware compatibility)
-      const cookies = document.cookie.split(';');
-      let adminSessionFromCookie = null;
-      
-      for (let cookie of cookies) {
-        const [name, value] = cookie.trim().split('=');
-        if (name === 'admin_session') {
-          try {
-            adminSessionFromCookie = JSON.parse(decodeURIComponent(value));
-          } catch (e) {
-            console.error('Error parsing admin session cookie:', e);
-          }
-          break;
-        }
-      }
-      
-      if (adminSessionFromCookie) {
-        const session = adminSessionFromCookie;
-        if (session.expiresAt && new Date(session.expiresAt) > new Date()) {
-          setAdmin(session.admin);
-          setIsAuthenticated(true);
-          return;
-        }
-      }
-      
-      // Check localStorage as fallback
+      // Check if admin session exists in localStorage
       const adminSession = localStorage.getItem('admin_session');
+      
       if (adminSession) {
         const session = JSON.parse(adminSession);
+        
+        // Check if session is still valid (not expired)
         if (session.expiresAt && new Date(session.expiresAt) > new Date()) {
           setAdmin(session.admin);
           setIsAuthenticated(true);
-          // Re-set cookie
-          document.cookie = `admin_session=${JSON.stringify(session)}; path=/; max-age=86400; SameSite=Lax`;
-          return;
         } else {
-          await logout();
+          // Session expired, logout
+          localStorage.removeItem('admin_session');
         }
       }
     } catch (error) {
@@ -74,34 +51,41 @@ export const AdminAuthProvider = ({ children }) => {
 
   const login = async (email, schoolId) => {
     try {
+      console.log('Attempting admin login for:', email);
+      
+      // Query the admins table in Supabase
       const { data: adminData, error: adminError } = await supabase
         .from('admins')
         .select('*')
         .eq('email', email.toLowerCase().trim())
-        .eq('school_id', schoolId.trim())
+        .eq('school_id', schoolId.trim().padStart(8, '0'))
         .maybeSingle();
 
-      if (adminError || !adminData) {
-        return { success: false, error: 'Invalid admin credentials' };
+      console.log('Admin query result:', { adminData, adminError });
+
+      if (adminError) {
+        console.error('Database error:', adminError);
+        return { success: false, error: 'Database error occurred' };
       }
 
+      if (!adminData) {
+        return { success: false, error: 'Invalid admin credentials. Please check your email and school ID.' };
+      }
+
+      // Create session (valid for 24 hours)
       const adminSession = {
         admin: adminData,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         loggedInAt: new Date().toISOString()
       };
 
-      const sessionString = JSON.stringify(adminSession);
-      
       // Store in localStorage
-      localStorage.setItem('admin_session', sessionString);
-      
-      // Set cookie with proper encoding
-      document.cookie = `admin_session=${encodeURIComponent(sessionString)}; path=/; max-age=86400; SameSite=Lax`;
-      document.cookie = `user_role=admin; path=/; max-age=86400; SameSite=Lax`;
+      localStorage.setItem('admin_session', JSON.stringify(adminSession));
       
       setAdmin(adminData);
       setIsAuthenticated(true);
+      
+      console.log('Admin login successful:', adminData.email);
       
       return { success: true, admin: adminData };
       
@@ -111,17 +95,19 @@ export const AdminAuthProvider = ({ children }) => {
     }
   };
 
-  const logout = async () => {
+  const logout = () => {
     localStorage.removeItem('admin_session');
-    document.cookie = 'admin_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-    document.cookie = 'user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-    
     setAdmin(null);
     setIsAuthenticated(false);
-    
     router.push('/');
-    
-    return { success: true };
+  };
+
+  const requireAuth = () => {
+    if (!isAuthenticated && !loading) {
+      router.push('/');
+      return false;
+    }
+    return true;
   };
 
   return (
@@ -130,7 +116,8 @@ export const AdminAuthProvider = ({ children }) => {
       loading,
       isAuthenticated,
       login,
-      logout
+      logout,
+      requireAuth
     }}>
       {children}
     </AdminAuthContext.Provider>
