@@ -415,7 +415,7 @@ export default function Login() {
     }
   };
 
-  // Theme-specific styles
+  
   const themeStyles = {
     dark: {
       background: 'from-[#02140f] via-[#063d2e] to-[#0b2545]',
