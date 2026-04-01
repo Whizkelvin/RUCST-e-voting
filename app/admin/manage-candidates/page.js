@@ -1,7 +1,7 @@
 // app/admin/manage-candidates/page.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
@@ -29,7 +29,9 @@ import {
   FaTimes,
   FaImage,
   FaCalendarAlt,
-  FaUniversity
+  FaUniversity,
+  FaCloudUploadAlt,
+  FaTrashAlt
 } from 'react-icons/fa';
 import * as XLSX from 'xlsx';
 
@@ -45,6 +47,9 @@ export default function ManageCandidates() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [editingCandidate, setEditingCandidate] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imagePreview, setImagePreview] = useState(null);
+  const fileInputRef = useRef(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -53,6 +58,7 @@ export default function ManageCandidates() {
     department: '',
     year_of_study: '',
     manifesto: '',
+    image_file: null,
     image_url: '',
     election_id: '',
     is_approved: false
@@ -104,7 +110,6 @@ export default function ManageCandidates() {
 
       if (error) throw error;
       
-      // Filter out invalid elections and ensure we have valid data
       const validElections = (data || []).filter(e => 
         e.title && 
         e.title !== 'src2026' && 
@@ -127,7 +132,6 @@ export default function ManageCandidates() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      // Apply election filter if selected
       if (selectedElection !== 'all') {
         query = query.eq('election_id', selectedElection);
       }
@@ -139,7 +143,6 @@ export default function ManageCandidates() {
       setCandidates(data || []);
       setFilteredCandidates(data || []);
       
-      // Calculate stats based on filtered candidates
       const approved = (data || []).filter(c => c.is_approved === true).length;
       const pending = (data || []).filter(c => c.is_approved === false && !c.rejection_reason).length;
       const rejected = (data || []).filter(c => c.rejection_reason && c.rejection_reason !== '').length;
@@ -158,13 +161,11 @@ export default function ManageCandidates() {
 
   const fetchPositions = async () => {
     try {
-      // Get unique positions from candidates
       let query = supabase
         .from('candidates')
         .select('position')
         .not('position', 'is', null);
 
-      // Apply election filter if selected
       if (selectedElection !== 'all') {
         query = query.eq('election_id', selectedElection);
       }
@@ -177,6 +178,79 @@ export default function ManageCandidates() {
       setPositions(uniquePositions);
     } catch (error) {
       console.error('Error fetching positions:', error);
+    }
+  };
+
+  // Upload image to Supabase Storage
+  const uploadImage = async (file) => {
+    if (!file) return null;
+    
+    setUploadingImage(true);
+    try {
+      // Generate unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `candidates/${fileName}`;
+      
+      // Upload to Supabase Storage
+      const { error: uploadError, data } = await supabase.storage
+        .from('candidate-images')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+      
+      if (uploadError) throw uploadError;
+      
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('candidate-images')
+        .getPublicUrl(filePath);
+      
+      return publicUrl;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      toast.error('Failed to upload image');
+      return null;
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  // Handle file selection
+  const handleImageSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validate file type
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!allowedTypes.includes(file.type)) {
+        toast.error('Please select a valid image (JPEG, PNG, or WebP)');
+        return;
+      }
+      
+      // Validate file size (max 2MB)
+      if (file.size > 2 * 1024 * 1024) {
+        toast.error('Image size must be less than 2MB');
+        return;
+      }
+      
+      setFormData({ ...formData, image_file: file, image_url: '' });
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Remove selected image
+  const removeImage = () => {
+    setFormData({ ...formData, image_file: null, image_url: '' });
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -216,13 +290,26 @@ export default function ManageCandidates() {
     
     setSubmitting(true);
     try {
+      let imageUrl = formData.image_url;
+      
+      // Upload image if selected
+      if (formData.image_file) {
+        const uploadedUrl = await uploadImage(formData.image_file);
+        if (uploadedUrl) {
+          imageUrl = uploadedUrl;
+        } else if (!formData.image_url) {
+          // If upload failed and no existing URL, show error but continue
+          toast.warning('Image upload failed, candidate will be added without image');
+        }
+      }
+      
       const candidateData = {
         name: formData.name,
         position: formData.position,
         department: formData.department,
         year_of_study: formData.year_of_study ? parseInt(formData.year_of_study) : null,
         manifesto: formData.manifesto,
-        image_url: formData.image_url || null,
+        image_url: imageUrl || null,
         election_id: formData.election_id,
         is_approved: formData.is_approved,
         status: formData.is_approved ? 'approved' : 'pending',
@@ -255,13 +342,23 @@ export default function ManageCandidates() {
     
     setSubmitting(true);
     try {
+      let imageUrl = formData.image_url;
+      
+      // Upload new image if selected
+      if (formData.image_file) {
+        const uploadedUrl = await uploadImage(formData.image_file);
+        if (uploadedUrl) {
+          imageUrl = uploadedUrl;
+        }
+      }
+      
       const candidateData = {
         name: formData.name,
         position: formData.position,
         department: formData.department,
         year_of_study: formData.year_of_study ? parseInt(formData.year_of_study) : null,
         manifesto: formData.manifesto,
-        image_url: formData.image_url || null,
+        image_url: imageUrl || null,
         election_id: formData.election_id,
         is_approved: formData.is_approved,
         status: formData.is_approved ? 'approved' : 'pending',
@@ -300,6 +397,23 @@ export default function ManageCandidates() {
       if (count > 0) {
         toast.error('Cannot delete a candidate who has received votes');
         return;
+      }
+      
+      // Get candidate to delete their image
+      const { data: candidate } = await supabase
+        .from('candidates')
+        .select('image_url')
+        .eq('id', candidateId)
+        .single();
+      
+      // Delete image from storage if exists
+      if (candidate?.image_url) {
+        const imagePath = candidate.image_url.split('/').pop();
+        if (imagePath) {
+          await supabase.storage
+            .from('candidate-images')
+            .remove([`candidates/${imagePath}`]);
+        }
       }
       
       const { error } = await supabase
@@ -376,11 +490,16 @@ export default function ManageCandidates() {
       department: '',
       year_of_study: '',
       manifesto: '',
+      image_file: null,
       image_url: '',
       election_id: '',
       is_approved: false
     });
+    setImagePreview(null);
     setFormErrors({});
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const editCandidate = (candidate) => {
@@ -393,10 +512,12 @@ export default function ManageCandidates() {
       department: candidate.department || '',
       year_of_study: candidate.year_of_study || '',
       manifesto: candidate.manifesto || '',
+      image_file: null,
       image_url: candidate.image_url || '',
       election_id: candidate.election_id || '',
       is_approved: candidate.is_approved || false
     });
+    setImagePreview(candidate.image_url || null);
     setShowAddModal(true);
   };
 
@@ -428,7 +549,6 @@ export default function ManageCandidates() {
   useEffect(() => {
     let filtered = [...candidates];
     
-    // Search filter
     if (searchTerm) {
       filtered = filtered.filter(c => 
         c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -437,12 +557,10 @@ export default function ManageCandidates() {
       );
     }
     
-    // Position filter
     if (selectedPosition !== 'all') {
       filtered = filtered.filter(c => c.position === selectedPosition);
     }
     
-    // Status filter
     if (selectedStatus !== 'all') {
       if (selectedStatus === 'approved') {
         filtered = filtered.filter(c => c.is_approved === true);
@@ -456,7 +574,6 @@ export default function ManageCandidates() {
     setFilteredCandidates(filtered);
   }, [searchTerm, selectedPosition, selectedStatus, candidates]);
 
-  // Refresh positions and candidates when election filter changes
   useEffect(() => {
     if (isAuthenticated) {
       fetchCandidates();
@@ -668,7 +785,7 @@ export default function ManageCandidates() {
                                   onError={(e) => {
                                     e.target.onerror = null;
                                     e.target.style.display = 'none';
-                                    e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center"><svg class="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg></div>';
+                                    e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center"><FaUserCheck className="text-gray-400 w-5 h-5" /></div>';
                                   }}
                                 />
                               </div>
@@ -855,6 +972,63 @@ export default function ManageCandidates() {
                 {formErrors.election_id && <p className="text-red-400 text-xs mt-1">{formErrors.election_id}</p>}
               </div>
               
+              {/* Image Upload Section */}
+              <div>
+                <label className="block text-gray-300 mb-2">Candidate Photo</label>
+                <div className="flex items-start gap-4">
+                  {/* Image Preview */}
+                  {imagePreview && (
+                    <div className="relative w-24 h-24 rounded-lg overflow-hidden bg-gray-700 flex-shrink-0">
+                      <img 
+                        src={imagePreview} 
+                        alt="Preview" 
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={removeImage}
+                        className="absolute top-1 right-1 bg-red-600 rounded-full p-1 hover:bg-red-500 transition"
+                        title="Remove image"
+                      >
+                        <FaTrashAlt className="text-white text-xs" />
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* Upload Area */}
+                  <div className="flex-1">
+                    <div className="relative">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,image/webp"
+                        onChange={handleImageSelect}
+                        className="hidden"
+                        id="candidate-image"
+                      />
+                      <label
+                        htmlFor="candidate-image"
+                        className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-gray-700 border-2 border-dashed border-gray-500 rounded-lg cursor-pointer hover:border-green-500 transition group"
+                      >
+                        {uploadingImage ? (
+                          <FaSpinner className="animate-spin text-green-500" />
+                        ) : (
+                          <>
+                            <FaCloudUploadAlt className="text-gray-400 group-hover:text-green-500 transition" />
+                            <span className="text-gray-300 group-hover:text-green-400 transition">
+                              {imagePreview ? 'Change Photo' : 'Upload Photo'}
+                            </span>
+                          </>
+                        )}
+                      </label>
+                    </div>
+                    <p className="text-gray-400 text-xs mt-2">
+                      JPEG, PNG, or WebP. Max 2MB. Recommended: Square image (400x400px)
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
               <div>
                 <label className="block text-gray-300 mb-2">Manifesto *</label>
                 <textarea
@@ -869,20 +1043,6 @@ export default function ManageCandidates() {
                 <p className="text-gray-400 text-xs mt-1">
                   {formData.manifesto?.length || 0}/2000 characters
                 </p>
-              </div>
-              
-              <div>
-                <label className="block text-gray-300 mb-2">Image URL (Optional)</label>
-                <div className="relative">
-                  <FaImage className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    value={formData.image_url}
-                    onChange={(e) => setFormData({...formData, image_url: e.target.value})}
-                    className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
-                    placeholder="https://example.com/image.jpg"
-                  />
-                </div>
               </div>
               
               <div className="flex items-center gap-3">
@@ -912,10 +1072,10 @@ export default function ManageCandidates() {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || uploadingImage}
                   className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white transition disabled:opacity-50"
                 >
-                  {submitting ? <FaSpinner className="animate-spin mx-auto" /> : (editingCandidate ? 'Update' : 'Add')}
+                  {submitting || uploadingImage ? <FaSpinner className="animate-spin mx-auto" /> : (editingCandidate ? 'Update' : 'Add')}
                 </button>
               </div>
             </form>
