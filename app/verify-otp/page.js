@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from 'next/image';
-import { toast } from 'react-toastify';
+import { Toaster, toast } from 'sonner'; // ← Changed from react-toastify
 import { FaSpinner, FaArrowLeft, FaExclamationTriangle, FaCheckCircle, FaClock, FaEnvelope, FaShieldAlt, FaLock } from 'react-icons/fa';
 import { supabase } from '@/lib/supabaseClient';
 import { logOtpVerification, logLogin, logOtpGeneration, getClientIP } from '@/utils/auditLog';
@@ -469,6 +469,7 @@ export default function VerifyOTP() {
   if (sessionError) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0a2418] via-[#1a4d2a] to-[#2d6a4f] flex items-center justify-center p-4">
+        <Toaster position="top-center" richColors />
         <div className="relative w-full max-w-md">
           <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl shadow-2xl p-8 text-center">
             <div className="flex justify-center mb-6">
@@ -495,6 +496,7 @@ export default function VerifyOTP() {
   if (!voterInfo) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0a2418] via-[#1a4d2a] to-[#2d6a4f] flex items-center justify-center">
+        <Toaster position="top-center" richColors />
         <div className="text-white text-center">
           <FaSpinner className="animate-spin text-4xl mx-auto mb-4" />
           <p>Validating your session...</p>
@@ -504,187 +506,199 @@ export default function VerifyOTP() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a2418] via-[#1a4d2a] to-[#2d6a4f] flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Animated Background */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-32 w-80 h-80 bg-[#2d6a4f] rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-32 w-80 h-80 bg-[#f4a261] rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-[#40916c] rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
-      </div>
+    <>
+      <Toaster 
+        position="top-center" 
+        richColors 
+        closeButton
+        toastOptions={{
+          duration: 4000,
+          className: 'text-sm font-medium',
+        }}
+      />
+      
+      <div className="min-h-screen bg-gradient-to-br from-[#0a2418] via-[#1a4d2a] to-[#2d6a4f] flex items-center justify-center p-4 relative overflow-hidden">
+        {/* Animated Background */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute -top-40 -right-32 w-80 h-80 bg-[#2d6a4f] rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
+          <div className="absolute -bottom-40 -left-32 w-80 h-80 bg-[#f4a261] rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-[#40916c] rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
+        </div>
 
-      <div className="relative w-full max-w-md">
-        <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl shadow-2xl p-6 sm:p-8 transform transition-all duration-300">
-          
-          {/* Header with Logos */}
-          <div className="text-center mb-6 sm:mb-8">
-            <div className="flex items-center justify-center space-x-2 sm:space-x-3 mb-4">
-              <Image 
-                src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1762440313/RUCST_logo-removebg-preview_hwdial.png" 
-                alt="Regent University Logo" 
-                width={60}
-                height={60}
-                className="h-12 w-12 sm:h-[70px] sm:w-[70px] object-contain"
-                priority
-              />
-              <Image 
-                src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1774528110/Gemini_Generated_Image_57c2xl57c2xl57c2_ykckzf.png" 
-                alt="RGSP Logo" 
-                width={60}
-                height={60}
-                className="h-12 w-12 sm:h-[70px] sm:w-[70px] object-contain"
-                priority
-              />
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-              Verify Your Identity
-            </h1>
-            <div className="flex items-center justify-center gap-2 text-emerald-100/80 text-xs sm:text-sm">
-              <FaEnvelope className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="truncate max-w-[200px] sm:max-w-none">{voterInfo.email}</span>
-            </div>
+        <div className="relative w-full max-w-md">
+          <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl shadow-2xl p-6 sm:p-8 transform transition-all duration-300">
             
-            {/* Security Badge */}
-            <div className="flex items-center justify-center gap-2 mt-3">
-              <div className="flex items-center gap-1 bg-[#f4a261]/20 px-2 py-1 rounded-full">
-                <FaLock className="w-3 h-3 text-[#f4a261]" />
-                <span className="text-[10px] text-[#f4a261]">Secure OTP</span>
-              </div>
-              {failedAttempts > 0 && !isLocked && (
-                <div className="flex items-center gap-1 bg-red-500/20 px-2 py-1 rounded-full">
-                  <FaShieldAlt className="w-3 h-3 text-red-400" />
-                  <span className="text-[10px] text-red-400">{4 - failedAttempts} attempts left</span>
-                </div>
-              )}
-              {isLocked && (
-                <div className="flex items-center gap-1 bg-red-500/20 px-2 py-1 rounded-full">
-                  <FaShieldAlt className="w-3 h-3 text-red-400" />
-                  <span className="text-[10px] text-red-400">Temporarily Locked</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Responsive OTP Boxes */}
-          <div className="mb-6 sm:mb-8">
-            <label className="text-emerald-100 text-sm font-medium block text-center mb-3 sm:mb-4">
-              Enter 6-Digit Verification Code
-            </label>
-            <div className="flex justify-center gap-2 sm:gap-3 flex-wrap">
-              {otpDigits.map((digit, index) => (
-                <input
-                  key={index}
-                  ref={(el) => (inputRefs.current[index] = el)}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={digit}
-                  onChange={(e) => handleDigitChange(index, e.target.value)}
-                  onKeyDown={(e) => handleKeyDown(index, e)}
-                  onPaste={index === 0 ? handlePaste : undefined}
-                  disabled={isVerifying || isLocked}
-                  className={`
-                    w-10 h-12 sm:w-14 sm:h-16 
-                    text-center text-xl sm:text-2xl font-bold 
-                    bg-white/10 border-2 
-                    rounded-xl text-white 
-                    focus:outline-none focus:ring-2 
-                    transition-all duration-200
-                    ${digit 
-                      ? 'border-[#f4a261] bg-white/20 ring-1 ring-[#f4a261]/50' 
-                      : 'border-white/20 focus:border-[#f4a261] focus:ring-[#f4a261]/50'
-                    }
-                    ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}
-                  `}
-                  autoFocus={index === 0 && !isLocked}
+            {/* Header with Logos */}
+            <div className="text-center mb-6 sm:mb-8">
+              <div className="flex items-center justify-center space-x-2 sm:space-x-3 mb-4">
+                <Image 
+                  src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1762440313/RUCST_logo-removebg-preview_hwdial.png" 
+                  alt="Regent University Logo" 
+                  width={60}
+                  height={60}
+                  className="h-12 w-12 sm:h-[70px] sm:w-[70px] object-contain"
+                  priority
                 />
-              ))}
+                <Image 
+                  src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1774528110/Gemini_Generated_Image_57c2xl57c2xl57c2_ykckzf.png" 
+                  alt="RGSP Logo" 
+                  width={60}
+                  height={60}
+                  className="h-12 w-12 sm:h-[70px] sm:w-[70px] object-contain"
+                  priority
+                />
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+                Verify Your Identity
+              </h1>
+              <div className="flex items-center justify-center gap-2 text-emerald-100/80 text-xs sm:text-sm">
+                <FaEnvelope className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="truncate max-w-[200px] sm:max-w-none">{voterInfo.email}</span>
+              </div>
+              
+              {/* Security Badge */}
+              <div className="flex items-center justify-center gap-2 mt-3">
+                <div className="flex items-center gap-1 bg-[#f4a261]/20 px-2 py-1 rounded-full">
+                  <FaLock className="w-3 h-3 text-[#f4a261]" />
+                  <span className="text-[10px] text-[#f4a261]">Secure OTP</span>
+                </div>
+                {failedAttempts > 0 && !isLocked && (
+                  <div className="flex items-center gap-1 bg-red-500/20 px-2 py-1 rounded-full">
+                    <FaShieldAlt className="w-3 h-3 text-red-400" />
+                    <span className="text-[10px] text-red-400">{4 - failedAttempts} attempts left</span>
+                  </div>
+                )}
+                {isLocked && (
+                  <div className="flex items-center gap-1 bg-red-500/20 px-2 py-1 rounded-full">
+                    <FaShieldAlt className="w-3 h-3 text-red-400" />
+                    <span className="text-[10px] text-red-400">Temporarily Locked</span>
+                  </div>
+                )}
+              </div>
             </div>
-            <p className="text-center text-emerald-200/50 text-xs mt-3">
-              Enter the 6-digit code sent to your email
-            </p>
-          </div>
 
-          {/* Verify Button */}
-          <button
-            onClick={handleVerify}
-            disabled={isVerifying || otpDigits.join('').length !== 6 || isLocked}
-            className="w-full py-3 sm:py-4 px-6 bg-gradient-to-r from-[#f4a261] to-[#e76f51] hover:from-[#e76f51] hover:to-[#f4a261] disabled:from-gray-600 disabled:to-gray-600 text-white font-semibold rounded-xl shadow-lg transform transition-all duration-300 hover:scale-105 disabled:transform-none disabled:cursor-not-allowed mb-4"
-          >
-            {isVerifying ? (
-              <div className="flex items-center justify-center space-x-2">
-                <FaSpinner className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
-                <span>Verifying...</span>
+            {/* Responsive OTP Boxes */}
+            <div className="mb-6 sm:mb-8">
+              <label className="text-emerald-100 text-sm font-medium block text-center mb-3 sm:mb-4">
+                Enter 6-Digit Verification Code
+              </label>
+              <div className="flex justify-center gap-2 sm:gap-3 flex-wrap">
+                {otpDigits.map((digit, index) => (
+                  <input
+                    key={index}
+                    ref={(el) => (inputRefs.current[index] = el)}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleDigitChange(index, e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(index, e)}
+                    onPaste={index === 0 ? handlePaste : undefined}
+                    disabled={isVerifying || isLocked}
+                    className={`
+                      w-10 h-12 sm:w-14 sm:h-16 
+                      text-center text-xl sm:text-2xl font-bold 
+                      bg-white/10 border-2 
+                      rounded-xl text-white 
+                      focus:outline-none focus:ring-2 
+                      transition-all duration-200
+                      ${digit 
+                        ? 'border-[#f4a261] bg-white/20 ring-1 ring-[#f4a261]/50' 
+                        : 'border-white/20 focus:border-[#f4a261] focus:ring-[#f4a261]/50'
+                      }
+                      ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}
+                    `}
+                    autoFocus={index === 0 && !isLocked}
+                  />
+                ))}
               </div>
-            ) : (
-              <div className="flex items-center justify-center space-x-2">
-                <FaCheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span>Verify & Vote</span>
-              </div>
-            )}
-          </button>
+              <p className="text-center text-emerald-200/50 text-xs mt-3">
+                Enter the 6-digit code sent to your email
+              </p>
+            </div>
 
-          {/* Resend Section */}
-          <div className="text-center mb-6">
+            {/* Verify Button */}
             <button
-              onClick={handleResendOtp}
-              disabled={resendCooldown > 0 || isLoading || isLocked}
-              className="text-[#f4a261] hover:text-[#e76f51] text-xs sm:text-sm disabled:opacity-50 transition-colors flex items-center justify-center gap-2 mx-auto"
+              onClick={handleVerify}
+              disabled={isVerifying || otpDigits.join('').length !== 6 || isLocked}
+              className="w-full py-3 sm:py-4 px-6 bg-gradient-to-r from-[#f4a261] to-[#e76f51] hover:from-[#e76f51] hover:to-[#f4a261] disabled:from-gray-600 disabled:to-gray-600 text-white font-semibold rounded-xl shadow-lg transform transition-all duration-300 hover:scale-105 disabled:transform-none disabled:cursor-not-allowed mb-4"
             >
-              <FaClock className="w-3 h-3" />
-              {resendCooldown > 0 
-                ? `Resend code in ${resendCooldown}s` 
-                : "Didn't receive code? Resend OTP"}
+              {isVerifying ? (
+                <div className="flex items-center justify-center space-x-2">
+                  <FaSpinner className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                  <span>Verifying...</span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center space-x-2">
+                  <FaCheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span>Verify & Vote</span>
+                </div>
+              )}
             </button>
-          </div>
 
-          {/* Info Cards - Responsive Grid */}
-          <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-6">
-            <div className="bg-white/5 rounded-xl p-2 sm:p-3 text-center border border-white/10">
-              <div className="text-[#f4a261] text-base sm:text-lg font-bold mb-1">10 min</div>
-              <div className="text-emerald-100/70 text-[10px] sm:text-xs">Code Valid For</div>
+            {/* Resend Section */}
+            <div className="text-center mb-6">
+              <button
+                onClick={handleResendOtp}
+                disabled={resendCooldown > 0 || isLoading || isLocked}
+                className="text-[#f4a261] hover:text-[#e76f51] text-xs sm:text-sm disabled:opacity-50 transition-colors flex items-center justify-center gap-2 mx-auto"
+              >
+                <FaClock className="w-3 h-3" />
+                {resendCooldown > 0 
+                  ? `Resend code in ${resendCooldown}s` 
+                  : "Didn't receive code? Resend OTP"}
+              </button>
             </div>
-            <div className="bg-white/5 rounded-xl p-2 sm:p-3 text-center border border-white/10">
-              <div className="text-[#f4a261] text-base sm:text-lg font-bold mb-1">1 Time</div>
-              <div className="text-emerald-100/70 text-[10px] sm:text-xs">Single Use Only</div>
+
+            {/* Info Cards - Responsive Grid */}
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-6">
+              <div className="bg-white/5 rounded-xl p-2 sm:p-3 text-center border border-white/10">
+                <div className="text-[#f4a261] text-base sm:text-lg font-bold mb-1">10 min</div>
+                <div className="text-emerald-100/70 text-[10px] sm:text-xs">Code Valid For</div>
+              </div>
+              <div className="bg-white/5 rounded-xl p-2 sm:p-3 text-center border border-white/10">
+                <div className="text-[#f4a261] text-base sm:text-lg font-bold mb-1">1 Time</div>
+                <div className="text-emerald-100/70 text-[10px] sm:text-xs">Single Use Only</div>
+              </div>
             </div>
-          </div>
 
-          {/* Back to Login */}
-          <button
-            onClick={() => {
-              localStorage.removeItem('temp_voter_email');
-              localStorage.removeItem('temp_voter_school_id');
-              localStorage.removeItem('temp_voter_id');
-              localStorage.removeItem('temp_voter_name');
-              router.push('/login');
-            }}
-            className="w-full py-2.5 sm:py-3 px-6 bg-white/5 hover:bg-white/10 text-white font-medium rounded-xl transition-all duration-300 flex items-center justify-center space-x-2 border border-white/10 text-sm sm:text-base"
-          >
-            <FaArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" />
-            <span>Back to Login</span>
-          </button>
+            {/* Back to Login */}
+            <button
+              onClick={() => {
+                localStorage.removeItem('temp_voter_email');
+                localStorage.removeItem('temp_voter_school_id');
+                localStorage.removeItem('temp_voter_id');
+                localStorage.removeItem('temp_voter_name');
+                router.push('/login');
+              }}
+              className="w-full py-2.5 sm:py-3 px-6 bg-white/5 hover:bg-white/10 text-white font-medium rounded-xl transition-all duration-300 flex items-center justify-center space-x-2 border border-white/10 text-sm sm:text-base"
+            >
+              <FaArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span>Back to Login</span>
+            </button>
 
-          {/* Footer */}
-          <div className="mt-6 text-center">
-            <div className="flex items-center justify-center space-x-3 sm:space-x-4 text-[10px] sm:text-xs text-emerald-100/60">
-              <span className="flex items-center space-x-1">
-                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-[#f4a261] rounded-full animate-pulse"></div>
-                <span>Secure</span>
-              </span>
-              <span>•</span>
-              <span className="flex items-center space-x-1">
-                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-[#2d6a4f] rounded-full animate-pulse"></div>
-                <span>Encrypted</span>
-              </span>
-              <span>•</span>
-              <span className="flex items-center space-x-1">
-                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-[#f4a261] rounded-full animate-pulse"></div>
-                <span>Audited</span>
-              </span>
+            {/* Footer */}
+            <div className="mt-6 text-center">
+              <div className="flex items-center justify-center space-x-3 sm:space-x-4 text-[10px] sm:text-xs text-emerald-100/60">
+                <span className="flex items-center space-x-1">
+                  <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-[#f4a261] rounded-full animate-pulse"></div>
+                  <span>Secure</span>
+                </span>
+                <span>•</span>
+                <span className="flex items-center space-x-1">
+                  <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-[#2d6a4f] rounded-full animate-pulse"></div>
+                  <span>Encrypted</span>
+                </span>
+                <span>•</span>
+                <span className="flex items-center space-x-1">
+                  <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-[#f4a261] rounded-full animate-pulse"></div>
+                  <span>Audited</span>
+                </span>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
