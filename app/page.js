@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { Toaster, toast } from 'sonner'; // ← Changed from react-toastify
 import NavigationBar from '@/components/home/NavigationBar';
 import CountdownTimer from '@/components/home/CountdownTimer';
 import StatsCard from '@/components/home/StatsCard';
@@ -64,6 +63,14 @@ export default function Home() {
     };
   }, [isMobileMenuOpen]);
 
+  // Optional: Show toast when voting status changes or data refreshes
+  useEffect(() => {
+    if (!loading && lastUpdated) {
+      // Optional: Show a silent refresh notification (can be commented out)
+      // toast.success('Election data refreshed', { duration: 2000 });
+    }
+  }, [lastUpdated, loading]);
+
   const stats = [
     { value: loading ? '...' : `${totalStats.totalVoters.toLocaleString()}+`, label: 'Registered Voters', icon: FaUsers,    color: 'teal' },
     { value: loading ? '...' : `${totalStats.participationRate.toFixed(1)}%`, label: 'Live Participation', icon: FaChartBar, color: 'amber' },
@@ -77,6 +84,18 @@ export default function Home() {
         ? 'bg-teal-50' 
         : 'bg-gray-900'
     }`}>
+      {/* Sonner Toaster - replaces ToastContainer */}
+      <Toaster 
+        position="top-right"
+        richColors
+        closeButton
+        toastOptions={{
+          duration: 4000,
+          className: 'text-sm font-medium',
+        }}
+        theme={theme === 'light' ? 'light' : 'dark'}
+      />
+
       {/* Page top accent bar */}
       <div className={`fixed top-0 left-0 right-0 h-0.5 z-50 ${
         theme === 'light'
@@ -103,13 +122,6 @@ export default function Home() {
       >
         {theme === 'light' ? <FaMoon size={20} /> : <FaSun size={20} />}
       </button>
-
-      <ToastContainer 
-        position="top-right" 
-        autoClose={5000}
-        className="!text-sm sm:!text-base"
-        theme={theme}
-      />
 
       <div className="relative z-10">
         <NavigationBar 
@@ -214,7 +226,12 @@ export default function Home() {
               </p>
             )}
             <button
-              onClick={fetchElectionData}
+              onClick={() => {
+                fetchElectionData();
+                toast.info('Refreshing election data...', {
+                  duration: 2000,
+                });
+              }}
               disabled={loading}
               className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-1.5 sm:py-2.5 bg-gradient-to-br from-teal-600 to-teal-800 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-md shadow-teal-600/25 hover:-translate-y-0.5 hover:shadow-teal-600/35 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transition-all duration-200"
             >
@@ -235,7 +252,13 @@ export default function Home() {
                 <p className={`font-semibold text-xs sm:text-sm ${
                   theme === 'light' ? 'text-red-800' : 'text-red-300'
                 }`}>{error}</p>
-                <button onClick={fetchElectionData} className="text-[11px] sm:text-xs text-red-500 font-medium mt-1 hover:text-red-700 transition-colors">
+                <button 
+                  onClick={() => {
+                    fetchElectionData();
+                    toast.info('Retrying...', { duration: 2000 });
+                  }} 
+                  className="text-[11px] sm:text-xs text-red-500 font-medium mt-1 hover:text-red-700 transition-colors"
+                >
                   Try again →
                 </button>
               </div>
