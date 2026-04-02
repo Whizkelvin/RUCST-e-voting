@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from 'react-hook-form';
@@ -27,7 +28,8 @@ import 'aos/dist/aos.css';
 import { supabase } from '@/lib/supabaseClient';
 import { logOtpGeneration, getClientIP } from '@/utils/auditLog';
 
-export default function Login() {
+// Create a separate component that uses useSearchParams
+function LoginContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDetectingRole, setIsDetectingRole] = useState(false);
   const [clientIP, setClientIP] = useState('unknown');
@@ -310,161 +312,161 @@ export default function Login() {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }, []);
 
-// Add this function to your login page
-const setAuthCookie = async (isAuthenticated, userRole, userEmail) => {
-  // Set cookies for middleware
-  document.cookie = `is_authenticated=${isAuthenticated}; path=/; max-age=1800`; // 30 minutes
-  document.cookie = `user_role=${userRole}; path=/; max-age=1800`;
-  document.cookie = `user_email=${userEmail}; path=/; max-age=1800`;
-};
+  // Add this function to your login page
+  const setAuthCookie = async (isAuthenticated, userRole, userEmail) => {
+    // Set cookies for middleware
+    document.cookie = `is_authenticated=${isAuthenticated}; path=/; max-age=1800`; // 30 minutes
+    document.cookie = `user_role=${userRole}; path=/; max-age=1800`;
+    document.cookie = `user_email=${userEmail}; path=/; max-age=1800`;
+  };
 
-// Then in your handleAdminLogin function, after successful login:
-const handleAdminLogin = useCallback(async (email, schoolId) => {
-  setIsLoading(true);
-  try {
-    const cleanEmail = email.toLowerCase().trim();
-    const cleanSchoolId = schoolId.trim().padStart(8, '0');
-    
-    // Step 1: Check if admin exists in admins table
-    const { data: adminData, error: adminCheckError } = await supabase
-      .from('admins')
-      .select('*')
-      .eq('email', cleanEmail)
-      .eq('school_id', cleanSchoolId)
-      .maybeSingle();
-    
-    if (!adminData || adminCheckError) {
-      setLoginAttempts(prev => prev + 1);
-      toast.error('❌ Admin not found. Please check your credentials.', {
-        position: "top-center",
-        autoClose: 3000
-      });
-      setIsLoading(false);
-      return;
-    }
-    
-    // Step 2: Authenticate with Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: cleanEmail,
-      password: cleanSchoolId
-    });
-    
-    if (authError) {
-      setLoginAttempts(prev => prev + 1);
-      
-      if (authError.message === 'Invalid login credentials') {
-        toast.error('❌ Invalid School ID. Please check your credentials.', {
-          position: "top-center",
-          autoClose: 3000
-        });
-      } else if (authError.message === 'Email not confirmed') {
-        toast.error('❌ Email not confirmed. Please check your inbox for verification link.', {
-          position: "top-center",
-          autoClose: 3000
-        });
-      } else {
-        toast.error('❌ Authentication failed: ' + authError.message, {
-          position: "top-center",
-          autoClose: 3000
-        });
-      }
-      setIsLoading(false);
-      return;
-    }
-    
-    // Step 3: Generate Admin OTP
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
-    
-    // Step 4: Store OTP in database
-    const { error: updateError } = await supabase
-      .from('admins')
-      .update({
-        otp_code: otpCode,
-        otp_expires_at: otpExpiry.toISOString(),
-        otp_verified: false,
-        last_otp_sent_at: new Date().toISOString(),
-        otp_attempts: 0
-      })
-      .eq('id', adminData.id);
-    
-    if (updateError) {
-      console.error('Error storing OTP:', updateError);
-      toast.error('Failed to generate OTP. Please try again.', {
-        position: "top-center",
-        autoClose: 3000
-      });
-      setIsLoading(false);
-      return;
-    }
-    
-    // Step 5: Store temporary data in localStorage for verification page
-    localStorage.setItem('temp_admin_id', adminData.id);
-    localStorage.setItem('temp_admin_email', cleanEmail);
-    localStorage.setItem('temp_admin_name', adminData.name || 'Admin User');
-    localStorage.setItem('temp_admin_role', adminData.role || 'admin');
-    localStorage.setItem('temp_admin_auth_id', authData.user.id);
-    
-    // Step 6: Send OTP via email
+  // Then in your handleAdminLogin function, after successful login:
+  const handleAdminLogin = useCallback(async (email, schoolId) => {
+    setIsLoading(true);
     try {
-      const response = await fetch('/api/send-admin-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: cleanEmail,
-          otp: otpCode,
-          name: adminData.name || 'Admin User',
-          role: adminData.role || 'admin'
-        }),
-      });
+      const cleanEmail = email.toLowerCase().trim();
+      const cleanSchoolId = schoolId.trim().padStart(8, '0');
       
-      const result = await response.json();
+      // Step 1: Check if admin exists in admins table
+      const { data: adminData, error: adminCheckError } = await supabase
+        .from('admins')
+        .select('*')
+        .eq('email', cleanEmail)
+        .eq('school_id', cleanSchoolId)
+        .maybeSingle();
       
-      if (result.success) {
-        toast.success(`✅ Admin OTP sent to ${cleanEmail}. Please verify to continue.`, {
+      if (!adminData || adminCheckError) {
+        setLoginAttempts(prev => prev + 1);
+        toast.error('❌ Admin not found. Please check your credentials.', {
           position: "top-center",
           autoClose: 3000
         });
-      } else {
-        console.log('🔑 Admin OTP for testing:', otpCode);
-        toast.info(`🔑 Development OTP: ${otpCode} (Check console)`, {
+        setIsLoading(false);
+        return;
+      }
+      
+      // Step 2: Authenticate with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: cleanSchoolId
+      });
+      
+      if (authError) {
+        setLoginAttempts(prev => prev + 1);
+        
+        if (authError.message === 'Invalid login credentials') {
+          toast.error('❌ Invalid School ID. Please check your credentials.', {
+            position: "top-center",
+            autoClose: 3000
+          });
+        } else if (authError.message === 'Email not confirmed') {
+          toast.error('❌ Email not confirmed. Please check your inbox for verification link.', {
+            position: "top-center",
+            autoClose: 3000
+          });
+        } else {
+          toast.error('❌ Authentication failed: ' + authError.message, {
+            position: "top-center",
+            autoClose: 3000
+          });
+        }
+        setIsLoading(false);
+        return;
+      }
+      
+      // Step 3: Generate Admin OTP
+      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
+      
+      // Step 4: Store OTP in database
+      const { error: updateError } = await supabase
+        .from('admins')
+        .update({
+          otp_code: otpCode,
+          otp_expires_at: otpExpiry.toISOString(),
+          otp_verified: false,
+          last_otp_sent_at: new Date().toISOString(),
+          otp_attempts: 0
+        })
+        .eq('id', adminData.id);
+      
+      if (updateError) {
+        console.error('Error storing OTP:', updateError);
+        toast.error('Failed to generate OTP. Please try again.', {
+          position: "top-center",
+          autoClose: 3000
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      // Step 5: Store temporary data in localStorage for verification page
+      localStorage.setItem('temp_admin_id', adminData.id);
+      localStorage.setItem('temp_admin_email', cleanEmail);
+      localStorage.setItem('temp_admin_name', adminData.name || 'Admin User');
+      localStorage.setItem('temp_admin_role', adminData.role || 'admin');
+      localStorage.setItem('temp_admin_auth_id', authData.user.id);
+      
+      // Step 6: Send OTP via email
+      try {
+        const response = await fetch('/api/send-admin-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: cleanEmail,
+            otp: otpCode,
+            name: adminData.name || 'Admin User',
+            role: adminData.role || 'admin'
+          }),
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          toast.success(`✅ Admin OTP sent to ${cleanEmail}. Please verify to continue.`, {
+            position: "top-center",
+            autoClose: 3000
+          });
+        } else {
+          console.log('🔑 Admin OTP for testing:', otpCode);
+          toast.info(`🔑 Development OTP: ${otpCode} (Check console)`, {
+            position: "top-center",
+            autoClose: 10000
+          });
+        }
+      } catch (emailError) {
+        console.error('Email sending failed:', emailError);
+        toast.info(`🔑 Development OTP: ${otpCode}`, {
           position: "top-center",
           autoClose: 10000
         });
       }
-    } catch (emailError) {
-      console.error('Email sending failed:', emailError);
-      toast.info(`🔑 Development OTP: ${otpCode}`, {
+      
+      setLoginAttempts(0);
+      setLockoutUntil(null);
+      
+      // Step 7: Redirect to OTP verification page
+      setTimeout(() => {
+        router.push('/admin-verify-otp');
+      }, 1500);
+      
+    } catch (error) {
+      console.error('Admin login error:', error);
+      toast.error('System error. Please try again later.', {
         position: "top-center",
-        autoClose: 10000
+        autoClose: 3000
       });
+    } finally {
+      setIsLoading(false);
     }
-    
-    setLoginAttempts(0);
-    setLockoutUntil(null);
-    
-    // Step 7: Redirect to OTP verification page
-    setTimeout(() => {
-      router.push('/admin-verify-otp');
-    }, 1500);
-    
-  } catch (error) {
-    console.error('Admin login error:', error);
-    toast.error('System error. Please try again later.', {
-      position: "top-center",
-      autoClose: 3000
-    });
-  } finally {
-    setIsLoading(false);
-  }
-}, [router, setLoginAttempts]);
+  }, [router, setLoginAttempts]);
 
-// Also add logout function to clear cookies
-const clearAuthCookies = () => {
-  document.cookie = 'is_authenticated=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-  document.cookie = 'user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-  document.cookie = 'user_email=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-};
+  // Also add logout function to clear cookies
+  const clearAuthCookies = () => {
+    document.cookie = 'is_authenticated=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    document.cookie = 'user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    document.cookie = 'user_email=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+  };
 
   const handleVoterLogin = useCallback(async (email, schoolId) => {
     setIsLoading(true);
@@ -977,5 +979,21 @@ const clearAuthCookies = () => {
         </div>
       </div>
     </div>
+  );
+}
+
+// Main export with Suspense boundary
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
+          <p className="text-white">Loading secure portal...</p>
+        </div>
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 }
