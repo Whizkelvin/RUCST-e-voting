@@ -1,28 +1,29 @@
 // app/api/send-admin-otp/route.js
+import { NextResponse } from 'next/server';
+
 export async function POST(request) {
   try {
     const { email, otp, name, role, expiresIn } = await request.json();
 
     // Validate inputs
     if (!email || !otp) {
-      return Response.json(
+      return NextResponse.json(
         { success: false, error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    // Brevo API Key
     const apiKey = process.env.BREVO_API_KEY;
 
     if (!apiKey) {
       console.error('BREVO_API_KEY not configured');
-      return Response.json(
+      return NextResponse.json(
         { success: false, error: 'Email service not configured' },
         { status: 500 }
       );
     }
 
-    // Send email via Brevo API
+    // Send email using Brevo API directly with fetch
     const response = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
@@ -212,7 +213,7 @@ export async function POST(request) {
 
     console.log('Admin OTP sent successfully to:', email);
     
-    return Response.json({ 
+    return NextResponse.json({ 
       success: true, 
       message: 'Admin OTP sent successfully',
       messageId: data.messageId 
@@ -220,7 +221,7 @@ export async function POST(request) {
     
   } catch (error) {
     console.error('Error sending admin OTP:', error);
-    return Response.json(
+    return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }
     );

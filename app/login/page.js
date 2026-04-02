@@ -325,7 +325,25 @@ const handleAdminLogin = useCallback(async (email, schoolId) => {
     const cleanEmail = email.toLowerCase().trim();
     const cleanSchoolId = schoolId.trim().padStart(8, '0');
     
-    // Sign in with Supabase Auth
+    // Step 1: Check if admin exists in admins table
+    const { data: adminData, error: adminCheckError } = await supabase
+      .from('admins')
+      .select('*')
+      .eq('email', cleanEmail)
+      .eq('school_id', cleanSchoolId)
+      .maybeSingle();
+    
+    if (!adminData || adminCheckError) {
+      setLoginAttempts(prev => prev + 1);
+      toast.error('❌ Admin not found. Please check your credentials.', {
+        position: "top-center",
+        autoClose: 3000
+      });
+      setIsLoading(false);
+      return;
+    }
+    
+    // Step 2: Authenticate with Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: cleanEmail,
       password: cleanSchoolId
@@ -333,25 +351,46 @@ const handleAdminLogin = useCallback(async (email, schoolId) => {
     
     if (authError) {
       setLoginAttempts(prev => prev + 1);
-      toast.error('❌ Login failed: Invalid credentials', {
-        position: "top-center",
-        autoClose: 3000
-      });
+      
+      if (authError.message === 'Invalid login credentials') {
+        toast.error('❌ Invalid School ID. Please check your credentials.', {
+          position: "top-center",
+          autoClose: 3000
+        });
+      } else if (authError.message === 'Email not confirmed') {
+        toast.error('❌ Email not confirmed. Please check your inbox for verification link.', {
+          position: "top-center",
+          autoClose: 3000
+        });
+      } else {
+        toast.error('❌ Authentication failed: ' + authError.message, {
+          position: "top-center",
+          autoClose: 3000
+        });
+      }
       setIsLoading(false);
       return;
     }
     
-    // Check if user is admin
-    const { data: adminData } = await supabase
+    // Step 3: Generate Admin OTP
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
+    
+    // Step 4: Store OTP in database
+    const { error: updateError } = await supabase
       .from('admins')
-      .select('role')
-      .eq('email', cleanEmail)
-      .eq('school_id', cleanSchoolId)
-      .single();
+      .update({
+        otp_code: otpCode,
+        otp_expires_at: otpExpiry.toISOString(),
+        otp_verified: false,
+        last_otp_sent_at: new Date().toISOString(),
+        otp_attempts: 0
+      })
+      .eq('id', adminData.id);
     
-    if (!adminData) {
-      await supabase.auth.signOut();
-      toast.error('❌ Not authorized as admin', {
+    if (updateError) {
+      console.error('Error storing OTP:', updateError);
+      toast.error('Failed to generate OTP. Please try again.', {
         position: "top-center",
         autoClose: 3000
       });
@@ -359,32 +398,66 @@ const handleAdminLogin = useCallback(async (email, schoolId) => {
       return;
     }
     
-    // Store in localStorage (for client-side)
-    localStorage.setItem('is_authenticated', 'true');
-    localStorage.setItem('user_role', adminData.role);
-    localStorage.setItem('user_email', cleanEmail);
-    localStorage.setItem('user_id', authData.user.id);
-    localStorage.setItem('last_activity', Date.now().toString());
+    // Step 5: Store temporary data in localStorage for verification page
+    localStorage.setItem('temp_admin_id', adminData.id);
+    localStorage.setItem('temp_admin_email', cleanEmail);
+    localStorage.setItem('temp_admin_name', adminData.name || 'Admin User');
+    localStorage.setItem('temp_admin_role', adminData.role || 'admin');
+    localStorage.setItem('temp_admin_auth_id', authData.user.id);
     
-    // ALSO set cookies for middleware
-    setAuthCookie('true', adminData.role, cleanEmail);
+    // Step 6: Send OTP via email
+    try {
+      const response = await fetch('/api/send-admin-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          otp: otpCode,
+          name: adminData.name || 'Admin User',
+          role: adminData.role || 'admin'
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success(`✅ Admin OTP sent to ${cleanEmail}. Please verify to continue.`, {
+          position: "top-center",
+          autoClose: 3000
+        });
+      } else {
+        console.log('🔑 Admin OTP for testing:', otpCode);
+        toast.info(`🔑 Development OTP: ${otpCode} (Check console)`, {
+          position: "top-center",
+          autoClose: 10000
+        });
+      }
+    } catch (emailError) {
+      console.error('Email sending failed:', emailError);
+      toast.info(`🔑 Development OTP: ${otpCode}`, {
+        position: "top-center",
+        autoClose: 10000
+      });
+    }
     
-    toast.success('✅ Login successful! Redirecting...', {
-      position: "top-center",
-      autoClose: 1500
-    });
+    setLoginAttempts(0);
+    setLockoutUntil(null);
     
-    // Redirect
+    // Step 7: Redirect to OTP verification page
     setTimeout(() => {
-      window.location.href = '/admin/manage-voters';
+      router.push('/admin-verify-otp');
     }, 1500);
     
   } catch (error) {
-    console.error('Login error:', error);
-    toast.error('System error', { position: "top-center" });
+    console.error('Admin login error:', error);
+    toast.error('System error. Please try again later.', {
+      position: "top-center",
+      autoClose: 3000
+    });
+  } finally {
     setIsLoading(false);
   }
-}, []);
+}, [router, setLoginAttempts]);
 
 // Also add logout function to clear cookies
 const clearAuthCookies = () => {

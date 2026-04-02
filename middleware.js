@@ -12,6 +12,7 @@ export function middleware(request) {
   // Allow access to login page and public routes
   const isPublicRoute = path === '/' || 
                        path === '/login' || 
+                       path === '/admin-verify-otp' ||  // Added admin-verify-otp
                        path === '/verify-otp' || 
                        path === '/election-result' ||
                        path.startsWith('/_next') ||
@@ -45,6 +46,7 @@ export const config = {
     '/admin/:path*',
     '/voter/:path*',
     '/login',
+    '/admin-verify-otp',  // Added admin-verify-otp
     '/verify-otp',
     '/election-result'
   ],

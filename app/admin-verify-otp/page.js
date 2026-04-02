@@ -1,0 +1,532 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { toast } from 'react-toastify';
+import Image from 'next/image';
+import { 
+  FaShieldAlt, 
+  FaSpinner, 
+  FaCheckCircle, 
+  FaTimesCircle,
+  FaKey,
+  FaUserShield,
+  FaClock,
+  FaExclamationTriangle,
+  FaArrowLeft
+} from 'react-icons/fa';
+import { supabase } from '@/lib/supabaseClient';
+
+export default function AdminVerifyOTP() {
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [isLoading, setIsLoading] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(300);
+  const [canResend, setCanResend] = useState(false);
+  const [adminData, setAdminData] = useState(null);
+  const [verificationStatus, setVerificationStatus] = useState(null);
+  
+  const router = useRouter();
+
+  useEffect(() => {
+    // Get admin info from localStorage
+    const adminId = localStorage.getItem('temp_admin_id');
+    const adminEmail = localStorage.getItem('temp_admin_email');
+    const adminName = localStorage.getItem('temp_admin_name');
+    const adminRole = localStorage.getItem('temp_admin_role');
+    
+    if (!adminId || !adminEmail) {
+      toast.error('Session expired. Please login again.');
+      router.push('/login');
+      return;
+    }
+    
+    setAdminData({
+      id: adminId,
+      email: adminEmail,
+      name: adminName,
+      role: adminRole
+    });
+    
+    // Check OTP status from database
+    checkOTPStatus(adminId);
+    
+    // Start countdown timer
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setCanResend(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, [router]);
+
+  const checkOTPStatus = async (adminId) => {
+    try {
+      const { data, error } = await supabase
+        .from('admins')
+        .select('otp_expires_at, otp_verified')
+        .eq('id', adminId)
+        .single();
+      
+      if (error) throw error;
+      
+      if (data.otp_verified) {
+        toast.info('Already verified! Redirecting...');
+        completeLogin();
+      }
+      
+      if (data.otp_expires_at) {
+        const expiryTime = new Date(data.otp_expires_at).getTime();
+        const currentTime = Date.now();
+        const remaining = Math.max(0, Math.floor((expiryTime - currentTime) / 1000));
+        setTimeLeft(remaining);
+      }
+    } catch (error) {
+      console.error('Error checking OTP status:', error);
+    }
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleOtpChange = (index, value) => {
+    if (!/^\d*$/.test(value)) return;
+    
+    const newOtp = [...otp];
+    newOtp[index] = value.slice(0, 1);
+    setOtp(newOtp);
+    
+    if (value && index < 5) {
+      const nextInput = document.getElementById(`otp-${index + 1}`);
+      if (nextInput) nextInput.focus();
+    }
+  };
+
+  const handleKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      const prevInput = document.getElementById(`otp-${index - 1}`);
+      if (prevInput) prevInput.focus();
+    }
+  };
+
+  const completeLogin = async () => {
+    const authId = localStorage.getItem('temp_admin_auth_id');
+    const adminEmail = localStorage.getItem('temp_admin_email');
+    const adminRole = localStorage.getItem('temp_admin_role');
+    
+    // Store session data
+    localStorage.setItem('is_authenticated', 'true');
+    localStorage.setItem('user_role', adminRole);
+    localStorage.setItem('user_email', adminEmail);
+    localStorage.setItem('user_id', authId);
+    localStorage.setItem('last_activity', Date.now().toString());
+    
+    // Clear temporary data
+    localStorage.removeItem('temp_admin_id');
+    localStorage.removeItem('temp_admin_email');
+    localStorage.removeItem('temp_admin_name');
+    localStorage.removeItem('temp_admin_role');
+    localStorage.removeItem('temp_admin_auth_id');
+    
+    toast.success('✅ Verification successful! Redirecting to dashboard...', {
+      position: "top-center",
+      autoClose: 2000
+    });
+    
+    setTimeout(() => {
+      router.push('/admin/manage-voters');
+    }, 2000);
+  };
+
+  const verifyOTP = async () => {
+    const otpCode = otp.join('');
+    
+    if (otpCode.length !== 6) {
+      toast.error('Please enter the complete 6-digit OTP', {
+        position: "top-center"
+      });
+      return;
+    }
+    
+    setIsLoading(true);
+    setVerificationStatus('verifying');
+    
+    try {
+      const adminId = localStorage.getItem('temp_admin_id');
+      
+      // Get admin data from database
+      const { data: admin, error: fetchError } = await supabase
+        .from('admins')
+        .select('otp_code, otp_expires_at, otp_attempts, otp_verified')
+        .eq('id', adminId)
+        .single();
+      
+      if (fetchError) throw fetchError;
+      
+      // Check if already verified
+      if (admin.otp_verified) {
+        toast.warning('OTP already verified! Redirecting...');
+        completeLogin();
+        return;
+      }
+      
+      // Check if OTP expired
+      if (new Date(admin.otp_expires_at) < new Date()) {
+        setVerificationStatus('expired');
+        toast.error('OTP has expired. Please request a new one.', {
+          position: "top-center"
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      // Check OTP attempts (max 5 attempts)
+      if (admin.otp_attempts >= 5) {
+        setVerificationStatus('failed');
+        toast.error('Too many failed attempts. Please request a new OTP.', {
+          position: "top-center"
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      // Verify OTP
+      if (admin.otp_code === otpCode) {
+        // Update database: mark as verified
+        const { error: updateError } = await supabase
+          .from('admins')
+          .update({
+            otp_verified: true,
+            otp_attempts: 0,
+            otp_code: null,
+            otp_expires_at: null
+          })
+          .eq('id', adminId);
+        
+        if (updateError) throw updateError;
+        
+        setVerificationStatus('success');
+        completeLogin();
+        
+      } else {
+        // Increment failed attempts
+        const { error: updateError } = await supabase
+          .from('admins')
+          .update({
+            otp_attempts: admin.otp_attempts + 1
+          })
+          .eq('id', adminId);
+        
+        if (updateError) throw updateError;
+        
+        setVerificationStatus('failed');
+        const remainingAttempts = 5 - (admin.otp_attempts + 1);
+        toast.error(`Invalid OTP. ${remainingAttempts} attempts remaining.`, {
+          position: "top-center"
+        });
+        
+        // Clear OTP inputs
+        setOtp(['', '', '', '', '', '']);
+        document.getElementById('otp-0')?.focus();
+      }
+      
+    } catch (error) {
+      console.error('OTP verification error:', error);
+      setVerificationStatus('failed');
+      toast.error('Verification failed. Please try again.', {
+        position: "top-center"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resendOTP = async () => {
+    if (!canResend) {
+      toast.warning(`Please wait ${formatTime(timeLeft)} before requesting another OTP`, {
+        position: "top-center"
+      });
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      const adminId = localStorage.getItem('temp_admin_id');
+      const adminEmail = localStorage.getItem('temp_admin_email');
+      const adminName = localStorage.getItem('temp_admin_name');
+      const adminRole = localStorage.getItem('temp_admin_role');
+      
+      // Generate new OTP
+      const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      const newExpiry = new Date(Date.now() + 5 * 60 * 1000);
+      
+      // Update database with new OTP
+      const { error: updateError } = await supabase
+        .from('admins')
+        .update({
+          otp_code: newOtp,
+          otp_expires_at: newExpiry.toISOString(),
+          otp_verified: false,
+          last_otp_sent_at: new Date().toISOString(),
+          otp_attempts: 0
+        })
+        .eq('id', adminId);
+      
+      if (updateError) throw updateError;
+      
+      // Send new OTP via email
+      const response = await fetch('/api/send-admin-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: adminEmail,
+          otp: newOtp,
+          name: adminName,
+          role: adminRole,
+          expiresIn: 5
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success('✅ New OTP sent to your email!', {
+          position: "top-center"
+        });
+        
+        // Reset timer
+        setTimeLeft(300);
+        setCanResend(false);
+        setOtp(['', '', '', '', '', '']);
+        setVerificationStatus(null);
+        
+        // Start countdown again
+        const timer = setInterval(() => {
+          setTimeLeft((prev) => {
+            if (prev <= 1) {
+              clearInterval(timer);
+              setCanResend(true);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+        
+      } else {
+        toast.error('Failed to send OTP. Please try again.', {
+          position: "top-center"
+        });
+      }
+      
+    } catch (error) {
+      console.error('Resend OTP error:', error);
+      toast.error('Error sending OTP. Please try again.', {
+        position: "top-center"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const goBackToLogin = () => {
+    localStorage.removeItem('temp_admin_id');
+    localStorage.removeItem('temp_admin_email');
+    localStorage.removeItem('temp_admin_name');
+    localStorage.removeItem('temp_admin_role');
+    localStorage.removeItem('temp_admin_auth_id');
+    router.push('/login');
+  };
+
+  if (!adminData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#02140f] via-[#063d2e] to-[#0b2545] flex items-center justify-center">
+        <FaSpinner className="animate-spin text-white text-4xl" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#02140f] via-[#063d2e] to-[#0b2545] flex items-center justify-center p-4 relative overflow-hidden">
+      
+      {/* Animated Background */}
+      <div className="absolute inset-0">
+        <div className="absolute top-[-100px] right-[-100px] w-[300px] h-[300px] bg-purple-600 opacity-20 blur-3xl rounded-full animate-pulse"></div>
+        <div className="absolute bottom-[-100px] left-[-100px] w-[300px] h-[300px] bg-blue-500 opacity-20 blur-3xl rounded-full animate-pulse delay-1000"></div>
+      </div>
+
+      <div className="relative w-full max-w-md">
+        <div className="bg-white/10 backdrop-blur-2xl border border-white/20 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.4)] p-8 transition-all duration-300">
+          
+          {/* Back Button */}
+          <button
+            onClick={goBackToLogin}
+            className="absolute top-4 left-4 text-white/70 hover:text-white transition-colors"
+          >
+            <FaArrowLeft className="text-xl" />
+          </button>
+
+          {/* Logos */}
+          <div className="flex justify-center gap-4 mb-6">
+            <Image 
+              src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1762440313/RUCST_logo-removebg-preview_hwdial.png"
+              width={60}
+              height={60}
+              alt="Regent University Logo"
+              className="object-contain"
+            />
+            <Image 
+              src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1774528110/Gemini_Generated_Image_57c2xl57c2xl57c2_ykckzf.png"
+              width={60}
+              height={60}
+              alt="E-Voting Logo"
+              className="object-contain"
+            />
+          </div>
+
+          {/* Title */}
+          <div className="text-center mb-6">
+            <div className="flex justify-center mb-3">
+              <div className="p-3 bg-purple-500/20 rounded-full">
+                <FaShieldAlt className="text-purple-400 text-3xl" />
+              </div>
+            </div>
+            <h1 className="text-2xl font-bold text-white">Admin Verification</h1>
+            <p className="text-white/70 text-sm mt-1">
+              Enter the OTP sent to your email
+            </p>
+          </div>
+
+          {/* Admin Info Card */}
+          <div className="mb-6 p-4 rounded-xl bg-purple-500/20 border border-purple-400/50">
+            <div className="flex items-center gap-3">
+              <FaUserShield className="text-purple-400 text-xl" />
+              <div>
+                <p className="text-white font-medium">{adminData.name}</p>
+                <p className="text-white/70 text-sm">{adminData.email}</p>
+                <p className="text-purple-300 text-xs mt-1">Role: {adminData.role}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Timer Display */}
+          <div className="mb-6 text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/20">
+              <FaClock className="text-yellow-400" />
+              <span className="text-white font-mono text-lg">
+                {formatTime(timeLeft)}
+              </span>
+            </div>
+            {!canResend && timeLeft > 0 && (
+              <p className="text-white/60 text-xs mt-2">
+                OTP expires in {formatTime(timeLeft)}
+              </p>
+            )}
+          </div>
+
+          {/* Verification Status */}
+          {verificationStatus === 'verifying' && (
+            <div className="mb-4 p-3 rounded-xl bg-blue-500/20 border border-blue-400/50">
+              <div className="flex items-center gap-2">
+                <FaSpinner className="animate-spin text-blue-400" />
+                <p className="text-blue-200 text-sm">Verifying OTP...</p>
+              </div>
+            </div>
+          )}
+
+          {verificationStatus === 'success' && (
+            <div className="mb-4 p-3 rounded-xl bg-green-500/20 border border-green-400/50">
+              <div className="flex items-center gap-2">
+                <FaCheckCircle className="text-green-400" />
+                <p className="text-green-200 text-sm">Verification successful! Redirecting...</p>
+              </div>
+            </div>
+          )}
+
+          {verificationStatus === 'failed' && (
+            <div className="mb-4 p-3 rounded-xl bg-red-500/20 border border-red-400/50">
+              <div className="flex items-center gap-2">
+                <FaTimesCircle className="text-red-400" />
+                <p className="text-red-200 text-sm">Invalid OTP. Please try again.</p>
+              </div>
+            </div>
+          )}
+
+          {verificationStatus === 'expired' && (
+            <div className="mb-4 p-3 rounded-xl bg-yellow-500/20 border border-yellow-400/50">
+              <div className="flex items-center gap-2">
+                <FaExclamationTriangle className="text-yellow-400" />
+                <p className="text-yellow-200 text-sm">OTP expired. Please request a new one.</p>
+              </div>
+            </div>
+          )}
+
+          {/* OTP Input Fields */}
+          <div className="mb-8">
+            <label className="text-white/80 text-sm block mb-3">
+              Enter 6-digit OTP
+            </label>
+            <div className="flex gap-3 justify-center">
+              {otp.map((digit, index) => (
+                <input
+                  key={index}
+                  id={`otp-${index}`}
+                  type="text"
+                  maxLength="1"
+                  value={digit}
+                  onChange={(e) => handleOtpChange(index, e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(index, e)}
+                  className="w-12 h-12 text-center text-2xl font-bold bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent"
+                  disabled={isLoading}
+                  autoFocus={index === 0}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Verify Button */}
+          <button
+            onClick={verifyOTP}
+            disabled={isLoading || verificationStatus === 'success'}
+            className="w-full py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-purple-700 to-purple-600 hover:from-purple-600 hover:to-purple-500 transition-all duration-300 shadow-lg hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 mb-3"
+          >
+            {isLoading ? (
+              <div className="flex items-center justify-center gap-2">
+                <FaSpinner className="animate-spin" />
+                Verifying...
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2">
+                <FaKey /> Verify OTP
+              </div>
+            )}
+          </button>
+
+          {/* Resend Button */}
+          <button
+            onClick={resendOTP}
+            disabled={!canResend || isLoading}
+            className="w-full py-2 rounded-xl font-medium text-purple-300 hover:text-purple-200 transition-all duration-300 disabled:opacity-50"
+          >
+            {canResend ? 'Resend OTP' : `Resend OTP in ${formatTime(timeLeft)}`}
+          </button>
+
+          {/* Info Footer */}
+          <div className="mt-6 text-xs text-white/40 text-center space-y-1">
+            <p>🔐 For security, this OTP expires in 5 minutes</p>
+            <p>📧 Check your spam folder if you don't see the email</p>
+            <p>👑 Maximum 5 verification attempts allowed</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

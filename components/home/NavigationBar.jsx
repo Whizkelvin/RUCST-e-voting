@@ -7,10 +7,10 @@ import { usePathname, useRouter } from 'next/navigation';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
 import Image from 'next/image';
-import { FaChevronRight, FaUserPlus, FaHome, FaVoteYea, FaChartBar, FaCrown, FaBars, FaTimes } from 'react-icons/fa';
+import { FaChevronRight, FaUserPlus, FaHome, FaVoteYea, FaChartBar, FaCrown, FaBars, FaTimes, FaSun, FaMoon } from 'react-icons/fa';
 import { GiStairsGoal, GiVote, GiChart } from 'react-icons/gi';
 
-const NavigationBar = ({ isVotingActive, isMobileMenuOpen, setIsMobileMenuOpen }) => {
+const NavigationBar = ({ isVotingActive, isMobileMenuOpen, setIsMobileMenuOpen, theme, toggleTheme }) => {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -43,16 +43,23 @@ const NavigationBar = ({ isVotingActive, isMobileMenuOpen, setIsMobileMenuOpen }
   };
 
   return (
-    <nav className="bg-white/90 backdrop-blur-lg shadow-lg border-b border-gray-100 py-2 sm:py-3 fixed top-0 z-50 w-full">
+    <nav className={`${
+      theme === 'light' 
+        ? 'bg-white/90 border-gray-100' 
+        : 'bg-gray-900/90 border-gray-800'
+    } backdrop-blur-lg shadow-lg border-b py-2 sm:py-3 fixed top-0 z-50 w-full transition-colors duration-300`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-12 sm:h-16">
-               {/* Mobile Menu Button */}
-            <button
-              onClick={() => setIsMobileMenuOpen && setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden text-gray-700 hover:text-green-950 transition p-1"
-            >
-              {isMobileMenuOpen ? <FaTimes className="text-xl" /> : <FaBars className="text-xl" />}
-            </button>
+          {/* Mobile Menu Button */}
+          <button
+            onClick={() => setIsMobileMenuOpen && setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className={`md:hidden transition p-1 ${
+              theme === 'light' ? 'text-gray-700 hover:text-green-950' : 'text-gray-300 hover:text-teal-400'
+            }`}
+          >
+            {isMobileMenuOpen ? <FaTimes className="text-xl" /> : <FaBars className="text-xl" />}
+          </button>
+          
           {/* Logo Section */}
           <div 
             data-aos="fade-right"
@@ -81,10 +88,16 @@ const NavigationBar = ({ isVotingActive, isMobileMenuOpen, setIsMobileMenuOpen }
             </div>
             
             <div className="sm:block">
-              <h1 className="text-base sm:text-xl font-bold bg-gradient-to-r from-green-950 to-emerald-700 bg-clip-text text-transparent">
+              <h1 className={`text-base sm:text-xl font-bold bg-gradient-to-r from-green-950 to-emerald-700 bg-clip-text text-transparent ${
+                theme === 'dark' && 'brightness-110'
+              }`}>
                 RUCST
               </h1>
-              <p className="text-[10px] sm:text-xs text-gray-600 font-medium"><span className='hidden md:block'>Secure </span>E-Voting Portal</p>
+              <p className={`text-[10px] sm:text-xs font-medium ${
+                theme === 'light' ? 'text-gray-600' : 'text-gray-400'
+              }`}>
+                <span className='hidden md:block'>Secure </span>E-Voting Portal
+              </p>
             </div>
           </div>
           
@@ -99,7 +112,11 @@ const NavigationBar = ({ isVotingActive, isMobileMenuOpen, setIsMobileMenuOpen }
                     data-aos="fade-down"
                     data-aos-delay={(index + 1) * 100}
                     href={link.href}
-                    className="text-gray-700 hover:text-green-950 transition-all duration-300 hover:font-medium flex items-center space-x-1 text-sm"
+                    className={`transition-all duration-300 hover:font-medium flex items-center space-x-1 text-sm ${
+                      theme === 'light' 
+                        ? 'text-gray-700 hover:text-green-950' 
+                        : 'text-gray-300 hover:text-teal-400'
+                    }`}
                   >
                     <Icon className="w-3 h-3 sm:w-4 sm:h-4" />
                     <span>{link.name}</span>
@@ -114,8 +131,8 @@ const NavigationBar = ({ isVotingActive, isMobileMenuOpen, setIsMobileMenuOpen }
                   href={link.href}
                   className={`transition-all duration-300 hover:font-medium flex items-center space-x-1 text-sm ${
                     isActive(link.href) 
-                      ? 'text-green-950 font-semibold' 
-                      : 'text-gray-700 hover:text-green-950'
+                      ? (theme === 'light' ? 'text-green-950 font-semibold' : 'text-teal-400 font-semibold')
+                      : (theme === 'light' ? 'text-gray-700 hover:text-green-950' : 'text-gray-300 hover:text-teal-400')
                   }`}
                 >
                   <Icon className="w-3 h-3 sm:w-4 sm:h-4" />
@@ -123,6 +140,18 @@ const NavigationBar = ({ isVotingActive, isMobileMenuOpen, setIsMobileMenuOpen }
                 </Link>
               );
             })}
+            
+            {/* Desktop Theme Toggle */}
+            <button
+              onClick={toggleTheme}
+              className={`p-2 rounded-lg transition-all duration-300 ${
+                theme === 'light'
+                  ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              {theme === 'light' ? <FaMoon size={16} /> : <FaSun size={16} />}
+            </button>
           </div>
           
           {/* Action Button */}
@@ -135,15 +164,17 @@ const NavigationBar = ({ isVotingActive, isMobileMenuOpen, setIsMobileMenuOpen }
               <span>{isVotingActive ? 'Vote Now' : 'View Results'}</span>
               <FaChevronRight className="w-3 h-3 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform" />
             </button>
-            
-       
           </div>
         </div>
       </div>
 
       {/* Mobile Menu Dropdown */}
       {isMobileMenuOpen && (
-        <div className="md:hidden absolute top-12 sm:top-16 left-0 right-0 bg-white/95 backdrop-blur-lg border-b border-gray-200 shadow-lg z-50">
+        <div className={`md:hidden absolute top-12 sm:top-16 left-0 right-0 backdrop-blur-lg border-b shadow-lg z-50 transition-colors duration-300 ${
+          theme === 'light'
+            ? 'bg-white/95 border-gray-200'
+            : 'bg-gray-900/95 border-gray-800'
+        }`}>
           <div className="flex flex-col py-3 px-4 space-y-1">
             {navLinks.map((link) => {
               const Icon = link.icon;
@@ -153,7 +184,11 @@ const NavigationBar = ({ isVotingActive, isMobileMenuOpen, setIsMobileMenuOpen }
                     key={link.name}
                     href={link.href}
                     onClick={closeMobileMenu}
-                    className="flex items-center gap-3 px-3 py-3 text-gray-700 hover:text-green-950 hover:bg-gray-50 rounded-lg transition"
+                    className={`flex items-center gap-3 px-3 py-3 rounded-lg transition ${
+                      theme === 'light'
+                        ? 'text-gray-700 hover:text-green-950 hover:bg-gray-50'
+                        : 'text-gray-300 hover:text-teal-400 hover:bg-gray-800'
+                    }`}
                   >
                     <Icon className="w-4 h-4" />
                     <span className="text-sm font-medium">{link.name}</span>
@@ -167,8 +202,12 @@ const NavigationBar = ({ isVotingActive, isMobileMenuOpen, setIsMobileMenuOpen }
                   onClick={closeMobileMenu}
                   className={`flex items-center gap-3 px-3 py-3 rounded-lg transition ${
                     isActive(link.href)
-                      ? 'text-green-950 bg-green-50 font-semibold'
-                      : 'text-gray-700 hover:text-green-950 hover:bg-gray-50'
+                      ? (theme === 'light'
+                        ? 'text-green-950 bg-green-50 font-semibold'
+                        : 'text-teal-400 bg-gray-800 font-semibold')
+                      : (theme === 'light'
+                        ? 'text-gray-700 hover:text-green-950 hover:bg-gray-50'
+                        : 'text-gray-300 hover:text-teal-400 hover:bg-gray-800')
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -176,6 +215,24 @@ const NavigationBar = ({ isVotingActive, isMobileMenuOpen, setIsMobileMenuOpen }
                 </Link>
               );
             })}
+            
+            {/* Mobile Theme Toggle Button */}
+            <button
+              onClick={() => {
+                toggleTheme();
+                closeMobileMenu();
+              }}
+              className={`flex items-center gap-3 px-3 py-3 rounded-lg transition mt-2 ${
+                theme === 'light'
+                  ? 'text-gray-700 hover:text-green-950 hover:bg-gray-50'
+                  : 'text-gray-300 hover:text-teal-400 hover:bg-gray-800'
+              }`}
+            >
+              {theme === 'light' ? <FaMoon className="w-4 h-4" /> : <FaSun className="w-4 h-4" />}
+              <span className="text-sm font-medium">
+                {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
+              </span>
+            </button>
           </div>
         </div>
       )}
