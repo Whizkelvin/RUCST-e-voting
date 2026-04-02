@@ -62,6 +62,46 @@ function LoginContent() {
   const watchedEmail = watch('email');
   const watchedSchoolId = watch('schoolId');
 
+  // Helper function to set authentication cookies
+  const setAuthCookies = useCallback((isAuthenticated, userRole, userEmail, userId = null) => {
+    // Set cookies for middleware with 30 minute expiry
+    const maxAge = 30 * 60; // 30 minutes in seconds
+    const cookieOptions = `path=/; max-age=${maxAge}; SameSite=Lax`;
+    
+    document.cookie = `is_authenticated=${isAuthenticated}; ${cookieOptions}`;
+    document.cookie = `user_role=${userRole}; ${cookieOptions}`;
+    document.cookie = `user_email=${encodeURIComponent(userEmail)}; ${cookieOptions}`;
+    
+    if (userId) {
+      document.cookie = `user_id=${userId}; ${cookieOptions}`;
+    }
+    
+    // Also store in localStorage for session persistence
+    localStorage.setItem('is_authenticated', isAuthenticated);
+    localStorage.setItem('user_role', userRole);
+    localStorage.setItem('user_email', userEmail);
+    if (userId) localStorage.setItem('user_id', userId);
+    localStorage.setItem('last_activity', Date.now().toString());
+    
+    console.log('Auth cookies set:', { isAuthenticated, userRole, userEmail });
+  }, []);
+
+  // Helper function to clear authentication cookies
+  const clearAuthCookies = useCallback(() => {
+    const cookieOptions = 'path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT';
+    document.cookie = `is_authenticated=; ${cookieOptions}`;
+    document.cookie = `user_role=; ${cookieOptions}`;
+    document.cookie = `user_email=; ${cookieOptions}`;
+    document.cookie = `user_id=; ${cookieOptions}`;
+    
+    localStorage.removeItem('is_authenticated');
+    localStorage.removeItem('user_role');
+    localStorage.removeItem('user_email');
+    localStorage.removeItem('user_id');
+    localStorage.removeItem('user_details');
+    localStorage.removeItem('last_activity');
+  }, []);
+
   // Role configuration (built-in)
   const getRoleConfig = useCallback((role) => {
     const roleMap = {
@@ -84,7 +124,7 @@ function LoginContent() {
         color: 'emerald'
       },
       admin: {
-        name: 'admin',
+        name: 'Admin',
         icon: FaUserCog,
         redirectPath: '/admin/manage-voters',
         color: 'cyan'
@@ -161,12 +201,7 @@ function LoginContent() {
       if (lastActivity) {
         const inactiveTime = Date.now() - parseInt(lastActivity);
         if (inactiveTime > 30 * 60 * 1000) {
-          localStorage.removeItem('is_authenticated');
-          localStorage.removeItem('user_role');
-          localStorage.removeItem('user_email');
-          localStorage.removeItem('user_id');
-          localStorage.removeItem('user_details');
-          localStorage.removeItem('last_activity');
+          clearAuthCookies();
           toast.info('Session expired. Please login again.');
           return;
         }
@@ -176,21 +211,18 @@ function LoginContent() {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session) {
+          // Refresh cookies
+          setAuthCookies(true, userRole, userEmail);
           const redirectPath = getRedirectPath(userRole);
           router.push(redirectPath);
         } else {
-          localStorage.removeItem('is_authenticated');
-          localStorage.removeItem('user_role');
-          localStorage.removeItem('user_email');
-          localStorage.removeItem('user_id');
-          localStorage.removeItem('user_details');
-          localStorage.removeItem('last_activity');
+          clearAuthCookies();
         }
       }
     };
     
     checkExistingSession();
-  }, [router, getRedirectPath]);
+  }, [router, getRedirectPath, setAuthCookies, clearAuthCookies]);
 
   // Update last activity
   useEffect(() => {
@@ -312,15 +344,6 @@ function LoginContent() {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }, []);
 
-  // Add this function to your login page
-  const setAuthCookie = async (isAuthenticated, userRole, userEmail) => {
-    // Set cookies for middleware
-    document.cookie = `is_authenticated=${isAuthenticated}; path=/; max-age=1800`; // 30 minutes
-    document.cookie = `user_role=${userRole}; path=/; max-age=1800`;
-    document.cookie = `user_email=${userEmail}; path=/; max-age=1800`;
-  };
-
-  // Then in your handleAdminLogin function, after successful login:
   const handleAdminLogin = useCallback(async (email, schoolId) => {
     setIsLoading(true);
     try {
@@ -445,7 +468,11 @@ function LoginContent() {
       setLoginAttempts(0);
       setLockoutUntil(null);
       
-      // Step 7: Redirect to OTP verification page
+      // Step 7: Set temporary auth cookie (will be fully set after OTP verification)
+      // This allows access to OTP verification page
+      setAuthCookies(false, adminData.role || 'admin', cleanEmail, adminData.id);
+      
+      // Step 8: Redirect to OTP verification page
       setTimeout(() => {
         router.push('/admin-verify-otp');
       }, 1500);
@@ -459,14 +486,7 @@ function LoginContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [router, setLoginAttempts]);
-
-  // Also add logout function to clear cookies
-  const clearAuthCookies = () => {
-    document.cookie = 'is_authenticated=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-    document.cookie = 'user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-    document.cookie = 'user_email=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-  };
+  }, [router, setLoginAttempts, setAuthCookies]);
 
   const handleVoterLogin = useCallback(async (email, schoolId) => {
     setIsLoading(true);
