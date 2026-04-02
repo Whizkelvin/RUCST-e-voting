@@ -20,36 +20,48 @@ const nextConfig = {
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
   reactStrictMode: true,
-  swcMinify: true,
   
-  // Add these to handle client-side only pages
-  output: 'standalone', // Better for production deployment
+  // REMOVED: swcMinify is now enabled by default in Next.js 16
   
-  // Configure which pages should be static
+  // REMOVED: output: 'standalone' - Let Vercel handle this automatically
+  
+  // Keep this if needed, but consider removing
   staticPageGenerationTimeout: 120,
   
-  // Skip trailing slash redirect for better performance
+  // Keep this
   skipTrailingSlashRedirect: true,
   
-  // Allow skipping static generation for specific pages
+  // Keep this
   typescript: {
     ignoreBuildErrors: false,
   },
   
-  // Add webpack configuration for better client-side handling
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      // Don't resolve certain modules on the client to avoid build issues
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        net: false,
-        tls: false,
-        crypto: false,
-      };
-    }
-    return config;
-  },
+  // COMMENT OUT or REMOVE the webpack config to use Turbopack
+  // Next.js 16 uses Turbopack by default, which doesn't support webpack configs
+  // If you MUST keep webpack, you need to explicitly opt out of Turbopack
+  // webpack: (config, { isServer }) => {
+  //   if (!isServer) {
+  //     config.resolve.fallback = {
+  //       ...config.resolve.fallback,
+  //       fs: false,
+  //       net: false,
+  //       tls: false,
+  //       crypto: false,
+  //     };
+  //   }
+  //   return config;
+  // },
 };
+
+// If you need the webpack config, use this alternative approach:
+// export default nextConfig;
+
+// OR explicitly opt-out of Turbopack by adding this:
+// export default {
+//   ...nextConfig,
+//   experimental: {
+//     turbo: false, // This disables Turbopack
+//   },
+// };
 
 export default nextConfig;
