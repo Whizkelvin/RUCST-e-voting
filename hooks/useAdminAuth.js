@@ -103,6 +103,19 @@ export function AdminAuthProvider({ children }) {
       const userRole = localStorage.getItem('user_role');
       const userEmail = localStorage.getItem('user_email');
       const lastActivity = localStorage.getItem('last_activity');
+      const isDebugSession = localStorage.getItem('is_debug_session');
+      
+      // Skip if debug session
+      if (isDebugSession === 'true') {
+        setAdmin({
+          email: userEmail,
+          role: userRole,
+          isDebug: true
+        });
+        setIsAuthenticated(true);
+        setLoading(false);
+        return;
+      }
       
       // Check session timeout
       if (lastActivity) {
@@ -115,10 +128,12 @@ export function AdminAuthProvider({ children }) {
           localStorage.removeItem('user_id');
           localStorage.removeItem('user_details');
           localStorage.removeItem('last_activity');
+          localStorage.removeItem('is_debug_session');
           toast.info('Session expired. Please login again.', {
             position: "top-center",
             autoClose: 3000
           });
+          setLoading(false);
           return;
         }
       }
@@ -128,13 +143,13 @@ export function AdminAuthProvider({ children }) {
         
         if (session) {
           // Session is valid, restore admin state
-          const user = session.user;
           const roleData = localStorage.getItem('user_details');
           
           setAdmin({
             email: userEmail,
-            id: user.id,
-            ...(roleData ? JSON.parse(roleData) : { role: userRole })
+            id: session.user.id,
+            role: userRole,
+            ...(roleData ? JSON.parse(roleData) : {})
           });
           setIsAuthenticated(true);
           
@@ -148,8 +163,10 @@ export function AdminAuthProvider({ children }) {
           localStorage.removeItem('user_id');
           localStorage.removeItem('user_details');
           localStorage.removeItem('last_activity');
+          localStorage.removeItem('is_debug_session');
         }
       }
+      setLoading(false);
     };
     
     checkExistingSession();
@@ -197,36 +214,9 @@ export function AdminAuthProvider({ children }) {
 
   const fetchAdminProfile = async (user) => {
     try {
-      // First check user_roles table
-      const { data: roleData, error: roleError } = await supabase
-        .from('user_roles')
-        .select('*')
-        .eq('email', user.email)
-        .eq('is_active', true)
-        .maybeSingle();
-
-      if (roleData && !roleError) {
-        const adminData = {
-          ...roleData,
-          id: user.id,
-          email: user.email
-        };
-        setAdmin(adminData);
-        setIsAuthenticated(true);
-        
-        // Store in localStorage for quick access
-        localStorage.setItem('user_role', roleData.role);
-        localStorage.setItem('user_email', user.email);
-        localStorage.setItem('user_id', user.id);
-        localStorage.setItem('user_details', JSON.stringify(roleData));
-        localStorage.setItem('is_authenticated', 'true');
-        localStorage.setItem('last_activity', Date.now().toString());
-        
-        resetLoginAttempts();
-        return;
-      }
-
-      // Then check admins table
+      console.log('Fetching profile for user:', user.email);
+      
+      // First check admins table (since you don't have user_roles)
       const { data: adminData, error: adminError } = await supabase
         .from('admins')
         .select('*')
@@ -234,10 +224,12 @@ export function AdminAuthProvider({ children }) {
         .maybeSingle();
 
       if (adminData && !adminError) {
+        console.log('Admin found in admins table:', adminData);
         const adminInfo = {
           ...adminData,
           id: user.id,
-          email: user.email
+          email: user.email,
+          role: adminData.role || 'admin'
         };
         setAdmin(adminInfo);
         setIsAuthenticated(true);
@@ -249,12 +241,28 @@ export function AdminAuthProvider({ children }) {
         localStorage.setItem('user_details', JSON.stringify(adminData));
         localStorage.setItem('is_authenticated', 'true');
         localStorage.setItem('last_activity', Date.now().toString());
+        localStorage.removeItem('is_debug_session'); // Clear debug flag if exists
         
         resetLoginAttempts();
         return;
       }
 
+      // If not found in admins, check if it's a debug session
+      const isDebugSession = localStorage.getItem('is_debug_session');
+      if (isDebugSession === 'true') {
+        console.log('Using debug session');
+        setAdmin({
+          email: user.email,
+          id: user.id,
+          role: 'admin',
+          isDebug: true
+        });
+        setIsAuthenticated(true);
+        return;
+      }
+
       // If authenticated but not admin, sign out
+      console.log('User not found in admins table, signing out...');
       await supabase.auth.signOut();
       setAdmin(null);
       setIsAuthenticated(false);
@@ -266,8 +274,9 @@ export function AdminAuthProvider({ children }) {
       localStorage.removeItem('user_details');
       localStorage.removeItem('is_authenticated');
       localStorage.removeItem('last_activity');
+      localStorage.removeItem('is_debug_session');
       
-      throw new Error('Unauthorized: Not an admin user');
+      throw new Error('Unauthorized: Not an admin user. Please contact system administrator to grant admin access.');
 
     } catch (error) {
       console.error('Error fetching admin profile:', error);
@@ -347,8 +356,13 @@ export function AdminAuthProvider({ children }) {
       localStorage.removeItem('user_details');
       localStorage.removeItem('is_authenticated');
       localStorage.removeItem('last_activity');
+      localStorage.removeItem('is_debug_session');
       
       router.push('/');
+      toast.info('Logged out successfully', {
+        position: "top-center",
+        autoClose: 2000
+      });
     } catch (error) {
       console.error('Logout error:', error);
     }

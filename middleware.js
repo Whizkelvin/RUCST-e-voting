@@ -1,37 +1,51 @@
+// middleware.js
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
-export async function middleware(request) {
+export function middleware(request) {
+  // Get authentication from cookies only (not localStorage)
+  const isAuthenticated = request.cookies.get('is_authenticated')?.value === 'true';
   const path = request.nextUrl.pathname;
-  const isAdminPath = path.startsWith('/admin');
-  const isLoginPath = path === '/login';
   
-  // Create Supabase client
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  );
+  // Get the redirect URL from the query params
+  const redirectUrl = request.nextUrl.searchParams.get('redirect') || '';
   
-  // Get session from cookies
-  const { data: { session } } = await supabase.auth.getSession();
+  // Allow access to login page and public routes
+  const isPublicRoute = path === '/' || 
+                       path === '/login' || 
+                       path === '/verify-otp' || 
+                       path === '/election-result' ||
+                       path.startsWith('/_next') ||
+                       path.startsWith('/api');
   
-  // If accessing admin routes without session
-  if (isAdminPath && !session) {
+  // If it's a public route, allow access
+  if (isPublicRoute) {
+    return NextResponse.next();
+  }
+  
+  // Protect admin routes
+  if (path.startsWith('/admin') && !isAuthenticated) {
+    // Redirect to login with the original URL as redirect parameter
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', path);
     return NextResponse.redirect(loginUrl);
   }
   
-  // If accessing login page with active session, redirect to admin dashboard
-  if (isLoginPath && session) {
-    // Optional: Check if user has admin role
-    // You might want to check user metadata or make a quick DB call
-    return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+  // Protect voter routes
+  if (path.startsWith('/voter') && !isAuthenticated) {
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('redirect', path);
+    return NextResponse.redirect(loginUrl);
   }
   
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/login'],
+  matcher: [
+    '/admin/:path*',
+    '/voter/:path*',
+    '/login',
+    '/verify-otp',
+    '/election-result'
+  ],
 };

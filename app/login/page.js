@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from 'react-hook-form';
 import Image from 'next/image';
 import { toast } from 'react-toastify';
@@ -40,6 +40,8 @@ export default function Login() {
   const [lockoutUntil, setLockoutUntil] = useState(null);
   const formRef = useRef(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectUrl = searchParams.get('redirect') || '/admin/manage-voters';
 
   const {
     register,
@@ -65,51 +67,31 @@ export default function Login() {
         name: 'Dean of Students',
         icon: FaUniversity,
         redirectPath: '/admin/dean-dashboard',
-        color: 'purple',
-        colorClass: {
-          dark: 'purple',
-          light: 'purple'
-        }
+        color: 'purple'
       },
       electoral_commission: {
         name: 'Electoral Commission',
         icon: FaUserShield,
         redirectPath: '/admin/electoral-commission-dashboard',
-        color: 'emerald',
-        colorClass: {
-          dark: 'emerald',
-          light: 'emerald'
-        }
+        color: 'emerald'
       },
       ec: {
         name: 'Electoral Commission',
         icon: FaUserShield,
         redirectPath: '/admin/electoral-commission-dashboard',
-        color: 'emerald',
-        colorClass: {
-          dark: 'emerald',
-          light: 'emerald'
-        }
+        color: 'emerald'
       },
       admin: {
-        name: 'IT Administrator',
+        name: 'admin',
         icon: FaUserCog,
         redirectPath: '/admin/manage-voters',
-        color: 'cyan',
-        colorClass: {
-          dark: 'cyan',
-          light: 'cyan'
-        }
+        color: 'cyan'
       },
       hod: {
         name: 'Head of Department',
         icon: FaChalkboardTeacher,
         redirectPath: '/admin/hod-dashboard',
-        color: 'green',
-        colorClass: {
-          dark: 'green',
-          light: 'green'
-        }
+        color: 'green'
       }
     };
     
@@ -139,25 +121,6 @@ export default function Login() {
   const getRoleName = useCallback(() => {
     const roleConfig = getRoleConfig(adminRole);
     return roleConfig ? roleConfig.name : 'Administrator';
-  }, [adminRole, getRoleConfig]);
-
-  // Get role color class
-  const getRoleColorClass = useCallback((type = 'bg') => {
-    const roleConfig = getRoleConfig(adminRole);
-    const color = roleConfig ? roleConfig.color : 'purple';
-    
-    switch(type) {
-      case 'bg':
-        return `bg-${color}-500/20`;
-      case 'border':
-        return `border-${color}-400/50`;
-      case 'text':
-        return `text-${color}-200`;
-      case 'text-dark':
-        return `text-${color}-700`;
-      default:
-        return '';
-    }
   }, [adminRole, getRoleConfig]);
 
   // Check rate limit
@@ -274,7 +237,7 @@ export default function Login() {
     getIP();
   }, []);
 
-  // Check user type when typing
+  // Check user type when typing - MODIFIED to only use admins table
   useEffect(() => {
     const checkUserType = async () => {
       if (watchedEmail && watchedSchoolId) {
@@ -285,7 +248,7 @@ export default function Login() {
           const cleanEmail = watchedEmail.toLowerCase().trim();
           const cleanSchoolId = watchedSchoolId.trim().padStart(8, '0');
           
-          // Check voter
+          // Check voters first
           const { data: voter, error: voterError } = await supabase
             .from('voters')
             .select('has_voted, voted_at')
@@ -301,23 +264,7 @@ export default function Login() {
             return;
           }
           
-          // Check user roles
-          const { data: roleUser, error: roleError } = await supabase
-            .from('user_roles')
-            .select('role, is_active, name')
-            .eq('email', cleanEmail)
-            .eq('is_active', true)
-            .maybeSingle();
-          
-          if (roleUser && !roleError) {
-            setLoginStatus('admin');
-            setAdminRole(roleUser.role);
-            setVoterStatus(null);
-            setIsDetectingRole(false);
-            return;
-          }
-          
-          // Check admins
+          // Check ONLY admins table (removed user_roles)
           const { data: admin, error: adminError } = await supabase
             .from('admins')
             .select('role')
@@ -326,6 +273,7 @@ export default function Login() {
             .maybeSingle();
           
           if (admin && !adminError) {
+            console.log('Admin found:', admin);
             setLoginStatus('admin');
             setAdminRole(admin.role || 'admin');
             setVoterStatus(null);
@@ -362,116 +310,88 @@ export default function Login() {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }, []);
 
-  const handleAdminLogin = useCallback(async (email, schoolId) => {
-    setIsLoading(true);
-    try {
-      const cleanEmail = email.toLowerCase().trim();
-      const cleanSchoolId = schoolId.trim().padStart(8, '0');
-      
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: cleanSchoolId
-      });
-      
-      if (authError) {
-        setLoginAttempts(prev => prev + 1);
-        
-        if (authError.message === 'Invalid login credentials') {
-          toast.error('❌ Invalid School ID. Please check your credentials.', {
-            position: "top-center",
-            autoClose: 3000
-          });
-        } else if (authError.message === 'Email not confirmed') {
-          toast.error('❌ Email not confirmed. Please check your inbox for verification link.', {
-            position: "top-center",
-            autoClose: 3000
-          });
-        } else {
-          toast.error('❌ Authentication failed: ' + authError.message, {
-            position: "top-center",
-            autoClose: 3000
-          });
-        }
-        setIsLoading(false);
-        return;
-      }
-      
-      let userRole = null;
-      let userDetails = null;
-      
-      const { data: roleData, error: roleError } = await supabase
-        .from('user_roles')
-        .select('*')
-        .eq('email', cleanEmail)
-        .eq('is_active', true)
-        .maybeSingle();
-      
-      if (roleData && !roleError) {
-        userRole = roleData.role;
-        userDetails = roleData;
-      } else {
-        const { data: adminData, error: adminError } = await supabase
-          .from('admins')
-          .select('*')
-          .eq('email', cleanEmail)
-          .eq('school_id', cleanSchoolId)
-          .maybeSingle();
-        
-        if (adminData && !adminError) {
-          userRole = adminData.role || 'admin';
-          userDetails = adminData;
-        }
-      }
-      
-      if (!userRole) {
-        toast.error('User authenticated but no role found. Please contact administrator.', {
-          position: "top-center",
-          autoClose: 3000
-        });
-        await supabase.auth.signOut();
-        setIsLoading(false);
-        return;
-      }
-      
-      // Store session data
-      localStorage.setItem('user_role', userRole);
-      localStorage.setItem('user_email', cleanEmail);
-      localStorage.setItem('user_id', authData.user.id);
-      localStorage.setItem('is_authenticated', 'true');
-      localStorage.setItem('last_activity', Date.now().toString());
-      
-      if (userDetails) {
-        localStorage.setItem('user_details', JSON.stringify(userDetails));
-      }
-      
-      const roleConfig = getRoleConfig(userRole);
-      const welcomeMessage = roleConfig 
-        ? `✅ Welcome ${roleConfig.name}! Redirecting to dashboard...`
-        : '✅ Welcome Admin! Redirecting to Admin Panel...';
-      const redirectPath = roleConfig ? roleConfig.redirectPath : '/admin/manage-voters';
-      
-      toast.success(welcomeMessage, {
-        position: "top-center",
-        autoClose: 2000
-      });
-      
-      setLoginAttempts(0);
-      setLockoutUntil(null);
-      
-      setTimeout(() => {
-        router.push(redirectPath);
-      }, 2000);
-      
-    } catch (error) {
-      console.error('Admin login error:', error);
-      toast.error('System error. Please try again later.', {
+// Add this function to your login page
+const setAuthCookie = async (isAuthenticated, userRole, userEmail) => {
+  // Set cookies for middleware
+  document.cookie = `is_authenticated=${isAuthenticated}; path=/; max-age=1800`; // 30 minutes
+  document.cookie = `user_role=${userRole}; path=/; max-age=1800`;
+  document.cookie = `user_email=${userEmail}; path=/; max-age=1800`;
+};
+
+// Then in your handleAdminLogin function, after successful login:
+const handleAdminLogin = useCallback(async (email, schoolId) => {
+  setIsLoading(true);
+  try {
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanSchoolId = schoolId.trim().padStart(8, '0');
+    
+    // Sign in with Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password: cleanSchoolId
+    });
+    
+    if (authError) {
+      setLoginAttempts(prev => prev + 1);
+      toast.error('❌ Login failed: Invalid credentials', {
         position: "top-center",
         autoClose: 3000
       });
-    } finally {
       setIsLoading(false);
+      return;
     }
-  }, [router, setLoginAttempts, getRoleConfig]);
+    
+    // Check if user is admin
+    const { data: adminData } = await supabase
+      .from('admins')
+      .select('role')
+      .eq('email', cleanEmail)
+      .eq('school_id', cleanSchoolId)
+      .single();
+    
+    if (!adminData) {
+      await supabase.auth.signOut();
+      toast.error('❌ Not authorized as admin', {
+        position: "top-center",
+        autoClose: 3000
+      });
+      setIsLoading(false);
+      return;
+    }
+    
+    // Store in localStorage (for client-side)
+    localStorage.setItem('is_authenticated', 'true');
+    localStorage.setItem('user_role', adminData.role);
+    localStorage.setItem('user_email', cleanEmail);
+    localStorage.setItem('user_id', authData.user.id);
+    localStorage.setItem('last_activity', Date.now().toString());
+    
+    // ALSO set cookies for middleware
+    setAuthCookie('true', adminData.role, cleanEmail);
+    
+    toast.success('✅ Login successful! Redirecting...', {
+      position: "top-center",
+      autoClose: 1500
+    });
+    
+    // Redirect
+    setTimeout(() => {
+      window.location.href = '/admin/manage-voters';
+    }, 1500);
+    
+  } catch (error) {
+    console.error('Login error:', error);
+    toast.error('System error', { position: "top-center" });
+    setIsLoading(false);
+  }
+}, []);
+
+// Also add logout function to clear cookies
+const clearAuthCookies = () => {
+  document.cookie = 'is_authenticated=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+  document.cookie = 'user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+  document.cookie = 'user_email=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+};
 
   const handleVoterLogin = useCallback(async (email, schoolId) => {
     setIsLoading(true);
@@ -639,14 +559,14 @@ export default function Login() {
     }
   }, [loginStatus, handleVoterLogin, handleAdminLogin, checkRateLimit, setLoginAttempts]);
 
-  // Keyboard shortcut for testing (Ctrl+Shift+D)
+  // Debug mode for testing (Ctrl+Shift+D)
   useEffect(() => {
     const handleKeyPress = (e) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'D') {
         if (process.env.NODE_ENV === 'development') {
-          setValue('email', 'test@regent.edu.gh');
-          setValue('schoolId', '12345678');
-          toast.info('Test credentials filled', {
+          setValue('email', 'admin@regent.edu.gh');
+          setValue('schoolId', '00000001');
+          toast.info('Debug credentials filled: admin@regent.edu.gh / 00000001', {
             position: "top-center",
             autoClose: 2000
           });
@@ -657,6 +577,7 @@ export default function Login() {
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [setValue]);
+  
 
   const themeStyles = useMemo(() => ({
     dark: {
@@ -968,7 +889,7 @@ export default function Login() {
             <p>👑 Staff/Admin: Use your School ID as password</p>
             {process.env.NODE_ENV === 'development' && (
               <p className="text-yellow-400 text-xs mt-2">
-                💡 Dev: Press Ctrl+Shift+D to fill test credentials
+                💡 Dev: Press Ctrl+Shift+D to fill admin credentials
               </p>
             )}
           </div>
