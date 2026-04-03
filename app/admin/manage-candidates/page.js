@@ -198,51 +198,67 @@ export default function ManageCandidates() {
     }
   };
 
-  const uploadImage = async (file) => {
-    if (!file) return null;
+  // Replace your uploadImage function with this:
+const uploadImage = async (file) => {
+  if (!file) return null;
+  
+  setUploadingImage(true);
+  
+  try {
+    // Generate unique filename
+    const fileExt = file.name.split('.').pop();
+    const timestamp = Date.now();
+    const randomString = Math.random().toString(36).substring(2, 15);
+    const fileName = `${timestamp}_${randomString}.${fileExt}`;
+    const filePath = `candidates/${fileName}`;
     
-    setUploadingImage(true);
+    console.log('Uploading to path:', filePath);
+    console.log('File details:', { name: file.name, type: file.type, size: file.size });
     
-    try {
-      const { data: buckets } = await supabase.storage.listBuckets();
-      const bucketExists = buckets?.some(b => b.name === 'candidate-images');
+    // Upload to Supabase Storage
+    const { data, error: uploadError } = await supabase.storage
+      .from('candidate-images')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        contentType: file.type,
+        upsert: false
+      });
+    
+    if (uploadError) {
+      console.error('Upload error details:', uploadError);
       
-      if (!bucketExists) {
-        toast.error('Storage bucket not configured. Please contact administrator.');
-        return null;
+      // Specific error messages
+      if (uploadError.message.includes('JWT')) {
+        toast.error('Authentication error. Please refresh the page and try again.');
+      } else if (uploadError.message.includes('permission')) {
+        toast.error('Permission denied. Please check storage policies.');
+      } else if (uploadError.message.includes('bucket')) {
+        toast.error('Storage bucket not accessible.');
+      } else {
+        toast.error(`Upload failed: ${uploadError.message}`);
       }
-      
-      const fileExt = file.name.split('.').pop();
-      const timestamp = Date.now();
-      const randomString = Math.random().toString(36).substring(2, 15);
-      const fileName = `${timestamp}_${randomString}.${fileExt}`;
-      const filePath = `candidates/${fileName}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('candidate-images')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: true,
-          contentType: file.type
-        });
-      
-      if (uploadError) throw new Error(uploadError.message);
-      
-      const { data: { publicUrl } } = supabase.storage
-        .from('candidate-images')
-        .getPublicUrl(filePath);
-      
-      toast.success('Image uploaded successfully!');
-      return publicUrl;
-      
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      toast.error(`Failed to upload image: ${error.message}`);
       return null;
-    } finally {
-      setUploadingImage(false);
     }
-  };
+    
+    console.log('Upload success:', data);
+    
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('candidate-images')
+      .getPublicUrl(filePath);
+    
+    console.log('Public URL:', publicUrl);
+    toast.success('Image uploaded successfully!');
+    return publicUrl;
+    
+  } catch (error) {
+    console.error('Upload error:', error);
+    toast.error(`Upload failed: ${error.message}`);
+    return null;
+  } finally {
+    setUploadingImage(false);
+  }
+};
 
   const handleImageSelect = (e) => {
     const file = e.target.files[0];
