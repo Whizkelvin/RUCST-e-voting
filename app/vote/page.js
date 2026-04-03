@@ -8,7 +8,7 @@ import {
   FaSpinner, FaCheckCircle, FaExclamationTriangle, FaVoteYea,
   FaShieldAlt, FaClock, FaUser, FaInfoCircle, FaUniversity,
   FaArrowLeft, FaSearch, FaTimes, FaRegClock, FaBell,
-  FaCalendarAlt, FaUserCheck
+  FaCalendarAlt, FaUserCheck, FaBars, FaTimesCircle
 } from 'react-icons/fa';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
@@ -30,6 +30,7 @@ export default function VotePage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [timeWarningShown, setTimeWarningShown] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -283,35 +284,87 @@ export default function VotePage() {
     setShowConfirmModal(true);
   };
 
-const handleSubmitVote = async () => {
-  setShowConfirmModal(false);
-  setSubmitting(true);
-  
-  try {
-    // Prepare votes with position title
-    const votesToInsert = positions.map(position => ({ 
-      voter_id: voter.id, 
-      candidate_id: selectedCandidates[position.id],
-      position_id: position.id,
-      position: position.title,  // ← ADD THIS LINE (the column that's causing the error)
-      election_id: election.id, 
-      voting_period_id: votingPeriod.id, 
-      ip_address: clientIP || 'unknown', 
-      created_at: new Date().toISOString() 
-    }));
+  const handleSubmitVote = async () => {
+    setShowConfirmModal(false);
+    setSubmitting(true);
     
-    const { error: voteError } = await supabase
-      .from('votes')
-      .insert(votesToInsert);
-    
-    if (voteError) throw new Error(voteError.message || 'Failed to cast vote');
-    
-    // ... rest of your code
-  } catch (error) {
-    console.error('Submit vote error:', error);
-    toast.error(error.message || 'Failed to cast vote. Please try again.');
-  }
-};
+    try {
+      // Prepare votes with position title
+      const votesToInsert = positions.map(position => ({ 
+        voter_id: voter.id, 
+        candidate_id: selectedCandidates[position.id],
+        position_id: position.id,
+        position: position.title,
+        election_id: election.id, 
+        voting_period_id: votingPeriod.id, 
+        ip_address: clientIP || 'unknown', 
+        created_at: new Date().toISOString() 
+      }));
+      
+      // Insert all votes
+      const { error: voteError } = await supabase
+        .from('votes')
+        .insert(votesToInsert);
+      
+      if (voteError) throw new Error(voteError.message || 'Failed to cast vote');
+      
+      // Update voter table - Set has_voted to true and voted_at to current time
+      const { error: updateError } = await supabase
+        .from('voters')
+        .update({ 
+          has_voted: true, 
+          voted_at: new Date().toISOString()
+        })
+        .eq('id', voter.id);
+      
+      if (updateError) {
+        console.error('Error updating voter status:', updateError);
+        toast.warning('Votes recorded but status update failed. Please contact admin.');
+      }
+      
+      // Log successful vote
+      await logVoteCast({ 
+        voter_id: voter.id, 
+        voter_name: voter.name, 
+        ip_address: clientIP, 
+        success: true,
+        votes_count: votesToInsert.length
+      });
+      
+      setHasVoted(true);
+      
+      // Update local storage
+      const updatedVoterData = { 
+        ...voter, 
+        has_voted: true, 
+        voted_at: new Date().toISOString() 
+      };
+      localStorage.setItem('voter_data', JSON.stringify(updatedVoterData));
+      localStorage.setItem('has_voted', 'true');
+      localStorage.setItem('voted_voter_id', voter.id);
+      localStorage.setItem('voted_election_id', election.id);
+      
+      toast.success('Your vote has been cast successfully! Redirecting...');
+      
+      setTimeout(() => {
+        router.push('/');
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Submit vote error:', error);
+      toast.error(error.message || 'Failed to cast vote. Please try again.');
+      
+      await logVoteCast({ 
+        voter_id: voter.id, 
+        voter_name: voter.name, 
+        ip_address: clientIP, 
+        success: false, 
+        error: error.message 
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const getSelectedCount = () => Object.values(selectedCandidates).filter(Boolean).length;
 
@@ -356,7 +409,7 @@ const handleSubmitVote = async () => {
       <>
         <Toaster position="top-center" richColors />
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md text-center" data-aos="fade-up">
+          <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 max-w-md text-center" data-aos="fade-up">
             <div className="w-16 h-16 bg-green-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <FaClock className="text-green-600 text-2xl" />
             </div>
@@ -380,7 +433,7 @@ const handleSubmitVote = async () => {
       <>
         <Toaster position="top-center" richColors />
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md text-center" data-aos="fade-up">
+          <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 max-w-md text-center" data-aos="fade-up">
             <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <FaClock className="text-amber-500 text-2xl" />
             </div>
@@ -408,7 +461,7 @@ const handleSubmitVote = async () => {
       <>
         <Toaster position="top-center" richColors />
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md text-center" data-aos="fade-up">
+          <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 max-w-md text-center" data-aos="fade-up">
             <div className="w-16 h-16 bg-yellow-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <FaUniversity className="text-yellow-600 text-2xl" />
             </div>
@@ -429,7 +482,7 @@ const handleSubmitVote = async () => {
       <>
         <Toaster position="top-center" richColors />
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md text-center" data-aos="fade-up">
+          <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 max-w-md text-center" data-aos="fade-up">
             <div className="w-16 h-16 bg-yellow-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <FaInfoCircle className="text-yellow-600 text-2xl" />
             </div>
@@ -512,163 +565,193 @@ const handleSubmitVote = async () => {
         <div className="h-1 bg-gradient-to-r from-green-900 via-green-500 to-amber-500 sticky top-0 z-50" />
 
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 sticky top-1 z-40 shadow-sm" data-aos="fade-down">
+        <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm" data-aos="fade-down">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
                 <button
                   onClick={() => router.push('/')}
                   className="p-2 hover:bg-gray-100 rounded-full transition"
                   title="Back to Home"
                 >
-                  <FaArrowLeft className="text-gray-500" />
+                  <FaArrowLeft className="text-gray-500 text-sm sm:text-base" />
                 </button>
                 <div className="flex items-center gap-2">
                   <Image 
                     src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1762440313/RUCST_logo-removebg-preview_hwdial.png" 
-                    width={44} 
-                    height={44} 
+                    width={36} 
+                    height={36} 
                     alt="Regent Logo" 
-                    className="object-contain"
+                    className="object-contain sm:w-11 sm:h-11"
                   />
                   <Image 
                     src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1774528110/Gemini_Generated_Image_57c2xl57c2xl57c2_ykckzf.png" 
-                    width={44} 
-                    height={44} 
+                    width={36} 
+                    height={36} 
                     alt="Logo" 
-                    className="object-contain"
+                    className="object-contain sm:w-11 sm:h-11"
                   />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-gray-900">{election?.title}</h1>
-                  <p className="text-sm text-gray-500">Welcome back, <strong className="text-gray-700">{voter?.name}</strong></p>
+                  <h1 className="text-base sm:text-xl font-bold text-gray-900 line-clamp-1">{election?.title}</h1>
+                  <p className="text-xs text-gray-500 hidden sm:block">Welcome back, <strong className="text-gray-700">{voter?.name}</strong></p>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
-                <div className={`flex items-center gap-2 rounded-full px-4 py-2 ${
+                {/* Mobile Menu Button */}
+                <button
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  className="lg:hidden p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition"
+                >
+                  <FaBars />
+                </button>
+                
+                <div className={`flex items-center gap-2 rounded-full px-3 py-1.5 sm:px-4 sm:py-2 ${
                   timeLeft?.minutes <= 5 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-100'
                 }`}>
-                  <FaRegClock className={getTimeColor()} />
-                  <span className={`font-mono font-semibold ${getTimeColor()}`}>{formatTimeLeft()}</span>
-                  <span className={`text-xs ${getTimeColor()}`}>remaining</span>
+                  <FaRegClock className={`${getTimeColor()} text-xs sm:text-sm`} />
+                  <span className={`font-mono font-semibold text-xs sm:text-sm ${getTimeColor()}`}>{formatTimeLeft()}</span>
+                  <span className={`text-xs hidden sm:inline ${getTimeColor()}`}>remaining</span>
                 </div>
                 {hasVoted && (
-                  <div className="flex items-center gap-2 bg-green-600 text-white rounded-full px-4 py-2 text-sm font-semibold">
-                    <FaCheckCircle /> Voted
+                  <div className="flex items-center gap-1.5 sm:gap-2 bg-green-600 text-white rounded-full px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold">
+                    <FaCheckCircle className="text-xs sm:text-sm" /> <span className="hidden sm:inline">Voted</span>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Progress Bar */}
-            <div className="flex items-center gap-3 mt-4">
-              <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+            {/* Progress Bar - Mobile Optimized */}
+            <div className="flex items-center gap-2 mt-3 sm:mt-4">
+              <div className="flex-1 h-1.5 sm:h-2 bg-gray-200 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-gradient-to-r from-green-600 to-green-500 rounded-full transition-all duration-500"
                   style={{ width: `${progress}%` }}
                 />
               </div>
               <span className="text-xs text-gray-400 whitespace-nowrap">
-                {getSelectedCount()} of {positions.length} positions filled
+                {getSelectedCount()}/{positions.length}
               </span>
             </div>
           </div>
         </header>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Sidebar */}
-            <aside className="lg:col-span-1 space-y-4">
-              {/* Election Info Card */}
-              <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm" data-aos="fade-right">
-                <div className="flex items-center gap-2 text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
-                  <FaCalendarAlt className="text-green-600" /> Election Info
-                </div>
-                <div className="space-y-2 text-sm">
-                  <p className="text-gray-600">
-                    <strong className="text-gray-800">Year:</strong> {election?.election_year}
-                  </p>
-                  {election?.description && (
-                    <p className="text-gray-600">
-                      <strong className="text-gray-800">About:</strong> {election.description}
+            {/* Sidebar - Mobile Drawer */}
+            <aside className={`
+              fixed inset-0 z-50 transform transition-transform duration-300 ease-in-out lg:relative lg:transform-none lg:block lg:col-span-1
+              ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+            `}>
+              {/* Overlay */}
+              {sidebarOpen && (
+                <div 
+                  className="fixed inset-0 bg-black/50 lg:hidden"
+                  onClick={() => setSidebarOpen(false)}
+                />
+              )}
+              
+              {/* Sidebar Content */}
+              <div className="relative bg-white w-80 h-full overflow-y-auto lg:w-auto lg:bg-transparent lg:block space-y-4 p-4 lg:p-0">
+                {/* Close button for mobile */}
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className="lg:hidden absolute top-4 right-4 p-2 bg-gray-100 rounded-full"
+                >
+                  <FaTimesCircle className="text-gray-500" />
+                </button>
+
+                {/* Election Info Card */}
+                <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 shadow-sm" data-aos="fade-right">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3 sm:mb-4">
+                    <FaCalendarAlt className="text-green-600" /> Election Info
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <p className="text-gray-600 text-xs sm:text-sm">
+                      <strong className="text-gray-800">Year:</strong> {election?.election_year}
                     </p>
-                  )}
+                    {election?.description && (
+                      <p className="text-gray-600 text-xs sm:text-sm">
+                        <strong className="text-gray-800">About:</strong> {election.description}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Search Bar */}
-              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm" data-aos="fade-right">
-                <div className="relative">
-                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-                  <input
-                    type="text"
-                    placeholder="Search candidates..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-9 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-500"
-                  />
-                  {searchTerm && (
-                    <button
-                      onClick={() => setSearchTerm('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      <FaTimes size={12} />
-                    </button>
-                  )}
+                {/* Search Bar */}
+                <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm" data-aos="fade-right">
+                  <div className="relative">
+                    <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs sm:text-sm" />
+                    <input
+                      type="text"
+                      placeholder="Search candidates..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-9 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-500"
+                    />
+                    {searchTerm && (
+                      <button
+                        onClick={() => setSearchTerm('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <FaTimes size={12} />
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Ballot Status */}
-              <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm" data-aos="fade-right">
-                <div className="flex items-center gap-2 text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
-                  <FaInfoCircle className="text-green-600" /> Your Ballot
+                {/* Ballot Status */}
+                <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 shadow-sm" data-aos="fade-right">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3 sm:mb-4">
+                    <FaInfoCircle className="text-green-600" /> Your Ballot
+                  </div>
+                  <ul className="space-y-2 max-h-80 overflow-y-auto">
+                    {positions.map(position => {
+                      const done = !!selectedCandidates[position.id];
+                      const selected = position.candidates?.find(c => c.id === selectedCandidates[position.id]);
+                      return (
+                        <li key={position.id} className={`flex items-start gap-2 p-2 rounded-lg ${done ? 'bg-green-50' : ''}`}>
+                          <div className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${done ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300'}`}>
+                            {done && <FaCheckCircle className="text-[8px] sm:text-[10px]" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs sm:text-sm font-medium text-gray-700 truncate">{position.title}</p>
+                            {done && <p className="text-xs text-green-700 truncate">{selected?.name}</p>}
+                          </div>
+                          {done && (
+                            <button
+                              onClick={() => clearSelection(position.id)}
+                              className="text-gray-400 hover:text-red-500 transition text-xs flex-shrink-0"
+                              title="Clear selection"
+                            >
+                              <FaTimes />
+                            </button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
-                <ul className="space-y-2 max-h-96 overflow-y-auto">
-                  {positions.map(position => {
-                    const done = !!selectedCandidates[position.id];
-                    const selected = position.candidates?.find(c => c.id === selectedCandidates[position.id]);
-                    return (
-                      <li key={position.id} className={`flex items-start gap-2 p-2 rounded-lg ${done ? 'bg-green-50' : ''}`}>
-                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${done ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300'}`}>
-                          {done && <FaCheckCircle className="text-[10px]" />}
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-700">{position.title}</p>
-                          {done && <p className="text-xs text-green-700">{selected?.name}</p>}
-                        </div>
-                        {done && (
-                          <button
-                            onClick={() => clearSelection(position.id)}
-                            className="text-gray-400 hover:text-red-500 transition text-xs"
-                            title="Clear selection"
-                          >
-                            <FaTimes />
-                          </button>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
 
-              {/* Instructions */}
-              <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm" data-aos="fade-right" data-aos-delay="80">
-                <div className="flex items-center gap-2 text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
-                  <FaShieldAlt className="text-green-600" /> Instructions
+                {/* Instructions */}
+                <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 shadow-sm" data-aos="fade-right" data-aos-delay="80">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3 sm:mb-4">
+                    <FaShieldAlt className="text-green-600" /> Instructions
+                  </div>
+                  <ul className="space-y-1.5 text-xs sm:text-sm text-gray-500">
+                    <li className="flex items-start gap-2">— Select <strong className="text-gray-700">one candidate</strong> per position</li>
+                    <li className="flex items-start gap-2">— All positions are <strong className="text-gray-700">mandatory</strong></li>
+                    <li className="flex items-start gap-2">— Review before submitting</li>
+                    <li className="flex items-start gap-2">— Votes are <strong className="text-gray-700">final</strong></li>
+                  </ul>
                 </div>
-                <ul className="space-y-2 text-sm text-gray-500">
-                  <li className="flex items-start gap-2">— Select <strong className="text-gray-700">one candidate</strong> per position</li>
-                  <li className="flex items-start gap-2">— All positions are <strong className="text-gray-700">mandatory</strong></li>
-                  <li className="flex items-start gap-2">— Review before submitting</li>
-                  <li className="flex items-start gap-2">— Votes are <strong className="text-gray-700">final</strong> and cannot be changed</li>
-                </ul>
-              </div>
 
-              {/* Security Note */}
-              <div className="bg-green-50 border border-green-100 rounded-xl p-4 flex items-center gap-3" data-aos="fade-right" data-aos-delay="160">
-                <FaShieldAlt className="text-green-600 flex-shrink-0" />
-                <span className="text-xs text-green-800 font-medium">Your vote is encrypted and fully anonymous</span>
+                {/* Security Note */}
+                <div className="bg-green-50 border border-green-100 rounded-xl p-3 sm:p-4 flex items-center gap-2 sm:gap-3" data-aos="fade-right" data-aos-delay="160">
+                  <FaShieldAlt className="text-green-600 flex-shrink-0 text-sm sm:text-base" />
+                  <span className="text-xs sm:text-sm text-green-800 font-medium">Your vote is encrypted and fully anonymous</span>
+                </div>
               </div>
             </aside>
 
@@ -678,8 +761,8 @@ const handleSubmitVote = async () => {
                 <div className="bg-green-50 border-l-4 border-green-600 rounded-lg p-4 flex items-start gap-3" data-aos="fade-up">
                   <FaCheckCircle className="text-green-600 text-xl flex-shrink-0 mt-0.5" />
                   <div>
-                    <strong className="text-green-900 block">Thank you for voting!</strong>
-                    <p className="text-green-700 text-sm">Your votes have been recorded securely. Redirecting...</p>
+                    <strong className="text-green-900 block text-sm sm:text-base">Thank you for voting!</strong>
+                    <p className="text-green-700 text-xs sm:text-sm">Your votes have been recorded securely. Redirecting...</p>
                   </div>
                 </div>
               )}
@@ -688,8 +771,8 @@ const handleSubmitVote = async () => {
                 <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-4 flex items-start gap-3" data-aos="fade-up">
                   <FaBell className="text-red-500 text-xl flex-shrink-0 mt-0.5" />
                   <div>
-                    <strong className="text-red-800 block">Time is running out!</strong>
-                    <p className="text-red-700 text-sm">Less than 5 minutes remaining to cast your vote. Please complete your selections quickly.</p>
+                    <strong className="text-red-800 block text-sm sm:text-base">Time is running out!</strong>
+                    <p className="text-red-700 text-xs sm:text-sm">Less than 5 minutes remaining to cast your vote.</p>
                   </div>
                 </div>
               )}
@@ -699,23 +782,23 @@ const handleSubmitVote = async () => {
                 const hasSearchResults = searchTerm && filteredCandidates.length === 0;
                 
                 return (
-                  <section key={position.id} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow" data-aos="fade-up" data-aos-delay={idx * 60}>
-                    <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
-                      <div className="flex items-start gap-3">
-                        <span className="text-3xl font-bold text-green-100">{(idx + 1).toString().padStart(2, '0')}</span>
+                  <section key={position.id} className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6 shadow-sm hover:shadow-md transition-shadow" data-aos="fade-up" data-aos-delay={idx * 60}>
+                    <div className="flex flex-wrap items-start justify-between mb-4 sm:mb-6 gap-2">
+                      <div className="flex items-start gap-2 sm:gap-3">
+                        <span className="text-2xl sm:text-3xl font-bold text-green-100">{(idx + 1).toString().padStart(2, '0')}</span>
                         <div>
-                          <h2 className="text-lg font-bold text-gray-900">{position.title}</h2>
-                          {position.description && <p className="text-xs text-gray-400 mt-1">{position.description}</p>}
+                          <h2 className="text-base sm:text-lg font-bold text-gray-900">{position.title}</h2>
+                          {position.description && <p className="text-xs text-gray-400 mt-0.5 sm:mt-1">{position.description}</p>}
                         </div>
                       </div>
                       {selectedCandidates[position.id] && (
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center gap-1 bg-green-100 text-green-800 rounded-full px-3 py-1 text-xs font-semibold">
-                            <FaCheckCircle /> Selected
+                        <div className="flex items-center gap-1 sm:gap-2">
+                          <div className="flex items-center gap-1 bg-green-100 text-green-800 rounded-full px-2 py-0.5 sm:px-3 sm:py-1 text-xs font-semibold">
+                            <FaCheckCircle className="text-xs" /> Selected
                           </div>
                           <button
                             onClick={() => clearSelection(position.id)}
-                            className="text-gray-400 hover:text-red-500 transition text-sm"
+                            className="text-gray-400 hover:text-red-500 transition text-xs sm:text-sm"
                             title="Clear selection"
                           >
                             <FaTimes />
@@ -725,18 +808,18 @@ const handleSubmitVote = async () => {
                     </div>
 
                     {hasSearchResults ? (
-                      <div className="text-center py-8 text-gray-500">
+                      <div className="text-center py-8 text-gray-500 text-sm">
                         No candidates match your search for this position
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                         {filteredCandidates.map((candidate) => {
                           const isSelected = selectedCandidates[position.id] === candidate.id;
                           return (
                             <div
                               key={candidate.id}
                               onClick={() => !hasVoted && handleCandidateSelect(position.id, candidate.id)}
-                              className={`relative border-2 rounded-xl p-4 text-center cursor-pointer transition-all duration-200 ${
+                              className={`relative border-2 rounded-xl p-3 sm:p-4 text-center cursor-pointer transition-all duration-200 ${
                                 isSelected 
                                   ? 'border-green-600 bg-green-50 shadow-md -translate-y-1' 
                                   : hasVoted 
@@ -744,25 +827,25 @@ const handleSubmitVote = async () => {
                                     : 'border-gray-200 hover:border-green-400 hover:shadow-md hover:-translate-y-1'
                               }`}
                             >
-                              <div className="relative inline-block mb-3">
+                              <div className="relative inline-block mb-2 sm:mb-3">
                                 {candidate.image_url ? (
-                                  <img src={candidate.image_url} alt={candidate.name} className="w-20 h-20 rounded-full object-cover border-2 border-gray-200" />
+                                  <img src={candidate.image_url} alt={candidate.name} className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover border-2 border-gray-200 mx-auto" />
                                 ) : (
-                                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-green-100 to-green-50 flex items-center justify-center border-2 border-gray-200">
-                                    <FaUser className="text-green-600 text-2xl" />
+                                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-green-100 to-green-50 flex items-center justify-center border-2 border-gray-200 mx-auto">
+                                    <FaUser className="text-green-600 text-xl sm:text-2xl" />
                                   </div>
                                 )}
                                 {isSelected && (
-                                  <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-600 rounded-full flex items-center justify-center shadow-lg">
-                                    <FaCheckCircle className="text-white text-sm" />
+                                  <div className="absolute -top-1 -right-1 w-5 h-5 sm:w-6 sm:h-6 bg-green-600 rounded-full flex items-center justify-center shadow-lg">
+                                    <FaCheckCircle className="text-white text-xs sm:text-sm" />
                                   </div>
                                 )}
                               </div>
-                              <h3 className="font-semibold text-gray-800">{candidate.name}</h3>
-                              {candidate.department && <p className="text-xs text-gray-500 mt-1">{candidate.department}</p>}
+                              <h3 className="font-semibold text-gray-800 text-sm sm:text-base">{candidate.name}</h3>
+                              {candidate.department && <p className="text-xs text-gray-500 mt-0.5 sm:mt-1 truncate">{candidate.department}</p>}
                               {candidate.year_of_study && <p className="text-xs text-gray-400">Level {candidate.year_of_study}</p>}
                               {candidate.manifesto && (
-                                <p className="text-xs text-gray-400 mt-2 line-clamp-2">{candidate.manifesto.substring(0, 80)}...</p>
+                                <p className="text-xs text-gray-400 mt-2 line-clamp-2 hidden sm:block">{candidate.manifesto.substring(0, 60)}...</p>
                               )}
                               <div className={`absolute bottom-0 left-0 right-0 h-1 bg-green-600 rounded-b-xl transition-transform duration-300 origin-left ${isSelected ? 'scale-x-100' : 'scale-x-0'}`} />
                             </div>
@@ -775,29 +858,29 @@ const handleSubmitVote = async () => {
               })}
 
               {/* Submit Panel */}
-              <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-md" data-aos="fade-up">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6 shadow-md" data-aos="fade-up">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
                   <div>
-                    <h3 className="text-lg font-bold text-gray-900">Ready to Submit?</h3>
-                    <p className="text-sm text-gray-500">Review all your selections above before casting</p>
+                    <h3 className="text-base sm:text-lg font-bold text-gray-900">Ready to Submit?</h3>
+                    <p className="text-xs sm:text-sm text-gray-500">Review all your selections above before casting</p>
                   </div>
                   <div className="text-right">
-                    <span className="text-4xl font-bold text-green-600">{getSelectedCount()}</span>
-                    <span className="text-xl text-gray-300">/{positions.length}</span>
+                    <span className="text-3xl sm:text-4xl font-bold text-green-600">{getSelectedCount()}</span>
+                    <span className="text-lg sm:text-xl text-gray-300">/{positions.length}</span>
                   </div>
                 </div>
 
                 {getSelectedCount() < positions.length && (
-                  <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6">
-                    <FaExclamationTriangle className="text-amber-500 flex-shrink-0" />
-                    <span className="text-sm text-amber-800">Please select a candidate for all {positions.length} positions to continue</span>
+                  <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 sm:mb-6">
+                    <FaExclamationTriangle className="text-amber-500 flex-shrink-0 text-sm sm:text-base" />
+                    <span className="text-xs sm:text-sm text-amber-800">Please select a candidate for all {positions.length} positions to continue</span>
                   </div>
                 )}
 
                 <button
                   onClick={openConfirmModal}
                   disabled={submitting || hasVoted || getSelectedCount() !== positions.length}
-                  className="w-full py-4 bg-gradient-to-r from-green-800 to-green-600 hover:from-green-700 hover:to-green-500 disabled:from-gray-400 disabled:to-gray-400 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full py-3 sm:py-4 bg-gradient-to-r from-green-800 to-green-600 hover:from-green-700 hover:to-green-500 disabled:from-gray-400 disabled:to-gray-400 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm sm:text-base"
                 >
                   {submitting ? (
                     <><FaSpinner className="animate-spin" /> Casting your vote...</>
