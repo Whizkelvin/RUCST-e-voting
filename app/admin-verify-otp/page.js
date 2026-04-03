@@ -1,8 +1,9 @@
+// app/admin/admin-verify-otp/page.js
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'react-toastify';
+import { Toaster, toast } from 'sonner';
 import Image from 'next/image';
 import { 
   FaShieldAlt, 
@@ -24,8 +25,111 @@ export default function AdminVerifyOTP() {
   const [canResend, setCanResend] = useState(false);
   const [adminData, setAdminData] = useState(null);
   const [verificationStatus, setVerificationStatus] = useState(null);
+  const [timerInterval, setTimerInterval] = useState(null);
   
   const router = useRouter();
+
+  // Format time as MM:SS
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Start countdown timer
+  const startTimer = (initialSeconds = 300) => {
+    if (timerInterval) clearInterval(timerInterval);
+    
+    setTimeLeft(initialSeconds);
+    setCanResend(false);
+    
+    const interval = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          setCanResend(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    setTimerInterval(interval);
+  };
+
+  // Complete login and redirect
+  const completeLogin = async () => {
+    const authId = localStorage.getItem('temp_admin_auth_id');
+    const adminEmail = localStorage.getItem('temp_admin_email');
+    const adminRole = localStorage.getItem('temp_admin_role');
+    const adminName = localStorage.getItem('temp_admin_name');
+    
+    // Store session data
+    localStorage.setItem('is_authenticated', 'true');
+    localStorage.setItem('user_role', adminRole);
+    localStorage.setItem('user_email', adminEmail);
+    localStorage.setItem('user_name', adminName);
+    localStorage.setItem('user_id', authId);
+    localStorage.setItem('last_activity', Date.now().toString());
+    
+    // Set cookies for middleware
+    const maxAge = 30 * 60;
+    const cookieOptions = `path=/; max-age=${maxAge}; SameSite=Lax`;
+    document.cookie = `is_authenticated=true; ${cookieOptions}`;
+    document.cookie = `user_role=${adminRole}; ${cookieOptions}`;
+    document.cookie = `user_email=${encodeURIComponent(adminEmail)}; ${cookieOptions}`;
+    if (authId) document.cookie = `user_id=${authId}; ${cookieOptions}`;
+    
+    // Clear temporary data
+    localStorage.removeItem('temp_admin_id');
+    localStorage.removeItem('temp_admin_email');
+    localStorage.removeItem('temp_admin_name');
+    localStorage.removeItem('temp_admin_role');
+    localStorage.removeItem('temp_admin_auth_id');
+    
+    toast.success('✅ Verification successful! Redirecting to dashboard...');
+    
+    setTimeout(() => {
+      router.push('/admin/manage-voters');
+    }, 2000);
+  };
+
+  // Check OTP status from database
+  const checkOTPStatus = async (adminId) => {
+    try {
+      const { data, error } = await supabase
+        .from('admins')
+        .select('otp_expires_at, otp_verified')
+        .eq('id', adminId)
+        .single();
+      
+      if (error) throw error;
+      
+      if (data.otp_verified) {
+        toast.info('Already verified! Redirecting...');
+        completeLogin();
+        return true;
+      }
+      
+      if (data.otp_expires_at) {
+        const expiryTime = new Date(data.otp_expires_at).getTime();
+        const currentTime = Date.now();
+        const remaining = Math.max(0, Math.floor((expiryTime - currentTime) / 1000));
+        
+        if (remaining > 0) {
+          startTimer(remaining);
+        } else {
+          setCanResend(true);
+          toast.warning('OTP has expired. Please request a new one.');
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error checking OTP status:', error);
+      return false;
+    }
+  };
 
   useEffect(() => {
     // Get admin info from localStorage
@@ -43,59 +147,18 @@ export default function AdminVerifyOTP() {
     setAdminData({
       id: adminId,
       email: adminEmail,
-      name: adminName,
-      role: adminRole
+      name: adminName || 'Admin User',
+      role: adminRole || 'admin'
     });
     
     // Check OTP status from database
     checkOTPStatus(adminId);
     
-    // Start countdown timer
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          setCanResend(true);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    
-    return () => clearInterval(timer);
-  }, [router]);
-
-  const checkOTPStatus = async (adminId) => {
-    try {
-      const { data, error } = await supabase
-        .from('admins')
-        .select('otp_expires_at, otp_verified')
-        .eq('id', adminId)
-        .single();
-      
-      if (error) throw error;
-      
-      if (data.otp_verified) {
-        toast.info('Already verified! Redirecting...');
-        completeLogin();
-      }
-      
-      if (data.otp_expires_at) {
-        const expiryTime = new Date(data.otp_expires_at).getTime();
-        const currentTime = Date.now();
-        const remaining = Math.max(0, Math.floor((expiryTime - currentTime) / 1000));
-        setTimeLeft(remaining);
-      }
-    } catch (error) {
-      console.error('Error checking OTP status:', error);
-    }
-  };
-
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+    // Cleanup timer on unmount
+    return () => {
+      if (timerInterval) clearInterval(timerInterval);
+    };
+  }, []);
 
   const handleOtpChange = (index, value) => {
     if (!/^\d*$/.test(value)) return;
@@ -104,6 +167,7 @@ export default function AdminVerifyOTP() {
     newOtp[index] = value.slice(0, 1);
     setOtp(newOtp);
     
+    // Auto-focus next input
     if (value && index < 5) {
       const nextInput = document.getElementById(`otp-${index + 1}`);
       if (nextInput) nextInput.focus();
@@ -117,42 +181,11 @@ export default function AdminVerifyOTP() {
     }
   };
 
-  const completeLogin = async () => {
-    const authId = localStorage.getItem('temp_admin_auth_id');
-    const adminEmail = localStorage.getItem('temp_admin_email');
-    const adminRole = localStorage.getItem('temp_admin_role');
-    
-    // Store session data
-    localStorage.setItem('is_authenticated', 'true');
-    localStorage.setItem('user_role', adminRole);
-    localStorage.setItem('user_email', adminEmail);
-    localStorage.setItem('user_id', authId);
-    localStorage.setItem('last_activity', Date.now().toString());
-    
-    // Clear temporary data
-    localStorage.removeItem('temp_admin_id');
-    localStorage.removeItem('temp_admin_email');
-    localStorage.removeItem('temp_admin_name');
-    localStorage.removeItem('temp_admin_role');
-    localStorage.removeItem('temp_admin_auth_id');
-    
-    toast.success('✅ Verification successful! Redirecting to dashboard...', {
-      position: "top-center",
-      autoClose: 2000
-    });
-    
-    setTimeout(() => {
-      router.push('/admin/manage-voters');
-    }, 2000);
-  };
-
   const verifyOTP = async () => {
     const otpCode = otp.join('');
     
     if (otpCode.length !== 6) {
-      toast.error('Please enter the complete 6-digit OTP', {
-        position: "top-center"
-      });
+      toast.error('Please enter the complete 6-digit OTP');
       return;
     }
     
@@ -181,9 +214,7 @@ export default function AdminVerifyOTP() {
       // Check if OTP expired
       if (new Date(admin.otp_expires_at) < new Date()) {
         setVerificationStatus('expired');
-        toast.error('OTP has expired. Please request a new one.', {
-          position: "top-center"
-        });
+        toast.error('OTP has expired. Please request a new one.');
         setIsLoading(false);
         return;
       }
@@ -191,9 +222,7 @@ export default function AdminVerifyOTP() {
       // Check OTP attempts (max 5 attempts)
       if (admin.otp_attempts >= 5) {
         setVerificationStatus('failed');
-        toast.error('Too many failed attempts. Please request a new OTP.', {
-          position: "top-center"
-        });
+        toast.error('Too many failed attempts. Please request a new OTP.');
         setIsLoading(false);
         return;
       }
@@ -218,20 +247,19 @@ export default function AdminVerifyOTP() {
         
       } else {
         // Increment failed attempts
+        const newAttempts = (admin.otp_attempts || 0) + 1;
         const { error: updateError } = await supabase
           .from('admins')
           .update({
-            otp_attempts: admin.otp_attempts + 1
+            otp_attempts: newAttempts
           })
           .eq('id', adminId);
         
         if (updateError) throw updateError;
         
         setVerificationStatus('failed');
-        const remainingAttempts = 5 - (admin.otp_attempts + 1);
-        toast.error(`Invalid OTP. ${remainingAttempts} attempts remaining.`, {
-          position: "top-center"
-        });
+        const remainingAttempts = 5 - newAttempts;
+        toast.error(`Invalid OTP. ${remainingAttempts} attempt${remainingAttempts !== 1 ? 's' : ''} remaining.`);
         
         // Clear OTP inputs
         setOtp(['', '', '', '', '', '']);
@@ -241,9 +269,7 @@ export default function AdminVerifyOTP() {
     } catch (error) {
       console.error('OTP verification error:', error);
       setVerificationStatus('failed');
-      toast.error('Verification failed. Please try again.', {
-        position: "top-center"
-      });
+      toast.error('Verification failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -251,9 +277,7 @@ export default function AdminVerifyOTP() {
 
   const resendOTP = async () => {
     if (!canResend) {
-      toast.warning(`Please wait ${formatTime(timeLeft)} before requesting another OTP`, {
-        position: "top-center"
-      });
+      toast.warning(`Please wait ${formatTime(timeLeft)} before requesting another OTP`);
       return;
     }
     
@@ -290,8 +314,8 @@ export default function AdminVerifyOTP() {
         body: JSON.stringify({
           email: adminEmail,
           otp: newOtp,
-          name: adminName,
-          role: adminRole,
+          name: adminName || 'Admin User',
+          role: adminRole || 'admin',
           expiresIn: 5
         }),
       });
@@ -299,56 +323,42 @@ export default function AdminVerifyOTP() {
       const result = await response.json();
       
       if (result.success) {
-        toast.success('✅ New OTP sent to your email!', {
-          position: "top-center"
-        });
+        toast.success('✅ New OTP sent to your email!');
         
         // Reset timer
-        setTimeLeft(300);
-        setCanResend(false);
+        startTimer(300);
         setOtp(['', '', '', '', '', '']);
         setVerificationStatus(null);
-        
-        // Start countdown again
-        const timer = setInterval(() => {
-          setTimeLeft((prev) => {
-            if (prev <= 1) {
-              clearInterval(timer);
-              setCanResend(true);
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
+        document.getElementById('otp-0')?.focus();
         
       } else {
-        toast.error('Failed to send OTP. Please try again.', {
-          position: "top-center"
-        });
+        toast.error('Failed to send OTP. Please try again.');
       }
       
     } catch (error) {
       console.error('Resend OTP error:', error);
-      toast.error('Error sending OTP. Please try again.', {
-        position: "top-center"
-      });
+      toast.error('Error sending OTP. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const goBackToLogin = () => {
+    // Clear all temporary data
     localStorage.removeItem('temp_admin_id');
     localStorage.removeItem('temp_admin_email');
     localStorage.removeItem('temp_admin_name');
     localStorage.removeItem('temp_admin_role');
     localStorage.removeItem('temp_admin_auth_id');
+    
+    if (timerInterval) clearInterval(timerInterval);
     router.push('/login');
   };
 
   if (!adminData) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#02140f] via-[#063d2e] to-[#0b2545] flex items-center justify-center">
+        <Toaster position="top-center" richColors />
         <FaSpinner className="animate-spin text-white text-4xl" />
       </div>
     );
@@ -356,6 +366,7 @@ export default function AdminVerifyOTP() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#02140f] via-[#063d2e] to-[#0b2545] flex items-center justify-center p-4 relative overflow-hidden">
+      <Toaster position="top-center" richColors closeButton />
       
       {/* Animated Background */}
       <div className="absolute inset-0">
@@ -428,6 +439,11 @@ export default function AdminVerifyOTP() {
             {!canResend && timeLeft > 0 && (
               <p className="text-white/60 text-xs mt-2">
                 OTP expires in {formatTime(timeLeft)}
+              </p>
+            )}
+            {canResend && (
+              <p className="text-yellow-400 text-xs mt-2">
+                OTP expired. Click "Resend OTP" to get a new code.
               </p>
             )}
           </div>
