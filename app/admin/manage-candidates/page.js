@@ -1,11 +1,10 @@
-// app/admin/manage-candidates/page.js
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
-import { toast } from 'react-toastify';
+import { Toaster, toast } from 'sonner';
 import { 
   FaSpinner, 
   FaUserPlus, 
@@ -62,11 +61,13 @@ export default function ManageCandidates() {
     image_file: null,
     image_url: '',
     election_id: '',
+    voting_period_id: '',
     is_approved: false
   });
   const [formErrors, setFormErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [elections, setElections] = useState([]);
+  const [votingPeriods, setVotingPeriods] = useState([]);
   const [stats, setStats] = useState({
     total: 0,
     approved: 0,
@@ -91,13 +92,28 @@ export default function ManageCandidates() {
       await Promise.all([
         fetchElections(),
         fetchCandidates(),
-        fetchPositions()
+        fetchPositions(),
+        fetchVotingPeriods()
       ]);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to load data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchVotingPeriods = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('voting_periods')
+        .select('id, title, start_date, end_date, is_active')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setVotingPeriods(data || []);
+    } catch (error) {
+      console.error('Error fetching voting periods:', error);
     }
   };
 
@@ -182,37 +198,27 @@ export default function ManageCandidates() {
     }
   };
 
-  // Improved upload image function with better error handling
   const uploadImage = async (file) => {
-    if (!file) {
-      console.log('No file provided for upload');
-      return null;
-    }
+    if (!file) return null;
     
     setUploadingImage(true);
     
     try {
-      // Check if bucket exists, if not create it (you need to do this in Supabase dashboard)
       const { data: buckets } = await supabase.storage.listBuckets();
       const bucketExists = buckets?.some(b => b.name === 'candidate-images');
       
       if (!bucketExists) {
-        console.error('Bucket "candidate-images" does not exist. Please create it in Supabase dashboard.');
         toast.error('Storage bucket not configured. Please contact administrator.');
         return null;
       }
       
-      // Generate unique filename with timestamp and random string
       const fileExt = file.name.split('.').pop();
       const timestamp = Date.now();
       const randomString = Math.random().toString(36).substring(2, 15);
       const fileName = `${timestamp}_${randomString}.${fileExt}`;
       const filePath = `candidates/${fileName}`;
       
-      console.log('Uploading to path:', filePath);
-      
-      // Upload to Supabase Storage
-      const { error: uploadError, data } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('candidate-images')
         .upload(filePath, file, {
           cacheControl: '3600',
@@ -220,27 +226,11 @@ export default function ManageCandidates() {
           contentType: file.type
         });
       
-      if (uploadError) {
-        console.error('Upload error details:', uploadError);
-        throw new Error(uploadError.message);
-      }
+      if (uploadError) throw new Error(uploadError.message);
       
-      // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from('candidate-images')
         .getPublicUrl(filePath);
-      
-      console.log('Upload successful, public URL:', publicUrl);
-      
-      // Test if URL is accessible
-      try {
-        const testResponse = await fetch(publicUrl, { method: 'HEAD' });
-        if (!testResponse.ok) {
-          console.warn('Image URL may not be publicly accessible:', testResponse.status);
-        }
-      } catch (testError) {
-        console.warn('Could not verify image accessibility:', testError);
-      }
       
       toast.success('Image uploaded successfully!');
       return publicUrl;
@@ -254,102 +244,83 @@ export default function ManageCandidates() {
     }
   };
 
-  // Handle file selection with improved validation
   const handleImageSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     
-    console.log('Selected file:', file.name, file.type, file.size);
-    
-    // Validate file type
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
     if (!allowedTypes.includes(file.type)) {
       toast.error('Please select a valid image (JPEG, PNG, GIF, or WebP)');
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
     
-    // Validate file size (max 5MB for better compatibility)
-    const maxSize = 5 * 1024 * 1024; // 5MB
+    const maxSize = 5 * 1024 * 1024;
     if (file.size > maxSize) {
       toast.error('Image size must be less than 5MB');
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
     
     setFormData({ ...formData, image_file: file, image_url: '' });
     
-    // Create preview
     const reader = new FileReader();
-    reader.onloadend = () => {
-      setImagePreview(reader.result);
-    };
-    reader.onerror = () => {
-      toast.error('Failed to read image file');
-    };
+    reader.onloadend = () => setImagePreview(reader.result);
+    reader.onerror = () => toast.error('Failed to read image file');
     reader.readAsDataURL(file);
   };
 
-  // Remove selected image
   const removeImage = () => {
     setFormData({ ...formData, image_file: null, image_url: '' });
     setImagePreview(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
     toast.info('Image removed');
   };
 
   const validateForm = () => {
     const errors = {};
     
-    if (!formData.name?.trim()) {
-      errors.name = 'Name is required';
-    }
-    
-    if (!formData.position?.trim()) {
-      errors.position = 'Position is required';
-    }
-    
-    if (!formData.department?.trim()) {
-      errors.department = 'Department is required';
-    }
-    
+    if (!formData.name?.trim()) errors.name = 'Name is required';
+    if (!formData.position?.trim()) errors.position = 'Position is required';
+    if (!formData.department?.trim()) errors.department = 'Department is required';
     if (!formData.manifesto?.trim()) {
       errors.manifesto = 'Manifesto is required';
     } else if (formData.manifesto.length < 100) {
       errors.manifesto = 'Manifesto must be at least 100 characters';
     }
-    
-    if (!formData.election_id) {
-      errors.election_id = 'Please select an election';
-    }
+    if (!formData.election_id) errors.election_id = 'Please select an election';
+    if (!formData.voting_period_id) errors.voting_period_id = 'Please select a voting period';
     
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
+  // Get voting period ID from selected election
+  const handleElectionChange = async (electionId) => {
+    setFormData({ ...formData, election_id: electionId, voting_period_id: '' });
+    
+    if (electionId) {
+      const selectedElectionObj = elections.find(e => e.id === electionId);
+      if (selectedElectionObj && selectedElectionObj.voting_period_id) {
+        setFormData(prev => ({ ...prev, voting_period_id: selectedElectionObj.voting_period_id }));
+      } else {
+        toast.warning('Selected election has no associated voting period');
+      }
+    }
+  };
+
   const handleAddCandidate = async (e) => {
     e.preventDefault();
-    
     if (!validateForm()) return;
     
     setSubmitting(true);
     let imageUrl = formData.image_url;
     
     try {
-      // Upload image if selected
       if (formData.image_file) {
         const uploadedUrl = await uploadImage(formData.image_file);
-        if (uploadedUrl) {
-          imageUrl = uploadedUrl;
-        } else {
-          toast.warning('Image upload failed, candidate will be added without image');
-        }
+        if (uploadedUrl) imageUrl = uploadedUrl;
+        else toast.warning('Image upload failed, candidate will be added without image');
       }
       
       const candidateData = {
@@ -360,6 +331,7 @@ export default function ManageCandidates() {
         manifesto: formData.manifesto.trim(),
         image_url: imageUrl || null,
         election_id: formData.election_id,
+        voting_period_id: formData.voting_period_id,
         is_approved: formData.is_approved,
         status: formData.is_approved ? 'approved' : 'pending',
         created_at: new Date().toISOString(),
@@ -367,15 +339,11 @@ export default function ManageCandidates() {
         candidate_school_id: formData.school_id || null
       };
       
-      // Remove undefined fields
       Object.keys(candidateData).forEach(key => 
         candidateData[key] === undefined && delete candidateData[key]
       );
       
-      const { error } = await supabase
-        .from('candidates')
-        .insert([candidateData]);
-      
+      const { error } = await supabase.from('candidates').insert([candidateData]);
       if (error) throw error;
       
       toast.success('Candidate added successfully!');
@@ -393,18 +361,15 @@ export default function ManageCandidates() {
 
   const handleUpdateCandidate = async (e) => {
     e.preventDefault();
-    
     if (!validateForm()) return;
     
     setSubmitting(true);
     let imageUrl = formData.image_url;
     
     try {
-      // Upload new image if selected
       if (formData.image_file) {
         const uploadedUrl = await uploadImage(formData.image_file);
         if (uploadedUrl) {
-          // Delete old image if exists
           if (editingCandidate?.image_url) {
             const oldImagePath = editingCandidate.image_url.split('/').pop();
             if (oldImagePath) {
@@ -426,6 +391,7 @@ export default function ManageCandidates() {
         manifesto: formData.manifesto.trim(),
         image_url: imageUrl || null,
         election_id: formData.election_id,
+        voting_period_id: formData.voting_period_id,
         is_approved: formData.is_approved,
         status: formData.is_approved ? 'approved' : 'pending',
         updated_at: new Date().toISOString(),
@@ -433,7 +399,6 @@ export default function ManageCandidates() {
         candidate_school_id: formData.school_id || null
       };
       
-      // Remove undefined fields
       Object.keys(candidateData).forEach(key => 
         candidateData[key] === undefined && delete candidateData[key]
       );
@@ -461,7 +426,6 @@ export default function ManageCandidates() {
 
   const handleDeleteCandidate = async (candidateId) => {
     try {
-      // Check if candidate has votes
       const { count, error: voteCheckError } = await supabase
         .from('votes')
         .select('*', { count: 'exact', head: true })
@@ -474,14 +438,12 @@ export default function ManageCandidates() {
         return;
       }
       
-      // Get candidate to delete their image
       const { data: candidate } = await supabase
         .from('candidates')
         .select('image_url')
         .eq('id', candidateId)
         .single();
       
-      // Delete image from storage if exists
       if (candidate?.image_url) {
         const imagePath = candidate.image_url.split('/').pop();
         if (imagePath) {
@@ -574,13 +536,12 @@ export default function ManageCandidates() {
       image_file: null,
       image_url: '',
       election_id: '',
+      voting_period_id: '',
       is_approved: false
     });
     setImagePreview(null);
     setFormErrors({});
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const editCandidate = (candidate) => {
@@ -596,6 +557,7 @@ export default function ManageCandidates() {
       image_file: null,
       image_url: candidate.image_url || '',
       election_id: candidate.election_id || '',
+      voting_period_id: candidate.voting_period_id || '',
       is_approved: candidate.is_approved || false
     });
     setImagePreview(candidate.image_url || null);
@@ -626,7 +588,6 @@ export default function ManageCandidates() {
     toast.success('Export successful!');
   };
 
-  // Apply filters
   useEffect(() => {
     let filtered = [...candidates];
     
@@ -662,10 +623,6 @@ export default function ManageCandidates() {
     }
   }, [selectedElection]);
 
-  const handleElectionFilterChange = async (electionId) => {
-    setSelectedElection(electionId);
-  };
-
   const getStatusBadge = (candidate) => {
     if (candidate.is_approved) {
       return { label: 'Approved', color: 'bg-green-500/20 text-green-400', icon: FaCheckCircle };
@@ -679,6 +636,7 @@ export default function ManageCandidates() {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center">
+        <Toaster position="top-center" richColors />
         <div className="text-center">
           <FaSpinner className="animate-spin text-4xl text-green-500 mx-auto mb-4" />
           <p className="text-white">Loading candidates...</p>
@@ -687,78 +645,77 @@ export default function ManageCandidates() {
     );
   }
 
-  if (!isAuthenticated) {
-    return null;
-  }
+  if (!isAuthenticated) return null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <Toaster position="top-center" richColors closeButton />
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">Manage Candidates</h1>
-          <p className="text-gray-300 mt-2">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white">Manage Candidates</h1>
+          <p className="text-gray-300 mt-1 sm:mt-2 text-sm sm:text-base">
             View, approve, and manage election candidates across all years
           </p>
-          <p className="text-green-400 text-sm mt-1">
+          <p className="text-green-400 text-xs sm:text-sm mt-1">
             Logged in as: {admin?.email}
           </p>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
+        {/* Stats Cards - Responsive Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-3 sm:p-4 border border-white/20">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-white/70 text-xs">Total Candidates</p>
-                <p className="text-2xl font-bold text-white mt-1">{stats.total}</p>
+                <p className="text-xl sm:text-2xl font-bold text-white mt-1">{stats.total}</p>
               </div>
-              <FaUserPlus className="text-2xl text-blue-400" />
+              <FaUserPlus className="text-xl sm:text-2xl text-blue-400" />
             </div>
           </div>
           
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-3 sm:p-4 border border-white/20">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-white/70 text-xs">Approved</p>
-                <p className="text-2xl font-bold text-green-400 mt-1">{stats.approved}</p>
+                <p className="text-xl sm:text-2xl font-bold text-green-400 mt-1">{stats.approved}</p>
               </div>
-              <FaCheckCircle className="text-2xl text-green-400" />
+              <FaCheckCircle className="text-xl sm:text-2xl text-green-400" />
             </div>
           </div>
           
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-3 sm:p-4 border border-white/20">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-white/70 text-xs">Pending</p>
-                <p className="text-2xl font-bold text-yellow-400 mt-1">{stats.pending}</p>
+                <p className="text-xl sm:text-2xl font-bold text-yellow-400 mt-1">{stats.pending}</p>
               </div>
-              <FaUserCheck className="text-2xl text-yellow-400" />
+              <FaUserCheck className="text-xl sm:text-2xl text-yellow-400" />
             </div>
           </div>
           
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-3 sm:p-4 border border-white/20">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-white/70 text-xs">Rejected</p>
-                <p className="text-2xl font-bold text-red-400 mt-1">{stats.rejected}</p>
+                <p className="text-xl sm:text-2xl font-bold text-red-400 mt-1">{stats.rejected}</p>
               </div>
-              <FaTimesCircle className="text-2xl text-red-400" />
+              <FaTimesCircle className="text-xl sm:text-2xl text-red-400" />
             </div>
           </div>
         </div>
 
-        {/* Filters Bar */}
+        {/* Filters Bar - Responsive */}
         <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 sm:p-6 border border-white/20 mb-6">
           <div className="flex flex-col gap-4">
-            {/* First Row - Election Filter */}
             <div className="w-full">
               <label className="block text-gray-300 text-sm mb-2">Filter by Election</label>
               <select
                 value={selectedElection}
-                onChange={(e) => handleElectionFilterChange(e.target.value)}
-                className="w-full sm:w-96 px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-green-500"
+                onChange={(e) => setSelectedElection(e.target.value)}
+                className="w-full sm:w-80 px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
               >
                 <option value="all">All Elections</option>
                 {elections.map(election => (
@@ -769,26 +726,25 @@ export default function ManageCandidates() {
               </select>
             </div>
             
-            {/* Second Row - Search and other filters */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-between items-stretch sm:items-center">
-              <div className="flex-1 min-w-[200px]">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+              <div className="flex-1">
                 <div className="relative">
-                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
                   <input
                     type="text"
-                    placeholder="Search by name, position, department..."
+                    placeholder="Search by name, position..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-green-500"
+                    className="w-full pl-9 pr-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-green-500 text-sm"
                   />
                 </div>
               </div>
               
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-3">
                 <select
                   value={selectedPosition}
                   onChange={(e) => setSelectedPosition(e.target.value)}
-                  className="px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-green-500"
+                  className="flex-1 sm:flex-none px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
                 >
                   <option value="all">All Positions</option>
                   {positions.map(pos => (
@@ -799,7 +755,7 @@ export default function ManageCandidates() {
                 <select
                   value={selectedStatus}
                   onChange={(e) => setSelectedStatus(e.target.value)}
-                  className="px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-green-500"
+                  className="flex-1 sm:flex-none px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
                 >
                   <option value="all">All Status</option>
                   <option value="approved">Approved</option>
@@ -809,14 +765,14 @@ export default function ManageCandidates() {
                 
                 <button
                   onClick={() => setShowAddModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white transition"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white transition text-sm"
                 >
-                  <FaUserPlus /> Add Candidate
+                  <FaUserPlus /> Add
                 </button>
                 
                 <button
                   onClick={exportToExcel}
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white transition"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white transition text-sm"
                 >
                   <FaFileExcel /> Export
                 </button>
@@ -825,25 +781,24 @@ export default function ManageCandidates() {
           </div>
         </div>
 
-        {/* Candidates Table */}
+        {/* Candidates Table - Responsive */}
         <div className="bg-white/10 backdrop-blur-lg rounded-xl border border-white/20 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px]">
+            <table className="w-full min-w-[800px]">
               <thead className="bg-white/5 border-b border-white/10">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Candidate</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Position</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Department</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Year</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Election</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Candidate</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Position</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Dept</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider hidden md:table-cell">Election</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/10">
                 {filteredCandidates.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center text-gray-400">
+                    <td colSpan="6" className="px-6 py-12 text-center text-gray-400">
                       No candidates found
                     </td>
                   </tr>
@@ -855,10 +810,10 @@ export default function ManageCandidates() {
                     
                     return (
                       <tr key={candidate.id} className="hover:bg-white/5 transition">
-                        <td className="px-6 py-4">
+                        <td className="px-4 sm:px-6 py-4">
                           <div className="flex items-center gap-3">
                             {candidate.image_url ? (
-                              <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-700 flex-shrink-0">
+                              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-gray-700 flex-shrink-0">
                                 <img 
                                   src={candidate.image_url} 
                                   alt={candidate.name}
@@ -866,53 +821,42 @@ export default function ManageCandidates() {
                                   onError={(e) => {
                                     e.target.onerror = null;
                                     e.target.style.display = 'none';
-                                    e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-gray-600"><FaUserCheck className="text-gray-400 w-5 h-5" /></div>';
                                   }}
                                 />
                               </div>
                             ) : (
-                              <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0">
-                                <FaUserCheck className="text-gray-400 w-5 h-5" />
+                              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0">
+                                <FaUserCheck className="text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
                               </div>
                             )}
                             <div>
-                              <div className="text-white font-medium">{candidate.name}</div>
-                              <div className="text-gray-400 text-xs truncate max-w-[200px]">
-                                {candidate.manifesto?.substring(0, 60)}...
+                              <div className="text-white font-medium text-sm sm:text-base">{candidate.name}</div>
+                              <div className="text-gray-400 text-xs hidden sm:block truncate max-w-[150px]">
+                                {candidate.manifesto?.substring(0, 50)}...
                               </div>
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="text-white text-sm">{candidate.position}</div>
+                        <td className="px-4 sm:px-6 py-4">
+                          <div className="text-white text-xs sm:text-sm">{candidate.position}</div>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="text-gray-300 text-sm">{candidate.department || 'N/A'}</div>
+                        <td className="px-4 sm:px-6 py-4">
+                          <div className="text-gray-300 text-xs sm:text-sm">{candidate.department || 'N/A'}</div>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="text-gray-300 text-sm">
-                            {candidate.year_of_study ? `Level ${candidate.year_of_study}` : 'N/A'}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-1 text-gray-300 text-sm">
+                        <td className="px-4 sm:px-6 py-4 hidden md:table-cell">
+                          <div className="flex items-center gap-1 text-gray-300 text-xs sm:text-sm">
                             <FaUniversity className="text-xs" />
-                            {election ? `${election.title} (${election.election_year})` : 'N/A'}
+                            {election ? `${election.title.substring(0, 15)}...` : 'N/A'}
                           </div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 sm:px-6 py-4">
                           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${status.color}`}>
                             <StatusIcon className="text-xs" />
                             {status.label}
                           </span>
-                          {candidate.rejection_reason && (
-                            <div className="text-red-400 text-xs mt-1 truncate max-w-[150px]" title={candidate.rejection_reason}>
-                              {candidate.rejection_reason}
-                            </div>
-                          )}
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
+                        <td className="px-4 sm:px-6 py-4">
+                          <div className="flex items-center gap-2 flex-wrap">
                             {!candidate.is_approved && !candidate.rejection_reason && (
                               <>
                                 <button
@@ -957,12 +901,12 @@ export default function ManageCandidates() {
         </div>
       </div>
 
-      {/* Add/Edit Candidate Modal */}
+      {/* Add/Edit Candidate Modal - Responsive */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-gray-800 rounded-xl max-w-2xl w-full my-8">
-            <div className="flex justify-between items-center p-6 border-b border-white/10">
-              <h2 className="text-2xl font-bold text-white">
+          <div className="bg-gray-800 rounded-xl max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gray-800 flex justify-between items-center p-4 sm:p-6 border-b border-white/10">
+              <h2 className="text-xl sm:text-2xl font-bold text-white">
                 {editingCandidate ? 'Edit Candidate' : 'Add New Candidate'}
               </h2>
               <button
@@ -977,71 +921,71 @@ export default function ManageCandidates() {
               </button>
             </div>
             
-            <form onSubmit={editingCandidate ? handleUpdateCandidate : handleAddCandidate} className="p-6 space-y-5">
+            <form onSubmit={editingCandidate ? handleUpdateCandidate : handleAddCandidate} className="p-4 sm:p-6 space-y-4 sm:space-y-5">
               <div>
-                <label className="block text-gray-300 mb-2">Full Name *</label>
+                <label className="block text-gray-300 text-sm mb-2">Full Name *</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
                   placeholder="John Doe"
                 />
                 {formErrors.name && <p className="text-red-400 text-xs mt-1">{formErrors.name}</p>}
               </div>
               
               <div>
-                <label className="block text-gray-300 mb-2">Email (Optional)</label>
+                <label className="block text-gray-300 text-sm mb-2">Email (Optional)</label>
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({...formData, email: e.target.value})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
                   placeholder="candidate@example.com"
                 />
               </div>
               
               <div>
-                <label className="block text-gray-300 mb-2">School ID (Optional)</label>
+                <label className="block text-gray-300 text-sm mb-2">School ID (Optional)</label>
                 <input
                   type="text"
                   value={formData.school_id}
                   onChange={(e) => setFormData({...formData, school_id: e.target.value})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
                   placeholder="STU-12345"
                 />
               </div>
               
               <div>
-                <label className="block text-gray-300 mb-2">Position *</label>
+                <label className="block text-gray-300 text-sm mb-2">Position *</label>
                 <input
                   type="text"
                   value={formData.position}
                   onChange={(e) => setFormData({...formData, position: e.target.value})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
                   placeholder="President"
                 />
                 {formErrors.position && <p className="text-red-400 text-xs mt-1">{formErrors.position}</p>}
               </div>
               
               <div>
-                <label className="block text-gray-300 mb-2">Department *</label>
+                <label className="block text-gray-300 text-sm mb-2">Department *</label>
                 <input
                   type="text"
                   value={formData.department}
                   onChange={(e) => setFormData({...formData, department: e.target.value})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
                   placeholder="Computer Science"
                 />
                 {formErrors.department && <p className="text-red-400 text-xs mt-1">{formErrors.department}</p>}
               </div>
               
               <div>
-                <label className="block text-gray-300 mb-2">Year of Study</label>
+                <label className="block text-gray-300 text-sm mb-2">Year of Study</label>
                 <select
                   value={formData.year_of_study}
                   onChange={(e) => setFormData({...formData, year_of_study: e.target.value})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
                 >
                   <option value="">Select Year</option>
                   <option value="100">100 Level</option>
@@ -1052,13 +996,13 @@ export default function ManageCandidates() {
               </div>
               
               <div>
-                <label className="block text-gray-300 mb-2">Election *</label>
+                <label className="block text-gray-300 text-sm mb-2">Election *</label>
                 <div className="relative">
-                  <FaCalendarAlt className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <FaCalendarAlt className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
                   <select
                     value={formData.election_id}
-                    onChange={(e) => setFormData({...formData, election_id: e.target.value})}
-                    className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                    onChange={(e) => handleElectionChange(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
                   >
                     <option value="">Select Election</option>
                     {elections.map(election => (
@@ -1071,13 +1015,16 @@ export default function ManageCandidates() {
                 {formErrors.election_id && <p className="text-red-400 text-xs mt-1">{formErrors.election_id}</p>}
               </div>
               
-              {/* Image Upload Section */}
+              {/* Voting Period ID - Hidden but required */}
+              <input type="hidden" value={formData.voting_period_id} />
+              {formErrors.voting_period_id && <p className="text-red-400 text-xs mt-1">{formErrors.voting_period_id}</p>}
+              
+              {/* Image Upload Section - Responsive */}
               <div>
-                <label className="block text-gray-300 mb-2">Candidate Photo</label>
+                <label className="block text-gray-300 text-sm mb-2">Candidate Photo</label>
                 <div className="flex flex-col sm:flex-row items-start gap-4">
-                  {/* Image Preview */}
                   {imagePreview && (
-                    <div className="relative w-24 h-24 rounded-lg overflow-hidden bg-gray-700 flex-shrink-0">
+                    <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden bg-gray-700 flex-shrink-0">
                       <img 
                         src={imagePreview} 
                         alt="Preview" 
@@ -1087,14 +1034,12 @@ export default function ManageCandidates() {
                         type="button"
                         onClick={removeImage}
                         className="absolute top-1 right-1 bg-red-600 rounded-full p-1 hover:bg-red-500 transition"
-                        title="Remove image"
                       >
                         <FaTrashAlt className="text-white text-xs" />
                       </button>
                     </div>
                   )}
                   
-                  {/* Upload Area */}
                   <div className="flex-1 w-full">
                     <div className="relative">
                       <input
@@ -1114,7 +1059,7 @@ export default function ManageCandidates() {
                         ) : (
                           <>
                             <FaCamera className="text-gray-400 group-hover:text-green-500 transition" />
-                            <span className="text-gray-300 group-hover:text-green-400 transition">
+                            <span className="text-gray-300 group-hover:text-green-400 transition text-sm">
                               {imagePreview ? 'Change Photo' : 'Click to Upload Photo'}
                             </span>
                           </>
@@ -1122,19 +1067,19 @@ export default function ManageCandidates() {
                       </label>
                     </div>
                     <p className="text-gray-400 text-xs mt-2">
-                      Supported: JPEG, PNG, GIF, WebP. Max 5MB. Recommended: Square image (400x400px)
+                      Supported: JPEG, PNG, GIF, WebP. Max 5MB
                     </p>
                   </div>
                 </div>
               </div>
               
               <div>
-                <label className="block text-gray-300 mb-2">Manifesto *</label>
+                <label className="block text-gray-300 text-sm mb-2">Manifesto *</label>
                 <textarea
                   value={formData.manifesto}
                   onChange={(e) => setFormData({...formData, manifesto: e.target.value})}
-                  rows={6}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                  rows={5}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
                   placeholder="Write your manifesto here... (minimum 100 characters)"
                 />
                 {formErrors.manifesto && <p className="text-red-400 text-xs mt-1">{formErrors.manifesto}</p>}
@@ -1151,7 +1096,7 @@ export default function ManageCandidates() {
                   onChange={(e) => setFormData({...formData, is_approved: e.target.checked})}
                   className="w-4 h-4"
                 />
-                <label htmlFor="is_approved" className="text-gray-300">
+                <label htmlFor="is_approved" className="text-gray-300 text-sm">
                   Approve this candidate immediately
                 </label>
               </div>
@@ -1164,14 +1109,14 @@ export default function ManageCandidates() {
                     setEditingCandidate(null);
                     resetForm();
                   }}
-                  className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition"
+                  className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting || uploadingImage}
-                  className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                 >
                   {submitting || uploadingImage ? <FaSpinner className="animate-spin mx-auto" /> : (editingCandidate ? 'Update Candidate' : 'Add Candidate')}
                 </button>
@@ -1184,21 +1129,21 @@ export default function ManageCandidates() {
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-xl max-w-md w-full p-6">
-            <h2 className="text-2xl font-bold text-white mb-4">Confirm Delete</h2>
-            <p className="text-gray-300 mb-6">
+          <div className="bg-gray-800 rounded-xl max-w-md w-full p-4 sm:p-6">
+            <h2 className="text-xl sm:text-2xl font-bold text-white mb-4">Confirm Delete</h2>
+            <p className="text-gray-300 text-sm sm:text-base mb-6">
               Are you sure you want to delete <strong className="text-white">{showDeleteConfirm.name}</strong>?
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDeleteConfirm(null)}
-                className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition"
+                className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition text-sm"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleDeleteCandidate(showDeleteConfirm.id)}
-                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-white transition"
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-white transition text-sm"
               >
                 Delete
               </button>
