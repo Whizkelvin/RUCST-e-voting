@@ -6,32 +6,10 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { Toaster, toast } from 'sonner';
 import { 
-  FaSpinner, 
-  FaUserPlus, 
-  FaTrash, 
-  FaEdit, 
-  FaSearch, 
-  FaDownload, 
-  FaUpload,
-  FaEnvelope,
-  FaIdCard,
-  FaGraduationCap,
-  FaBuilding,
-  FaCheckCircle,
-  FaTimesCircle,
-  FaUserCheck,
-  FaEye,
-  FaEyeSlash,
-  FaFileExcel,
-  FaFilePdf,
-  FaFilter,
-  FaTimes,
-  FaImage,
-  FaCalendarAlt,
-  FaUniversity,
-  FaCloudUploadAlt,
-  FaTrashAlt,
-  FaCamera
+  FaSpinner, FaUserPlus, FaTrash, FaEdit, FaSearch, FaDownload, 
+  FaEnvelope, FaIdCard, FaGraduationCap, FaBuilding, FaCheckCircle,
+  FaTimesCircle, FaUserCheck, FaEye, FaEyeSlash, FaFileExcel,
+  FaTimes, FaImage, FaCalendarAlt, FaUniversity, FaCamera, FaTrashAlt
 } from 'react-icons/fa';
 import * as XLSX from 'xlsx';
 
@@ -92,7 +70,6 @@ export default function ManageCandidates() {
       await Promise.all([
         fetchElections(),
         fetchCandidates(),
-        fetchPositions(),
         fetchVotingPeriods()
       ]);
     } catch (error) {
@@ -142,11 +119,64 @@ export default function ManageCandidates() {
     }
   };
 
+  // Function to sync position to positions table
+const syncPositionToTable = async (electionId, positionTitle, orderNumber = null) => {
+  if (!electionId || !positionTitle) return null;
+  
+  try {
+    // Check if position already exists for this election
+    const { data: existingPosition } = await supabase
+      .from('positions')
+      .select('id')
+      .eq('election_id', electionId)
+      .eq('title', positionTitle)
+      .maybeSingle();
+    
+    if (existingPosition) {
+      return existingPosition.id;
+    }
+    
+    // Create new position - using correct column names from your table
+    const { data: newPosition, error } = await supabase
+      .from('positions')
+      .insert({
+        election_id: electionId,
+        title: positionTitle,
+        description: `Candidates for ${positionTitle}`,
+        order_number: orderNumber || 999,
+        order_index: orderNumber || 999,
+        max_votes: 1,
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error creating position:', error);
+      throw error;
+    }
+    
+    toast.success(`Position "${positionTitle}" created automatically`);
+    return newPosition.id;
+    
+  } catch (error) {
+    console.error('Error syncing position:', error);
+    toast.error(`Failed to create position: ${error.message}`);
+    return null;
+  }
+};
   const fetchCandidates = async () => {
     try {
       let query = supabase
         .from('candidates')
-        .select('*')
+        .select(`
+          *,
+          positions!candidates_position_id_fkey (
+            id,
+            title,
+            order_number
+          )
+        `)
         .order('created_at', { ascending: false });
 
       if (selectedElection !== 'all') {
@@ -159,6 +189,10 @@ export default function ManageCandidates() {
 
       setCandidates(data || []);
       setFilteredCandidates(data || []);
+      
+      // Extract unique positions for filter
+      const uniquePositions = [...new Set((data || []).map(c => c.position).filter(p => p))];
+      setPositions(uniquePositions);
       
       const approved = (data || []).filter(c => c.is_approved === true).length;
       const pending = (data || []).filter(c => c.is_approved === false && !c.rejection_reason).length;
@@ -176,89 +210,43 @@ export default function ManageCandidates() {
     }
   };
 
-  const fetchPositions = async () => {
+  const uploadImage = async (file) => {
+    if (!file) return null;
+    
+    setUploadingImage(true);
+    
     try {
-      let query = supabase
-        .from('candidates')
-        .select('position')
-        .not('position', 'is', null);
-
-      if (selectedElection !== 'all') {
-        query = query.eq('election_id', selectedElection);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
+      const fileExt = file.name.split('.').pop();
+      const timestamp = Date.now();
+      const randomString = Math.random().toString(36).substring(2, 15);
+      const fileName = `${timestamp}_${randomString}.${fileExt}`;
+      const filePath = `candidates/${fileName}`;
       
-      const uniquePositions = [...new Set((data || []).map(c => c.position).filter(p => p))];
-      setPositions(uniquePositions);
+      const { data, error: uploadError } = await supabase.storage
+        .from('candidate-images')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          contentType: file.type,
+          upsert: false
+        });
+      
+      if (uploadError) throw uploadError;
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('candidate-images')
+        .getPublicUrl(filePath);
+      
+      toast.success('Image uploaded successfully!');
+      return publicUrl;
+      
     } catch (error) {
-      console.error('Error fetching positions:', error);
+      console.error('Upload error:', error);
+      toast.error(`Upload failed: ${error.message}`);
+      return null;
+    } finally {
+      setUploadingImage(false);
     }
   };
-
-  // Replace your uploadImage function with this:
-const uploadImage = async (file) => {
-  if (!file) return null;
-  
-  setUploadingImage(true);
-  
-  try {
-    // Generate unique filename
-    const fileExt = file.name.split('.').pop();
-    const timestamp = Date.now();
-    const randomString = Math.random().toString(36).substring(2, 15);
-    const fileName = `${timestamp}_${randomString}.${fileExt}`;
-    const filePath = `candidates/${fileName}`;
-    
-    console.log('Uploading to path:', filePath);
-    console.log('File details:', { name: file.name, type: file.type, size: file.size });
-    
-    // Upload to Supabase Storage
-    const { data, error: uploadError } = await supabase.storage
-      .from('candidate-images')
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        contentType: file.type,
-        upsert: false
-      });
-    
-    if (uploadError) {
-      console.error('Upload error details:', uploadError);
-      
-      // Specific error messages
-      if (uploadError.message.includes('JWT')) {
-        toast.error('Authentication error. Please refresh the page and try again.');
-      } else if (uploadError.message.includes('permission')) {
-        toast.error('Permission denied. Please check storage policies.');
-      } else if (uploadError.message.includes('bucket')) {
-        toast.error('Storage bucket not accessible.');
-      } else {
-        toast.error(`Upload failed: ${uploadError.message}`);
-      }
-      return null;
-    }
-    
-    console.log('Upload success:', data);
-    
-    // Get public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('candidate-images')
-      .getPublicUrl(filePath);
-    
-    console.log('Public URL:', publicUrl);
-    toast.success('Image uploaded successfully!');
-    return publicUrl;
-    
-  } catch (error) {
-    console.error('Upload error:', error);
-    toast.error(`Upload failed: ${error.message}`);
-    return null;
-  } finally {
-    setUploadingImage(false);
-  }
-};
 
   const handleImageSelect = (e) => {
     const file = e.target.files[0];
@@ -311,7 +299,6 @@ const uploadImage = async (file) => {
     return Object.keys(errors).length === 0;
   };
 
-  // Get voting period ID from selected election
   const handleElectionChange = async (electionId) => {
     setFormData({ ...formData, election_id: electionId, voting_period_id: '' });
     
@@ -333,15 +320,28 @@ const uploadImage = async (file) => {
     let imageUrl = formData.image_url;
     
     try {
+      // FIRST: Sync position to positions table
+      const positionId = await syncPositionToTable(
+        formData.election_id,
+        formData.position.trim()
+      );
+      
+      if (!positionId) {
+        toast.error('Failed to create/validate position');
+        return;
+      }
+      
+      // THEN: Upload image if any
       if (formData.image_file) {
         const uploadedUrl = await uploadImage(formData.image_file);
         if (uploadedUrl) imageUrl = uploadedUrl;
-        else toast.warning('Image upload failed, candidate will be added without image');
       }
       
+      // FINALLY: Insert candidate with position_id
       const candidateData = {
         name: formData.name.trim(),
         position: formData.position.trim(),
+        position_id: positionId,
         department: formData.department.trim(),
         year_of_study: formData.year_of_study ? parseInt(formData.year_of_study) : null,
         manifesto: formData.manifesto.trim(),
@@ -354,10 +354,6 @@ const uploadImage = async (file) => {
         candidate_email: formData.email || null,
         candidate_school_id: formData.school_id || null
       };
-      
-      Object.keys(candidateData).forEach(key => 
-        candidateData[key] === undefined && delete candidateData[key]
-      );
       
       const { error } = await supabase.from('candidates').insert([candidateData]);
       if (error) throw error;
@@ -383,9 +379,21 @@ const uploadImage = async (file) => {
     let imageUrl = formData.image_url;
     
     try {
+      // Sync position if changed
+      let positionId = editingCandidate.position_id;
+      if (editingCandidate.position !== formData.position.trim() || 
+          editingCandidate.election_id !== formData.election_id) {
+        positionId = await syncPositionToTable(
+          formData.election_id,
+          formData.position.trim()
+        );
+      }
+      
+      // Upload new image if any
       if (formData.image_file) {
         const uploadedUrl = await uploadImage(formData.image_file);
         if (uploadedUrl) {
+          // Delete old image
           if (editingCandidate?.image_url) {
             const oldImagePath = editingCandidate.image_url.split('/').pop();
             if (oldImagePath) {
@@ -402,6 +410,7 @@ const uploadImage = async (file) => {
       const candidateData = {
         name: formData.name.trim(),
         position: formData.position.trim(),
+        position_id: positionId,
         department: formData.department.trim(),
         year_of_study: formData.year_of_study ? parseInt(formData.year_of_study) : null,
         manifesto: formData.manifesto.trim(),
@@ -414,10 +423,6 @@ const uploadImage = async (file) => {
         candidate_email: formData.email || null,
         candidate_school_id: formData.school_id || null
       };
-      
-      Object.keys(candidateData).forEach(key => 
-        candidateData[key] === undefined && delete candidateData[key]
-      );
       
       const { error } = await supabase
         .from('candidates')
@@ -635,9 +640,8 @@ const uploadImage = async (file) => {
   useEffect(() => {
     if (isAuthenticated) {
       fetchCandidates();
-      fetchPositions();
     }
-  }, [selectedElection]);
+  }, [selectedElection, isAuthenticated]);
 
   const getStatusBadge = (candidate) => {
     if (candidate.is_approved) {
@@ -680,7 +684,7 @@ const uploadImage = async (file) => {
           </p>
         </div>
 
-        {/* Stats Cards - Responsive Grid */}
+        {/* Stats Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
           <div className="bg-white/10 backdrop-blur-lg rounded-xl p-3 sm:p-4 border border-white/20">
             <div className="flex items-center justify-between">
@@ -723,7 +727,7 @@ const uploadImage = async (file) => {
           </div>
         </div>
 
-        {/* Filters Bar - Responsive */}
+        {/* Filters Bar */}
         <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 sm:p-6 border border-white/20 mb-6">
           <div className="flex flex-col gap-4">
             <div className="w-full">
@@ -797,7 +801,7 @@ const uploadImage = async (file) => {
           </div>
         </div>
 
-        {/* Candidates Table - Responsive */}
+        {/* Candidates Table */}
         <div className="bg-white/10 backdrop-blur-lg rounded-xl border border-white/20 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[800px]">
@@ -917,7 +921,7 @@ const uploadImage = async (file) => {
         </div>
       </div>
 
-      {/* Add/Edit Candidate Modal - Responsive */}
+      {/* Add/Edit Candidate Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-gray-800 rounded-xl max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
@@ -1004,10 +1008,10 @@ const uploadImage = async (file) => {
                   className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
                 >
                   <option value="">Select Year</option>
-                  <option value="100">100 Level</option>
-                  <option value="200">200 Level</option>
-                  <option value="300">300 Level</option>
-                  <option value="400">400 Level</option>
+                  <option value="100">Level 100</option>
+                  <option value="200">Level 200</option>
+                  <option value="300">Level 300</option>
+                  <option value="400">Level 400</option>
                 </select>
               </div>
               
@@ -1031,11 +1035,10 @@ const uploadImage = async (file) => {
                 {formErrors.election_id && <p className="text-red-400 text-xs mt-1">{formErrors.election_id}</p>}
               </div>
               
-              {/* Voting Period ID - Hidden but required */}
               <input type="hidden" value={formData.voting_period_id} />
               {formErrors.voting_period_id && <p className="text-red-400 text-xs mt-1">{formErrors.voting_period_id}</p>}
               
-              {/* Image Upload Section - Responsive */}
+              {/* Image Upload Section */}
               <div>
                 <label className="block text-gray-300 text-sm mb-2">Candidate Photo</label>
                 <div className="flex flex-col sm:flex-row items-start gap-4">

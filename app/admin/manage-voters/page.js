@@ -564,10 +564,10 @@ export default function ManageVoters() {
                     className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
                   >
                     <option value="">Select Year</option>
-                    <option value="100">100 Level</option>
-                    <option value="200">200 Level</option>
-                    <option value="300">300 Level</option>
-                    <option value="400">400 Level</option>
+                    <option value="100">Level 100 </option>
+                    <option value="200">Level 200 </option>
+                    <option value="300">Level 300 </option>
+                    <option value="400">Level 400 </option>
                   </select>
                 </div>
                 {formErrors.year_of_study && <p className="text-red-400 text-xs mt-1">{formErrors.year_of_study}</p>}

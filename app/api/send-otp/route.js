@@ -1,4 +1,4 @@
-// app/api/send-admin-otp/route.js
+// app/api/send-Voter-otp/route.js
 export async function POST(request) {
   try {
     const { email, otp, name, role, expiresIn } = await request.json();
@@ -36,13 +36,13 @@ export async function POST(request) {
           email: process.env.BREVO_FROM_EMAIL || 'noreply@regent.edu.gh'
         },
         to: [{ email: email, name: name || 'Administrator' }],
-        subject: '🔐 Admin Verification OTP - E-Voting Portal',
+        subject: '🔐 Voter Verification OTP - E-Voting Portal',
         htmlContent: `
           <!DOCTYPE html>
           <html>
           <head>
             <meta charset="utf-8">
-            <title>Admin OTP Verification</title>
+            <title>Voter OTP Verification</title>
             <style>
               body {
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -127,17 +127,17 @@ export async function POST(request) {
           <body>
             <div class="container">
               <div class="header">
-                <h1>🔐 Admin Verification Required</h1>
+                <h1>🔐 Voter Verification Required</h1>
                 <p>Regent University E-Voting Portal</p>
               </div>
               <div class="content">
-                <h2>Dear ${name || 'Administrator'},</h2>
+                <h2>Dear ${name || 'Voteristrator'},</h2>
                 
                 <div class="role-badge">
-                  Role: ${role || 'Administrator'}
+                  Role: ${role || 'Voteristrator'}
                 </div>
                 
-                <p>You are attempting to access the <strong>Admin Dashboard</strong> of the Regent University E-Voting System.</p>
+                <p>You are attempting to access the <strong>Voter Dashboard</strong> of the Regent University E-Voting System.</p>
                 
                 <p>Please use the following One-Time Password (OTP) to complete your login:</p>
                 
@@ -179,13 +179,13 @@ export async function POST(request) {
           </html>
         `,
         textContent: `
-          Admin Verification OTP - Regent University E-Voting Portal
+          Voter Verification OTP - Regent University E-Voting Portal
 
-          Dear ${name || 'Administrator'},
+          Dear ${name || 'Voteristrator'},
 
-          Role: ${role || 'Administrator'}
+          Role: ${role || 'Voteristrator'}
 
-          You are attempting to access the Admin Dashboard.
+          You are attempting to access the Voter Dashboard.
 
           Your OTP verification code is: ${otp}
 
@@ -210,16 +210,16 @@ export async function POST(request) {
       throw new Error(data.message || 'Failed to send email');
     }
 
-    console.log('Admin OTP sent successfully to:', email);
+    console.log('Voter OTP sent successfully to:', email);
     
     return Response.json({ 
       success: true, 
-      message: 'Admin OTP sent successfully',
+      message: 'Voter OTP sent successfully',
       messageId: data.messageId 
     });
     
   } catch (error) {
-    console.error('Error sending admin OTP:', error);
+    console.error('Error sending Voter OTP:', error);
     return Response.json(
       { success: false, error: error.message },
       { status: 500 }

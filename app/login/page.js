@@ -448,7 +448,7 @@ function LoginContent() {
       
       // Step 8: Redirect to OTP verification page
       setTimeout(() => {
-        router.push('/admin-verify-otp');
+        router.push('/admin/admin-verify-otp');
       }, 1500);
       
     } catch (error) {

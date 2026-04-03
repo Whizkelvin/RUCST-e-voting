@@ -32,7 +32,7 @@ const NavigationBar = ({ isVotingActive, isMobileMenuOpen, setIsMobileMenuOpen, 
   const isActive = (path) => pathname === path;
 
   const navLinks = [
-    { name: 'How It Works', href: '/how-it-works', icon: GiStairsGoal, mobileOnly: false },
+    { name: 'How to Vote', href: '/how-to-vote', icon: GiStairsGoal, mobileOnly: false },
     { name: 'Elections', href: '#elections', icon: GiVote, mobileOnly: false, isAnchor: true },
     { name: 'Become a Candidate', href: '/candidate-nomination', icon: FaUserPlus, mobileOnly: false },
     { name: 'Candidate only', href: '#progress', icon: GiChart, mobileOnly: false, isAnchor: true },
