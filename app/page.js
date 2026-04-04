@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
-import { Toaster, toast } from 'sonner'; // ← Changed from react-toastify
+import { Toaster, toast } from 'sonner';
 import NavigationBar from '@/components/home/NavigationBar';
 import CountdownTimer from '@/components/home/CountdownTimer';
 import StatsCard from '@/components/home/StatsCard';
@@ -11,11 +11,29 @@ import ElectionCard from '@/components/home/ElectionCard';
 import VotingStatusBanner from '@/components/home/VotingStatusBanner';
 import Footer from '@/components/footer';
 import { useElectionData } from '@/hooks/useElectionData';
-import { FaSync, FaExclamationCircle, FaVoteYea, FaUsers, FaChartBar, FaClock, FaLock, FaSun, FaMoon } from 'react-icons/fa';
+import { 
+  FaSync, FaExclamationCircle, FaVoteYea, FaUsers, FaChartBar, 
+  FaClock, FaLock, FaSun, FaMoon, FaSearch, FaEnvelope, 
+  FaIdCard, FaCheckCircle, FaTimesCircle, FaUserGraduate,
+  FaDownload, FaEye
+} from 'react-icons/fa';
+import { supabase } from '@/lib/supabaseClient';
+import * as XLSX from 'xlsx';
 
 export default function Home() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState('light');
+  const [showVoterList, setShowVoterList] = useState(false);
+  const [voters, setVoters] = useState([]);
+  const [filteredVoters, setFilteredVoters] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [voterLoading, setVoterLoading] = useState(false);
+  const [voterStats, setVoterStats] = useState({
+    total: 0,
+    voted: 0,
+    notVoted: 0,
+    turnout: 0
+  });
   
   const {
     loading,
@@ -29,6 +47,75 @@ export default function Home() {
     fetchElectionData,
     lastUpdated
   } = useElectionData();
+
+  // Fetch voters when modal opens
+  const fetchVoters = async () => {
+    setVoterLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('voters')
+        .select('*')
+        .order('name', { ascending: true });
+      
+      if (error) throw error;
+      
+      setVoters(data || []);
+      setFilteredVoters(data || []);
+      
+      const voted = (data || []).filter(v => v.has_voted === true).length;
+      const notVoted = (data || []).filter(v => v.has_voted === false).length;
+      const turnout = data?.length > 0 ? ((voted / data.length) * 100).toFixed(1) : 0;
+      
+      setVoterStats({
+        total: data?.length || 0,
+        voted,
+        notVoted,
+        turnout
+      });
+    } catch (error) {
+      console.error('Error fetching voters:', error);
+      toast.error('Failed to load voters list');
+    } finally {
+      setVoterLoading(false);
+    }
+  };
+
+  const handleOpenVoterList = () => {
+    setShowVoterList(true);
+    fetchVoters();
+  };
+
+  // Filter voters based on search
+  useEffect(() => {
+    if (!searchTerm) {
+      setFilteredVoters(voters);
+    } else {
+      const filtered = voters.filter(voter => 
+        voter.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        voter.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        voter.school_id?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredVoters(filtered);
+    }
+  }, [searchTerm, voters]);
+
+  const exportToExcel = () => {
+    const exportData = filteredVoters.map(voter => ({
+      'Name': voter.name,
+      'Email': voter.email,
+      'School ID': voter.school_id,
+      'Department': voter.department || 'N/A',
+      'Level': voter.level || 'N/A',
+      'Has Voted': voter.has_voted ? 'Yes' : 'No',
+      'Voted At': voter.voted_at ? new Date(voter.voted_at).toLocaleString() : 'Not yet'
+    }));
+    
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Voters List');
+    XLSX.writeFile(wb, `voters_list_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success('Export successful!');
+  };
 
   // Theme management
   useEffect(() => {
@@ -51,7 +138,6 @@ export default function Home() {
   useEffect(() => {
     AOS.init({ duration: 1000, once: true, offset: 100 });
     
-    // Prevent body scroll when mobile menu is open
     if (isMobileMenuOpen) {
       document.body.style.overflow = 'hidden';
     } else {
@@ -62,14 +148,6 @@ export default function Home() {
       document.body.style.overflow = 'unset';
     };
   }, [isMobileMenuOpen]);
-
-  // Optional: Show toast when voting status changes or data refreshes
-  useEffect(() => {
-    if (!loading && lastUpdated) {
-      // Optional: Show a silent refresh notification (can be commented out)
-      // toast.success('Election data refreshed', { duration: 2000 });
-    }
-  }, [lastUpdated, loading]);
 
   const stats = [
     { value: loading ? '...' : `${totalStats.totalVoters.toLocaleString()}+`, label: 'Registered Voters', icon: FaUsers,    color: 'teal' },
@@ -84,7 +162,6 @@ export default function Home() {
         ? 'bg-teal-50' 
         : 'bg-gray-900'
     }`}>
-      {/* Sonner Toaster - replaces ToastContainer */}
       <Toaster 
         position="top-right"
         richColors
@@ -96,6 +173,145 @@ export default function Home() {
         theme={theme === 'light' ? 'light' : 'dark'}
       />
 
+      {/* Voter List Modal */}
+      {showVoterList && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className={`rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden shadow-2xl ${
+            theme === 'light' ? 'bg-white' : 'bg-gray-800'
+          }`}>
+            {/* Modal Header */}
+            <div className={`flex justify-between items-center p-6 border-b ${
+              theme === 'light' ? 'border-gray-200' : 'border-gray-700'
+            }`}>
+              <div>
+                <h2 className={`text-2xl font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+                  Registered Voters
+                </h2>
+                <p className={`text-sm mt-1 ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>
+                  Total: {voterStats.total} voters • {voterStats.turnout}% turnout
+                </p>
+              </div>
+              <button
+                onClick={() => setShowVoterList(false)}
+                className={`p-2 rounded-lg transition ${
+                  theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'
+                }`}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-3 gap-4 p-6 bg-gradient-to-r from-teal-50 to-amber-50 dark:from-gray-900 dark:to-gray-800">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-teal-600">{voterStats.total}</p>
+                <p className="text-xs text-gray-500">Total Voters</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-green-600">{voterStats.voted}</p>
+                <p className="text-xs text-gray-500">Voted</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-orange-600">{voterStats.notVoted}</p>
+                <p className="text-xs text-gray-500">Not Voted</p>
+              </div>
+            </div>
+
+            {/* Search and Export Bar */}
+            <div className="p-6 border-b flex flex-wrap gap-4 justify-between items-center">
+              <div className="relative flex-1 min-w-[200px]">
+                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                <input
+                  type="text"
+                  placeholder="Search by name, email or school ID..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className={`w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    theme === 'light' 
+                      ? 'bg-white border-gray-300' 
+                      : 'bg-gray-700 border-gray-600 text-white'
+                  }`}
+                />
+              </div>
+              <button
+                onClick={exportToExcel}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm"
+              >
+                <FaDownload /> Export to Excel
+              </button>
+            </div>
+
+            {/* Voters Table */}
+            <div className="overflow-y-auto max-h-[50vh]">
+              {voterLoading ? (
+                <div className="flex justify-center py-12">
+                  <FaSync className="animate-spin text-3xl text-teal-500" />
+                </div>
+              ) : filteredVoters.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  No voters found
+                </div>
+              ) : (
+                <table className="w-full">
+                  <thead className={`sticky top-0 ${theme === 'light' ? 'bg-gray-50' : 'bg-gray-700'}`}>
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Email</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">School ID</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className={`divide-y ${theme === 'light' ? 'divide-gray-200' : 'divide-gray-700'}`}>
+                    {filteredVoters.map((voter) => (
+                      <tr key={voter.id} className={`transition ${
+                        theme === 'light' ? 'hover:bg-gray-50' : 'hover:bg-gray-700'
+                      }`}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <FaUserGraduate className="text-teal-500" />
+                            <span className="text-sm font-medium">{voter.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <FaEnvelope className="text-gray-400 text-xs" />
+                            <span className="text-sm">{voter.email}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <FaIdCard className="text-gray-400 text-xs" />
+                            <span className="text-sm">{voter.school_id}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {voter.has_voted ? (
+                            <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                              <FaCheckCircle size={10} /> Voted
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-full">
+                              <FaTimesCircle size={10} /> Not Voted
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className={`p-4 border-t text-center text-xs ${
+              theme === 'light' ? 'border-gray-200 text-gray-500' : 'border-gray-700 text-gray-400'
+            }`}>
+              Showing {filteredVoters.length} of {voterStats.total} registered voters
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Page top accent bar */}
       <div className={`fixed top-0 left-0 right-0 h-0.5 z-50 ${
         theme === 'light'
@@ -103,7 +319,7 @@ export default function Home() {
           : 'bg-gradient-to-r from-teal-400 via-teal-500 to-amber-500'
       }`} />
 
-      {/* Ambient background blobs - Hidden on mobile */}
+      {/* Ambient background blobs */}
       <div className={`fixed -top-32 -right-20 w-96 h-96 rounded-full blur-3xl pointer-events-none z-0 hidden sm:block ${
         theme === 'light' ? 'bg-teal-400/10' : 'bg-teal-500/5'
       }`} />
@@ -111,7 +327,7 @@ export default function Home() {
         theme === 'light' ? 'bg-amber-400/8' : 'bg-amber-500/5'
       }`} />
 
-      {/* Theme toggle button for mobile menu */}
+      {/* Theme toggle button */}
       <button
         onClick={toggleTheme}
         className="fixed bottom-6 right-6 z-50 p-3 rounded-full shadow-lg transition-all duration-300 hover:scale-110 md:hidden"
@@ -179,7 +395,6 @@ export default function Home() {
                         : 'bg-gray-800 border-gray-700'
                     }`}
                   >
-                    {/* Corner accent */}
                     <div className={`absolute top-0 right-0 w-16 sm:w-20 h-16 sm:h-20 rounded-bl-full opacity-5 ${
                       isTeal 
                         ? (theme === 'light' ? 'bg-teal-600' : 'bg-teal-400')
@@ -194,7 +409,6 @@ export default function Home() {
                       }`}>
                         <Icon size={14} className="sm:text-base" />
                       </div>
-                      {/* Pulse dot - hidden on very small screens */}
                       <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-teal-400 animate-pulse" />
                     </div>
 
@@ -211,6 +425,33 @@ export default function Home() {
               })}
             </div>
           </section>
+
+          {/* ── VIEW VOTERS BUTTON ── */}
+          <div data-aos="fade-up" className="mb-8">
+            <button
+              onClick={handleOpenVoterList}
+              className={`flex items-center gap-3 px-6 py-4 rounded-xl w-full justify-between transition-all duration-300 group ${
+                theme === 'light'
+                  ? 'bg-gradient-to-r from-teal-50 to-amber-50 border border-teal-200 hover:shadow-md'
+                  : 'bg-gradient-to-r from-gray-800 to-gray-700 border border-gray-600 hover:shadow-lg'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-teal-100 dark:bg-teal-900 flex items-center justify-center">
+                  <FaUsers className="text-teal-600 dark:text-teal-400" />
+                </div>
+                <div className="text-left">
+                  <h3 className={`font-semibold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+                    View Registered Voters
+                  </h3>
+                  <p className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>
+                    See complete list of all registered voters with their voting status
+                  </p>
+                </div>
+              </div>
+              <FaEye className="text-teal-500 group-hover:translate-x-1 transition-transform" />
+            </button>
+          </div>
 
           {/* ── REFRESH / LAST UPDATED ── */}
           <div
@@ -318,7 +559,6 @@ export default function Home() {
                         : 'bg-gray-800 border-gray-700 hover:border-teal-600/50'
                     }`}
                   >
-                    {/* Top bar on hover */}
                     <div className="h-0.5 sm:h-1 bg-gradient-to-r from-teal-600 via-amber-400 to-teal-800 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-500" />
                     <ElectionCard
                       election={election}
@@ -396,7 +636,6 @@ export default function Home() {
                         : 'bg-gray-800 border-gray-700'
                     }`}
                   >
-                    {/* Bottom bar on hover */}
                     <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-teal-600 to-amber-400 scale-x-0 group-hover:scale-x-100 transition-transform duration-400 origin-left" />
 
                     <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center mx-auto mb-2 sm:mb-3 group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300 ${
@@ -428,7 +667,6 @@ export default function Home() {
         <Footer theme={theme} />
       </div>
 
-      {/* Global styles for theme */}
       <style jsx global>{`
         :root {
           --bg-primary: #f0fdfa;
