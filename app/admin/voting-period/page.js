@@ -1,3 +1,5 @@
+// app/admin/voting-period/page.js
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -7,7 +9,8 @@ import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { Toaster, toast } from 'sonner';
 import { 
   FaSpinner, FaCalendarAlt, FaClock, FaSave, FaEdit, FaPlus,
-  FaTrash, FaCheckCircle, FaTimesCircle, FaPlay, FaStop, FaX
+  FaTrash, FaCheckCircle, FaTimesCircle, FaPlay, FaStop,
+  FaSun, FaMoon, FaChartLine, FaUsers, FaCalendarCheck
 } from 'react-icons/fa';
 
 export default function VotingPeriodManager() {
@@ -17,6 +20,7 @@ export default function VotingPeriodManager() {
   const [activePeriod, setActivePeriod] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingPeriod, setEditingPeriod] = useState(null);
+  const [theme, setTheme] = useState('light');
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -28,6 +32,24 @@ export default function VotingPeriodManager() {
   });
   const [submitting, setSubmitting] = useState(false);
   const router = useRouter();
+
+  // Theme management
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('votingPeriodTheme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+    setTheme(initialTheme);
+    document.documentElement.setAttribute('data-theme', initialTheme);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('votingPeriodTheme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -190,17 +212,27 @@ export default function VotingPeriodManager() {
 
   const handleDeletePeriod = async (periodId) => {
     toast.custom((t) => (
-      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl p-5 max-w-sm w-full border border-slate-200 dark:border-slate-700">
-        <div className="mb-5">
-          <h3 className="font-semibold text-slate-900 dark:text-white text-lg">Delete Voting Period?</h3>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">
-            This action cannot be undone. Please confirm you want to delete this voting period.
+      <div className={`rounded-lg shadow-lg p-4 max-w-sm w-full ${
+        theme === 'light' ? 'bg-white' : 'bg-gray-800'
+      }`}>
+        <div className="mb-4">
+          <h3 className={`font-semibold ${
+            theme === 'light' ? 'text-gray-900' : 'text-white'
+          }`}>Confirm Delete</h3>
+          <p className={`text-sm mt-1 ${
+            theme === 'light' ? 'text-gray-500' : 'text-gray-400'
+          }`}>
+            Are you sure you want to delete this voting period? This action cannot be undone.
           </p>
         </div>
-        <div className="flex gap-3 justify-end">
+        <div className="flex gap-2 justify-end">
           <button
             onClick={() => toast.dismiss(t)}
-            className="px-4 py-2 text-sm font-medium bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+            className={`px-3 py-1.5 text-sm rounded-lg transition ${
+              theme === 'light'
+                ? 'bg-gray-200 hover:bg-gray-300'
+                : 'bg-gray-700 hover:bg-gray-600'
+            }`}
           >
             Cancel
           </button>
@@ -234,7 +266,7 @@ export default function VotingPeriodManager() {
                 toast.error(`Failed to delete: ${error.message}`);
               }
             }}
-            className="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
           >
             Delete
           </button>
@@ -287,11 +319,11 @@ export default function VotingPeriodManager() {
     const end = new Date(period.end_date);
     
     if (period.is_active) {
-      if (now < start) return { label: 'Upcoming', color: 'slate', icon: FaClock };
-      if (now >= start && now <= end) return { label: 'Active', color: 'emerald', icon: FaPlay };
-      if (now > end) return { label: 'Ended', color: 'slate', icon: FaStop };
+      if (now < start) return { label: 'Upcoming', color: 'bg-blue-500/20 text-blue-400', icon: FaClock };
+      if (now >= start && now <= end) return { label: 'Active', color: 'bg-teal-500/20 text-teal-400', icon: FaPlay };
+      if (now > end) return { label: 'Ended', color: 'bg-gray-500/20 text-gray-400', icon: FaStop };
     }
-    return { label: 'Inactive', color: 'slate', icon: FaTimesCircle };
+    return { label: 'Inactive', color: 'bg-red-500/20 text-red-400', icon: FaTimesCircle };
   };
 
   const getTimeRemaining = (period) => {
@@ -310,15 +342,23 @@ export default function VotingPeriodManager() {
     return `${minutes}m remaining`;
   };
 
+  // Calculate stats
+  const stats = {
+    total: votingPeriods.length,
+    active: votingPeriods.filter(p => p.is_active === true).length,
+    upcoming: votingPeriods.filter(p => !p.is_active && new Date(p.start_date) > new Date()).length,
+    completed: votingPeriods.filter(p => !p.is_active && new Date(p.end_date) < new Date()).length
+  };
+
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-white dark:bg-slate-950 flex items-center justify-center">
+      <div className={`min-h-screen flex items-center justify-center ${
+        theme === 'light' ? 'bg-gray-50' : 'bg-gradient-to-br from-gray-900 to-gray-800'
+      }`}>
         <Toaster position="top-center" richColors />
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-            <FaSpinner className="animate-spin text-3xl text-emerald-600 dark:text-emerald-400" />
-          </div>
-          <p className="text-slate-700 dark:text-slate-300 font-medium">Loading voting periods...</p>
+          <FaSpinner className="animate-spin text-4xl text-teal-500 mx-auto mb-4" />
+          <p className={theme === 'light' ? 'text-gray-600' : 'text-white'}>Loading voting periods...</p>
         </div>
       </div>
     );
@@ -327,17 +367,41 @@ export default function VotingPeriodManager() {
   if (!isAuthenticated) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors">
+    <div className={`min-h-screen transition-colors duration-300 ${
+      theme === 'light' ? 'bg-gray-50' : 'bg-gradient-to-br from-gray-900 to-gray-800'
+    }`}>
       <Toaster position="top-center" richColors closeButton />
       
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 md:py-10">
+      {/* Theme Toggle Button */}
+      <button
+        onClick={toggleTheme}
+        className="fixed bottom-6 right-6 z-50 p-3 rounded-full shadow-lg transition-all duration-300 hover:scale-110"
+        style={{
+          backgroundColor: theme === 'light' ? '#0f766e' : '#fbbf24',
+          color: theme === 'light' ? '#ffffff' : '#1f2937',
+        }}
+      >
+        {theme === 'light' ? <FaMoon size={20} /> : <FaSun size={20} />}
+      </button>
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-24">
         
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-6 mb-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div>
-            <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white">Voting Periods</h1>
-            <p className="text-slate-600 dark:text-slate-400 mt-2 text-sm sm:text-base">Manage and configure election voting periods</p>
-            <p className="text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm mt-2 font-medium">Admin: {admin?.email}</p>
+            <h1 className={`text-3xl font-bold ${
+              theme === 'light' ? 'text-gray-900' : 'text-white'
+            }`}>
+              Voting Period Manager
+            </h1>
+            <p className={`mt-2 ${
+              theme === 'light' ? 'text-gray-600' : 'text-gray-300'
+            }`}>
+              Configure and manage election voting periods
+            </p>
+            <p className="text-teal-600 dark:text-teal-400 text-sm mt-1">
+              Logged in as: {admin?.email}
+            </p>
           </div>
           
           <button
@@ -345,31 +409,113 @@ export default function VotingPeriodManager() {
               resetForm();
               setShowForm(true);
             }}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors shadow-lg hover:shadow-xl"
+            className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition"
           >
-            <FaPlus className="text-sm" />
-            <span>Create Period</span>
+            <FaPlus /> Create New Period
           </button>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className={`rounded-xl p-4 border ${
+            theme === 'light'
+              ? 'bg-white border-gray-200 shadow-sm'
+              : 'bg-white/10 backdrop-blur-lg border-white/20'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-xs ${
+                  theme === 'light' ? 'text-gray-500' : 'text-white/70'
+                }`}>Total Periods</p>
+                <p className={`text-2xl font-bold mt-1 ${
+                  theme === 'light' ? 'text-gray-900' : 'text-white'
+                }`}>{stats.total}</p>
+              </div>
+              <FaCalendarCheck className="text-2xl text-teal-500" />
+            </div>
+          </div>
+          
+          <div className={`rounded-xl p-4 border ${
+            theme === 'light'
+              ? 'bg-white border-gray-200 shadow-sm'
+              : 'bg-white/10 backdrop-blur-lg border-white/20'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-xs ${
+                  theme === 'light' ? 'text-gray-500' : 'text-white/70'
+                }`}>Active</p>
+                <p className="text-2xl font-bold mt-1 text-teal-600 dark:text-teal-400">{stats.active}</p>
+              </div>
+              <FaPlay className="text-2xl text-teal-500" />
+            </div>
+          </div>
+          
+          <div className={`rounded-xl p-4 border ${
+            theme === 'light'
+              ? 'bg-white border-gray-200 shadow-sm'
+              : 'bg-white/10 backdrop-blur-lg border-white/20'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-xs ${
+                  theme === 'light' ? 'text-gray-500' : 'text-white/70'
+                }`}>Upcoming</p>
+                <p className="text-2xl font-bold mt-1 text-blue-600 dark:text-blue-400">{stats.upcoming}</p>
+              </div>
+              <FaClock className="text-2xl text-teal-500" />
+            </div>
+          </div>
+          
+          <div className={`rounded-xl p-4 border ${
+            theme === 'light'
+              ? 'bg-white border-gray-200 shadow-sm'
+              : 'bg-white/10 backdrop-blur-lg border-white/20'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-xs ${
+                  theme === 'light' ? 'text-gray-500' : 'text-white/70'
+                }`}>Completed</p>
+                <p className="text-2xl font-bold mt-1 text-gray-600 dark:text-gray-400">{stats.completed}</p>
+              </div>
+              <FaCheckCircle className="text-2xl text-teal-500" />
+            </div>
+          </div>
         </div>
 
         {/* Active Period Card */}
         {activePeriod && (
-          <div className="mb-8 rounded-xl border border-emerald-200 dark:border-emerald-900/30 bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/20 dark:to-emerald-900/10 p-5 sm:p-6 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-center gap-3 sm:gap-4">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 bg-emerald-200 dark:bg-emerald-900/50 rounded-full flex items-center justify-center flex-shrink-0">
-                  <FaPlay className="text-emerald-600 dark:text-emerald-400 text-lg" />
+          <div className={`rounded-xl p-6 border mb-8 ${
+            theme === 'light'
+              ? 'bg-gradient-to-r from-teal-50 to-emerald-50 border-teal-200'
+              : 'bg-gradient-to-r from-teal-600/20 to-emerald-600/20 border-teal-500/30'
+          }`}>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                  theme === 'light' ? 'bg-teal-100' : 'bg-teal-500/20'
+                }`}>
+                  <FaPlay className={`text-xl ${
+                    theme === 'light' ? 'text-teal-600' : 'text-teal-400'
+                  }`} />
                 </div>
-                <div className="min-w-0">
-                  <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">Active Voting Period</h2>
-                  <p className="text-emerald-700 dark:text-emerald-300 text-sm font-medium truncate">{activePeriod.title}</p>
+                <div>
+                  <h2 className={`text-xl font-bold ${
+                    theme === 'light' ? 'text-gray-900' : 'text-white'
+                  }`}>
+                    Active Voting Period
+                  </h2>
+                  <p className="text-teal-600 dark:text-teal-400 text-sm">{activePeriod.title}</p>
                 </div>
               </div>
-              <div className="text-sm sm:text-right">
-                <p className="text-slate-700 dark:text-slate-300 text-xs sm:text-sm line-clamp-2">
+              <div className="text-left sm:text-right">
+                <p className={`text-sm ${
+                  theme === 'light' ? 'text-gray-600' : 'text-gray-300'
+                }`}>
                   {formatDateTime(activePeriod.start_date)} - {formatDateTime(activePeriod.end_date)}
                 </p>
-                <p className="text-amber-600 dark:text-amber-400 font-semibold mt-1">
+                <p className="text-yellow-600 dark:text-yellow-400 text-sm font-medium mt-1">
                   {getTimeRemaining(activePeriod)}
                 </p>
               </div>
@@ -378,26 +524,35 @@ export default function VotingPeriodManager() {
         )}
 
         {/* Voting Periods List */}
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-          <div className="px-5 sm:px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">All Voting Periods</h2>
+        <div className={`rounded-xl border overflow-hidden ${
+          theme === 'light'
+            ? 'bg-white border-gray-200 shadow-sm'
+            : 'bg-white/10 backdrop-blur-lg border-white/20'
+        }`}>
+          <div className={`px-4 sm:px-6 py-4 border-b ${
+            theme === 'light' ? 'border-gray-200' : 'border-white/10'
+          }`}>
+            <h2 className={`text-lg font-semibold ${
+              theme === 'light' ? 'text-gray-900' : 'text-white'
+            }`}>
+              Voting Periods
+            </h2>
           </div>
           
-          <div className="divide-y divide-slate-200 dark:divide-slate-800">
+          <div className="divide-y divide-gray-200 dark:divide-white/10">
             {votingPeriods.length === 0 ? (
-              <div className="text-center py-12 px-4 sm:px-6">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                  <FaCalendarAlt className="text-3xl text-slate-400 dark:text-slate-600" />
-                </div>
-                <p className="text-slate-600 dark:text-slate-400 font-medium">No voting periods created yet</p>
+              <div className="text-center py-12">
+                <FaCalendarAlt className={`text-4xl mx-auto mb-4 ${
+                  theme === 'light' ? 'text-gray-400' : 'text-gray-500'
+                }`} />
+                <p className={theme === 'light' ? 'text-gray-500' : 'text-gray-400'}>
+                  No voting periods created yet
+                </p>
                 <button
-                  onClick={() => {
-                    resetForm();
-                    setShowForm(true);
-                  }}
-                  className="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors"
+                  onClick={() => setShowForm(true)}
+                  className="mt-4 px-4 py-2 bg-teal-600 rounded-lg text-white hover:bg-teal-500 transition"
                 >
-                  Create First Period
+                  Create First Voting Period
                 </button>
               </div>
             ) : (
@@ -405,101 +560,100 @@ export default function VotingPeriodManager() {
                 const status = getPeriodStatus(period);
                 const StatusIcon = status.icon;
                 
-                const statusColorMap = {
-                  emerald: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900/50',
-                  slate: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700',
-                  orange: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-900/50'
-                };
-                
                 return (
-                  <div key={period.id} className="p-4 sm:p-6 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                      {/* Left Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-3">
-                          <h3 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white break-words">{period.title}</h3>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 border ${statusColorMap[status.color]}`}>
-                              <StatusIcon className="text-xs" />
-                              {status.label}
+                  <div key={period.id} className="p-4 sm:p-6 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center gap-3 mb-2">
+                          <h3 className={`text-lg font-semibold ${
+                            theme === 'light' ? 'text-gray-900' : 'text-white'
+                          }`}>
+                            {period.title}
+                          </h3>
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${status.color}`}>
+                            <StatusIcon className="text-xs" />
+                            {status.label}
+                          </span>
+                          {period.is_active && (
+                            <span className="px-2 py-1 bg-teal-500/20 text-teal-600 dark:text-teal-400 text-xs rounded-full animate-pulse">
+                              LIVE
                             </span>
-                            {period.is_active && (
-                              <span className="px-2.5 py-1 bg-emerald-200 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-xs rounded-full font-medium animate-pulse">
-                                LIVE
-                              </span>
-                            )}
-                          </div>
+                          )}
                         </div>
                         
                         {period.description && (
-                          <p className="text-slate-600 dark:text-slate-400 text-sm mb-3">{period.description}</p>
+                          <p className={`text-sm mb-2 ${
+                            theme === 'light' ? 'text-gray-600' : 'text-gray-400'
+                          }`}>
+                            {period.description}
+                          </p>
                         )}
                         
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs sm:text-sm">
-                          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                            <FaCalendarAlt className="text-slate-400 dark:text-slate-600 flex-shrink-0" />
-                            <span className="truncate">Start: {formatDateTime(period.start_date)}</span>
+                        <div className="flex flex-wrap gap-4 text-sm">
+                          <div className={`flex items-center gap-2 ${
+                            theme === 'light' ? 'text-gray-600' : 'text-gray-300'
+                          }`}>
+                            <FaCalendarAlt className="text-teal-500 text-xs" />
+                            <span>Start: {formatDateTime(period.start_date)}</span>
                           </div>
-                          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                            <FaClock className="text-slate-400 dark:text-slate-600 flex-shrink-0" />
-                            <span className="truncate">End: {formatDateTime(period.end_date)}</span>
+                          <div className={`flex items-center gap-2 ${
+                            theme === 'light' ? 'text-gray-600' : 'text-gray-300'
+                          }`}>
+                            <FaClock className="text-teal-500 text-xs" />
+                            <span>End: {formatDateTime(period.end_date)}</span>
                           </div>
                           {period.year && (
-                            <div className="text-slate-600 dark:text-slate-400">
-                              Year: <span className="font-medium text-slate-900 dark:text-white">{period.year}</span>
+                            <div className={theme === 'light' ? 'text-gray-500' : 'text-gray-400'}>
+                              Year: {period.year}
                             </div>
                           )}
                           {period.total_eligible_voters > 0 && (
-                            <div className="text-slate-600 dark:text-slate-400">
-                              Voters: <span className="font-medium text-slate-900 dark:text-white">{period.total_eligible_voters}</span>
+                            <div className={`flex items-center gap-1 ${
+                              theme === 'light' ? 'text-gray-500' : 'text-gray-400'
+                            }`}>
+                              <FaUsers className="text-teal-500 text-xs" />
+                              Voters: {period.total_eligible_voters}
                             </div>
                           )}
                         </div>
                       </div>
                       
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-1.5 sm:gap-2 pt-4 lg:pt-0 flex-wrap lg:flex-nowrap lg:flex-col">
-                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap lg:flex-nowrap lg:w-full">
-                          {!period.is_active && new Date(period.start_date) <= new Date() && (
-                            <button
-                              onClick={() => handleActivatePeriod(period)}
-                              className="flex-1 sm:flex-none px-3 py-2 bg-emerald-100 dark:bg-emerald-900/30 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 rounded-lg transition-colors font-medium text-xs sm:text-sm flex items-center justify-center gap-1"
-                              title="Activate this voting period"
-                            >
-                              <FaPlay className="text-xs" />
-                              <span className="hidden sm:inline">Activate</span>
-                            </button>
-                          )}
-                          
-                          {period.is_active && (
-                            <button
-                              onClick={() => handleDeactivatePeriod(period)}
-                              className="flex-1 sm:flex-none px-3 py-2 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 rounded-lg transition-colors font-medium text-xs sm:text-sm flex items-center justify-center gap-1"
-                              title="Deactivate this voting period"
-                            >
-                              <FaStop className="text-xs" />
-                              <span className="hidden sm:inline">Stop</span>
-                            </button>
-                          )}
-                          
+                      <div className="flex items-center gap-2">
+                        {!period.is_active && new Date(period.start_date) <= new Date() && (
                           <button
-                            onClick={() => editPeriod(period)}
-                            className="flex-1 sm:flex-none px-3 py-2 bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-lg transition-colors font-medium text-xs sm:text-sm flex items-center justify-center gap-1"
-                            title="Edit period"
+                            onClick={() => handleActivatePeriod(period)}
+                            className="p-2 bg-teal-600/20 hover:bg-teal-600/30 rounded-lg text-teal-600 dark:text-teal-400 transition"
+                            title="Activate this voting period"
                           >
-                            <FaEdit className="text-xs" />
-                            <span className="hidden sm:inline">Edit</span>
+                            <FaPlay />
                           </button>
-                          
+                        )}
+                        
+                        {period.is_active && (
                           <button
-                            onClick={() => handleDeletePeriod(period.id)}
-                            className="flex-1 sm:flex-none px-3 py-2 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 rounded-lg transition-colors font-medium text-xs sm:text-sm flex items-center justify-center gap-1"
-                            title="Delete period"
+                            onClick={() => handleDeactivatePeriod(period)}
+                            className="p-2 bg-red-600/20 hover:bg-red-600/30 rounded-lg text-red-500 transition"
+                            title="Deactivate this voting period"
                           >
-                            <FaTrash className="text-xs" />
-                            <span className="hidden sm:inline">Delete</span>
+                            <FaStop />
                           </button>
-                        </div>
+                        )}
+                        
+                        <button
+                          onClick={() => editPeriod(period)}
+                          className="p-2 bg-teal-600/20 hover:bg-teal-600/30 rounded-lg text-teal-600 dark:text-teal-400 transition"
+                          title="Edit period"
+                        >
+                          <FaEdit />
+                        </button>
+                        
+                        <button
+                          onClick={() => handleDeletePeriod(period.id)}
+                          className="p-2 bg-red-600/20 hover:bg-red-600/30 rounded-lg text-red-500 transition"
+                          title="Delete period"
+                        >
+                          <FaTrash />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -511,10 +665,16 @@ export default function VotingPeriodManager() {
 
         {/* Create/Edit Modal */}
         {showForm && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 sm:p-6">
-            <div className="bg-white dark:bg-slate-900 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-              <div className="flex justify-between items-center p-5 sm:p-6 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
-                <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto ${
+              theme === 'light' ? 'bg-white' : 'bg-gray-800'
+            }`}>
+              <div className={`sticky top-0 flex justify-between items-center p-4 sm:p-6 border-b ${
+                theme === 'light' ? 'border-gray-200' : 'border-white/10'
+              } ${theme === 'light' ? 'bg-white' : 'bg-gray-800'}`}>
+                <h2 className={`text-xl sm:text-2xl font-bold ${
+                  theme === 'light' ? 'text-gray-900' : 'text-white'
+                }`}>
                   {editingPeriod ? 'Edit Voting Period' : 'Create New Voting Period'}
                 </h2>
                 <button
@@ -522,136 +682,179 @@ export default function VotingPeriodManager() {
                     setShowForm(false);
                     resetForm();
                   }}
-                  className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                  className={`transition ${
+                    theme === 'light' ? 'text-gray-400 hover:text-gray-600' : 'text-gray-400 hover:text-white'
+                  }`}
                 >
-                  <FaX className="text-lg" />
+                  <FaTimesCircle />
                 </button>
               </div>
               
-              <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-5">
-                {/* Title */}
+              <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-5">
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-2 text-sm">Title *</label>
+                  <label className={`block mb-2 text-sm font-medium ${
+                    theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                  }`}>
+                    Title *
+                  </label>
                   <input
                     type="text"
                     value={formData.title}
                     onChange={(e) => setFormData({...formData, title: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/10 dark:focus:ring-emerald-400/10 transition-colors"
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900'
+                        : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
                     placeholder="e.g., 2024 Student Elections"
                     required
                   />
                 </div>
                 
-                {/* Description */}
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-2 text-sm">Description</label>
+                  <label className={`block mb-2 text-sm font-medium ${
+                    theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                  }`}>
+                    Description
+                  </label>
                   <textarea
                     value={formData.description}
                     onChange={(e) => setFormData({...formData, description: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/10 dark:focus:ring-emerald-400/10 transition-colors resize-none"
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900'
+                        : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
                     rows="3"
                     placeholder="Brief description of this voting period..."
                   />
                 </div>
                 
-                {/* Start Date */}
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-2 text-sm">Start Date & Time *</label>
+                  <label className={`block mb-2 text-sm font-medium ${
+                    theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                  }`}>
+                    Start Date & Time *
+                  </label>
                   <input
                     type="datetime-local"
                     value={formData.start_date}
                     onChange={(e) => setFormData({...formData, start_date: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/10 dark:focus:ring-emerald-400/10 transition-colors"
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900'
+                        : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
                     required
                   />
                 </div>
                 
-                {/* End Date */}
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-2 text-sm">End Date & Time *</label>
+                  <label className={`block mb-2 text-sm font-medium ${
+                    theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                  }`}>
+                    End Date & Time *
+                  </label>
                   <input
                     type="datetime-local"
                     value={formData.end_date}
                     onChange={(e) => setFormData({...formData, end_date: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/10 dark:focus:ring-emerald-400/10 transition-colors"
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900'
+                        : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
                     required
                   />
                 </div>
                 
-                {/* Year & Voters Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-slate-700 dark:text-slate-300 font-medium mb-2 text-sm">Year</label>
+                    <label className={`block mb-2 text-sm font-medium ${
+                      theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                    }`}>
+                      Year
+                    </label>
                     <input
                       type="number"
                       value={formData.year}
                       onChange={(e) => setFormData({...formData, year: parseInt(e.target.value)})}
-                      className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/10 dark:focus:ring-emerald-400/10 transition-colors"
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                        theme === 'light'
+                          ? 'bg-white border-gray-300 text-gray-900'
+                          : 'bg-gray-700 border-gray-600 text-white'
+                      }`}
                       placeholder="2024"
                     />
                   </div>
                   
                   <div>
-                    <label className="block text-slate-700 dark:text-slate-300 font-medium mb-2 text-sm">Total Eligible Voters</label>
+                    <label className={`block mb-2 text-sm font-medium ${
+                      theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                    }`}>
+                      Total Eligible Voters
+                    </label>
                     <input
                       type="number"
                       value={formData.total_eligible_voters}
                       onChange={(e) => setFormData({...formData, total_eligible_voters: parseInt(e.target.value) || 0})}
-                      className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/10 dark:focus:ring-emerald-400/10 transition-colors"
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                        theme === 'light'
+                          ? 'bg-white border-gray-300 text-gray-900'
+                          : 'bg-gray-700 border-gray-600 text-white'
+                      }`}
                       placeholder="0"
                     />
                   </div>
                 </div>
                 
-                {/* Active Checkbox */}
-                <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center gap-3">
                   <input
                     type="checkbox"
                     id="is_active"
                     checked={formData.is_active}
                     onChange={(e) => setFormData({...formData, is_active: e.target.checked})}
-                    className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    className="w-4 h-4 text-teal-600 rounded"
                   />
-                  <label htmlFor="is_active" className="text-slate-700 dark:text-slate-300 font-medium text-sm cursor-pointer">
+                  <label htmlFor="is_active" className={`text-sm ${
+                    theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                  }`}>
                     Activate this voting period immediately
                   </label>
                 </div>
                 
                 {formData.is_active && (
-                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/30 rounded-lg p-4">
-                    <p className="text-amber-800 dark:text-amber-200 text-sm font-medium">
+                  <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-3">
+                    <p className="text-yellow-600 dark:text-yellow-400 text-sm">
                       ⚠️ Activating this period will automatically deactivate any currently active voting period.
                     </p>
                   </div>
                 )}
                 
-                {/* Form Actions */}
-                <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                <div className="flex gap-3 pt-4">
                   <button
                     type="button"
                     onClick={() => {
                       setShowForm(false);
                       resetForm();
                     }}
-                    className="flex-1 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white font-medium rounded-lg transition-colors"
+                    className={`flex-1 px-4 py-2 rounded-lg transition text-sm ${
+                      theme === 'light'
+                        ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                        : 'bg-gray-700 hover:bg-gray-600 text-white'
+                    }`}
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-500 disabled:opacity-60 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                    className="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition disabled:opacity-50 text-sm"
                   >
-                    {submitting ? (
-                      <>
-                        <FaSpinner className="animate-spin text-sm" />
-                        <span>{editingPeriod ? 'Updating...' : 'Creating...'}</span>
-                      </>
-                    ) : (
-                      <>
-                        <FaSave className="text-sm" />
-                        <span>{editingPeriod ? 'Update Period' : 'Create Period'}</span>
-                      </>
+                    {submitting ? <FaSpinner className="animate-spin mx-auto" /> : (
+                      <span className="flex items-center justify-center gap-2">
+                        <FaSave /> {editingPeriod ? 'Update' : 'Create'}
+                      </span>
                     )}
                   </button>
                 </div>
