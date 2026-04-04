@@ -48,7 +48,7 @@ export default function Home() {
     lastUpdated
   } = useElectionData();
 
-  // Fetch voters when modal opens
+  // Fetch voters when modal opens - show all voters
   const fetchVoters = async () => {
     setVoterLoading(true);
     try {
@@ -105,9 +105,8 @@ export default function Home() {
       'Email': voter.email,
       'School ID': voter.school_id,
       'Department': voter.department || 'N/A',
-      'Level': voter.level || 'N/A',
-      'Has Voted': voter.has_voted ? 'Yes' : 'No',
-      'Voted At': voter.voted_at ? new Date(voter.voted_at).toLocaleString() : 'Not yet'
+      'Level': voter.level || 'N/A'
+      // Removed 'Has Voted' and 'Voted At' fields
     }));
     
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -188,7 +187,7 @@ export default function Home() {
                   Registered Voters
                 </h2>
                 <p className={`text-sm mt-1 ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>
-                  Total: {voterStats.total} voters • {voterStats.turnout}% turnout
+                  Total: {voterStats.total} voters
                 </p>
               </div>
               <button
@@ -199,22 +198,6 @@ export default function Home() {
               >
                 ✕
               </button>
-            </div>
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-3 gap-4 p-6 bg-gradient-to-r from-teal-50 to-amber-50 dark:from-gray-900 dark:to-gray-800">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-teal-600">{voterStats.total}</p>
-                <p className="text-xs text-gray-500">Total Voters</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-green-600">{voterStats.voted}</p>
-                <p className="text-xs text-gray-500">Voted</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-orange-600">{voterStats.notVoted}</p>
-                <p className="text-xs text-gray-500">Not Voted</p>
-              </div>
             </div>
 
             {/* Search and Export Bar */}
@@ -241,8 +224,8 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Voters Table */}
-            <div className="overflow-y-auto max-h-[50vh]">
+            {/* Voters Table - Status column removed */}
+            <div className="overflow-y-auto max-h-[60vh]">
               {voterLoading ? (
                 <div className="flex justify-center py-12">
                   <FaSync className="animate-spin text-3xl text-teal-500" />
@@ -258,7 +241,6 @@ export default function Home() {
                       <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Name</th>
                       <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Email</th>
                       <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">School ID</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
                     </tr>
                   </thead>
                   <tbody className={`divide-y ${theme === 'light' ? 'divide-gray-200' : 'divide-gray-700'}`}>
@@ -283,17 +265,6 @@ export default function Home() {
                             <FaIdCard className="text-gray-400 text-xs" />
                             <span className="text-sm">{voter.school_id}</span>
                           </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {voter.has_voted ? (
-                            <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
-                              <FaCheckCircle size={10} /> Voted
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-full">
-                              <FaTimesCircle size={10} /> Not Voted
-                            </span>
-                          )}
                         </td>
                       </tr>
                     ))}
@@ -445,7 +416,7 @@ export default function Home() {
                     View Registered Voters
                   </h3>
                   <p className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>
-                    See complete list of all registered voters with their voting status
+                    See complete list of all registered voters
                   </p>
                 </div>
               </div>
