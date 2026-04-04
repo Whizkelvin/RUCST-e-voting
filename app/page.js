@@ -106,7 +106,6 @@ export default function Home() {
       'School ID': voter.school_id,
       'Department': voter.department || 'N/A',
       'Level': voter.level || 'N/A'
-      // Removed 'Has Voted' and 'Voted At' fields
     }));
     
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -149,10 +148,10 @@ export default function Home() {
   }, [isMobileMenuOpen]);
 
   const stats = [
-    { value: loading ? '...' : `${totalStats.totalVoters.toLocaleString()}+`, label: 'Registered Voters', icon: FaUsers,    color: 'teal' },
-    { value: loading ? '...' : `${totalStats.participationRate.toFixed(1)}%`, label: 'Live Participation', icon: FaChartBar, color: 'amber' },
-    { value: '24/7',  label: 'System Uptime', icon: FaClock, color: 'teal' },
-    { value: '100%',  label: 'Secure Votes',  icon: FaLock,  color: 'amber' },
+    { value: loading ? '...' : `${totalStats.totalVoters.toLocaleString()}+`, label: 'Registered Voters', icon: FaUsers },
+    { value: loading ? '...' : `${totalStats.participationRate.toFixed(1)}%`, label: 'Live Participation', icon: FaChartBar },
+    { value: '24/7',  label: 'System Uptime', icon: FaClock },
+    { value: '100%',  label: 'Secure Votes',  icon: FaLock },
   ];
 
   return (
@@ -203,7 +202,7 @@ export default function Home() {
             {/* Search and Export Bar */}
             <div className="p-6 border-b flex flex-wrap gap-4 justify-between items-center">
               <div className="relative flex-1 min-w-[200px]">
-                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500 text-sm" />
                 <input
                   type="text"
                   placeholder="Search by name, email or school ID..."
@@ -216,10 +215,15 @@ export default function Home() {
                   }`}
                 />
               </div>
-              
+              <button
+                onClick={exportToExcel}
+                className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition text-sm"
+              >
+                <FaDownload /> Export to Excel
+              </button>
             </div>
 
-            {/* Voters Table - Status column removed */}
+            {/* Voters Table */}
             <div className="overflow-y-auto max-h-[60vh]">
               {voterLoading ? (
                 <div className="flex justify-center py-12">
@@ -251,13 +255,13 @@ export default function Home() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            <FaEnvelope className="text-gray-400 text-xs" />
+                            <FaEnvelope className="text-teal-500 text-xs" />
                             <span className="text-sm">{voter.email}</span>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            <FaIdCard className="text-gray-400 text-xs" />
+                            <FaIdCard className="text-teal-500 text-xs" />
                             <span className="text-sm">{voter.school_id}</span>
                           </div>
                         </td>
@@ -281,8 +285,8 @@ export default function Home() {
       {/* Page top accent bar */}
       <div className={`fixed top-0 left-0 right-0 h-0.5 z-50 ${
         theme === 'light'
-          ? 'bg-gradient-to-r from-teal-900 via-teal-400 to-amber-400'
-          : 'bg-gradient-to-r from-teal-400 via-teal-500 to-amber-500'
+          ? 'bg-gradient-to-r from-teal-900 via-teal-400 to-teal-600'
+          : 'bg-gradient-to-r from-teal-400 via-teal-500 to-teal-600'
       }`} />
 
       {/* Ambient background blobs */}
@@ -290,7 +294,7 @@ export default function Home() {
         theme === 'light' ? 'bg-teal-400/10' : 'bg-teal-500/5'
       }`} />
       <div className={`fixed bottom-10 -left-24 w-80 h-80 rounded-full blur-3xl pointer-events-none z-0 hidden sm:block ${
-        theme === 'light' ? 'bg-amber-400/8' : 'bg-amber-500/5'
+        theme === 'light' ? 'bg-teal-400/8' : 'bg-teal-500/5'
       }`} />
 
       {/* Theme toggle button */}
@@ -349,7 +353,6 @@ export default function Home() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {stats.map((stat, index) => {
                 const Icon = stat.icon;
-                const isTeal = stat.color === 'teal';
                 return (
                   <div
                     key={index}
@@ -359,19 +362,14 @@ export default function Home() {
                       theme === 'light'
                         ? 'bg-white border-teal-600/10'
                         : 'bg-gray-800 border-gray-700'
-                    }`}
-                  >
+                    }`}>
                     <div className={`absolute top-0 right-0 w-16 sm:w-20 h-16 sm:h-20 rounded-bl-full opacity-5 ${
-                      isTeal 
-                        ? (theme === 'light' ? 'bg-teal-600' : 'bg-teal-400')
-                        : (theme === 'light' ? 'bg-amber-400' : 'bg-amber-500')
+                      theme === 'light' ? 'bg-teal-600' : 'bg-teal-400'
                     }`} />
 
                     <div className="flex justify-between items-start mb-3 sm:mb-4">
                       <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center ${
-                        isTeal 
-                          ? (theme === 'light' ? 'bg-teal-600/10 text-teal-600' : 'bg-teal-500/20 text-teal-400')
-                          : (theme === 'light' ? 'bg-amber-400/10 text-amber-500' : 'bg-amber-500/20 text-amber-400')
+                        theme === 'light' ? 'bg-teal-600/10 text-teal-600' : 'bg-teal-500/20 text-teal-400'
                       }`}>
                         <Icon size={14} className="sm:text-base" />
                       </div>
@@ -398,7 +396,7 @@ export default function Home() {
               onClick={handleOpenVoterList}
               className={`flex items-center gap-3 px-6 py-4 rounded-xl w-full justify-between transition-all duration-300 group ${
                 theme === 'light'
-                  ? 'bg-gradient-to-r from-teal-50 to-amber-50 border border-teal-200 hover:shadow-md'
+                  ? 'bg-gradient-to-r from-teal-50 to-teal-100 border border-teal-200 hover:shadow-md'
                   : 'bg-gradient-to-r from-gray-800 to-gray-700 border border-gray-600 hover:shadow-lg'
               }`}
             >
@@ -428,7 +426,7 @@ export default function Home() {
               <p className={`flex items-center gap-1.5 text-[10px] sm:text-xs ${
                 theme === 'light' ? 'text-slate-400' : 'text-gray-500'
               }`}>
-                <FaClock size={10} className="sm:text-xs text-teal-600" />
+                <FaClock size={10} className="sm:text-xs text-teal-500" />
                 Last updated: {lastUpdated.toLocaleTimeString()}
               </p>
             )}
@@ -480,13 +478,13 @@ export default function Home() {
           {/* ── ELECTIONS SECTION ── */}
           <section id="elections" className={`mb-8 p-4 sm:p-6 rounded-2xl sm:rounded-3xl border ${
             theme === 'light'
-              ? 'bg-green-900/20 border-teal-600/20'
+              ? 'bg-teal-50/50 border-teal-600/20'
               : 'bg-teal-900/20 border-teal-700'
           }`}>
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4 mb-5 sm:mb-9">
               <div data-aos="fade-right">
                 <p className={`text-[11px] sm:text-xs font-semibold uppercase tracking-widest mb-1 ${
-                  theme === 'light' ? 'text-green-950' : 'text-teal-400'
+                  theme === 'light' ? 'text-teal-700' : 'text-teal-400'
                 }`}>Participate Now</p>
                 <h2 className={`text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight leading-tight ${
                   theme === 'light' ? 'text-teal-950' : 'text-white'
@@ -494,7 +492,7 @@ export default function Home() {
                   Current Elections
                 </h2>
                 <p className={`mt-1 sm:mt-2 text-xs sm:text-sm ${
-                  theme === 'light' ? 'text-green-950' : 'text-gray-400'
+                  theme === 'light' ? 'text-teal-700' : 'text-gray-400'
                 }`}>
                   Cast your vote for the leaders who will shape our future
                 </p>
@@ -506,7 +504,7 @@ export default function Home() {
                     ? 'bg-white border-teal-600/12 text-teal-950'
                     : 'bg-gray-800 border-gray-700 text-white'
                 }`}>
-                  <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${isVotingActive ? 'bg-amber-400 animate-pulse' : 'bg-slate-300'}`} />
+                  <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${isVotingActive ? 'bg-teal-400 animate-pulse' : 'bg-gray-400'}`} />
                   {isVotingActive ? 'Voting Active' : 'Voting Closed'}
                 </div>
               </div>
@@ -525,7 +523,7 @@ export default function Home() {
                         : 'bg-gray-800 border-gray-700 hover:border-teal-600/50'
                     }`}
                   >
-                    <div className="h-0.5 sm:h-1 bg-gradient-to-r from-teal-600 via-amber-400 to-teal-800 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-500" />
+                    <div className="h-0.5 sm:h-1 bg-gradient-to-r from-teal-600 via-teal-400 to-teal-800 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-500" />
                     <ElectionCard
                       election={election}
                       index={index}
@@ -584,13 +582,12 @@ export default function Home() {
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {[
-                { label: 'Registered Voters',  value: loading ? '...' : `${totalStats.totalVoters.toLocaleString()}+`, icon: FaUsers,    color: 'teal' },
-                { label: 'Votes Cast',          value: loading ? '...' : totalStats.totalVotes.toLocaleString(),       icon: FaVoteYea,  color: 'amber' },
-                { label: 'Participation Rate',  value: loading ? '...' : `${totalStats.participationRate.toFixed(1)}%`, icon: FaChartBar, color: 'teal' },
-                { label: 'Security Level',      value: '100%',                                                         icon: FaLock,     color: 'amber' },
+                { label: 'Registered Voters',  value: loading ? '...' : `${totalStats.totalVoters.toLocaleString()}+`, icon: FaUsers },
+                { label: 'Votes Cast',          value: loading ? '...' : totalStats.totalVotes.toLocaleString(),       icon: FaVoteYea },
+                { label: 'Participation Rate',  value: loading ? '...' : `${totalStats.participationRate.toFixed(1)}%`, icon: FaChartBar },
+                { label: 'Security Level',      value: '100%',                                                         icon: FaLock },
               ].map((item, i) => {
                 const Icon = item.icon;
-                const isTeal = item.color === 'teal';
                 return (
                   <div
                     key={i}
@@ -600,15 +597,10 @@ export default function Home() {
                       theme === 'light'
                         ? 'bg-white border-teal-600/10'
                         : 'bg-gray-800 border-gray-700'
-                    }`}
-                  >
-                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-teal-600 to-amber-400 scale-x-0 group-hover:scale-x-100 transition-transform duration-400 origin-left" />
-
-                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center mx-auto mb-2 sm:mb-3 group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300 ${
-                      isTeal 
-                        ? 'bg-gradient-to-br from-teal-600 to-teal-800'
-                        : 'bg-gradient-to-br from-amber-400 to-orange-500'
                     }`}>
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-teal-600 to-teal-400 scale-x-0 group-hover:scale-x-100 transition-transform duration-400 origin-left" />
+
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center mx-auto mb-2 sm:mb-3 group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300 bg-gradient-to-br from-teal-600 to-teal-800">
                       <Icon size={16} className="sm:text-lg text-white" />
                     </div>
 
