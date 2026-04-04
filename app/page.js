@@ -216,12 +216,7 @@ export default function Home() {
                   }`}
                 />
               </div>
-              <button
-                onClick={exportToExcel}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm"
-              >
-                <FaDownload /> Export to Excel
-              </button>
+              
             </div>
 
             {/* Voters Table - Status column removed */}
