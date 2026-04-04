@@ -256,8 +256,7 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
           {/* Voting Progress Section */}
           <div className="mt-6">
             <div className="flex justify-between text-sm text-green-200 mb-2">
-              <span>Voter Participation (Voters who completed all 3 votes)</span>
-              <span>{loading ? '...' : `${(totalStats?.participationRate || 0).toFixed(1)}% Complete`}</span>
+              
             </div>
             <div className="w-full bg-white/20 rounded-full h-3">
               <div 
@@ -266,12 +265,12 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
               ></div>
             </div>
             <div className="flex justify-between text-xs text-green-300 mt-2">
-              <span>{loading ? '...' : `${(totalStats?.totalVotersWhoVoted || 0).toLocaleString()} voters completed all votes`}</span>
+              <span>{loading ? '...' : `${(totalStats?.totalVotersWhoVoted || 0).toLocaleString()} have votes`}</span>
               <span>{loading ? '...' : `${(totalStats?.remainingVoters || 0).toLocaleString()} voters yet to vote`}</span>
             </div>
             <div className="flex justify-between text-xs text-green-300 mt-1">
-              <span>Total votes cast across all positions: {loading ? '...' : (totalStats?.totalVotes || 0).toLocaleString()}</span>
-              <span>3 votes per voter max</span>
+              
+              
             </div>
           </div>
         </div>
