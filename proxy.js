@@ -1,7 +1,6 @@
 // proxy.js
 import { NextResponse } from 'next/server';
 
-// Change this function name from 'middleware' to 'proxy'
 export function proxy(request) {
   // Get authentication from cookies only (not localStorage)
   const isAuthenticated = request.cookies.get('is_authenticated')?.value === 'true';
@@ -10,23 +9,25 @@ export function proxy(request) {
   // Get the redirect URL from the query params
   const redirectUrl = request.nextUrl.searchParams.get('redirect') || '';
   
-  // Allow access to login page and public routes
+  // Define public routes (no authentication required)
   const isPublicRoute = path === '/' || 
                        path === '/login' || 
-                       path === '/admin-verify-otp' ||
                        path === '/verify-otp' || 
                        path === '/election-result' ||
+                       path === '/admin-verify-otp' ||
                        path.startsWith('/_next') ||
                        path.startsWith('/api');
   
-  // If it's a public route, allow access
-  if (isPublicRoute) {
+  // ⭐ FIX: Also allow access to admin OTP verification without auth
+  const isAdminOtpRoute = path === '/admin/admin-verify-otp';
+  
+  // If it's a public route OR admin OTP page, allow access
+  if (isPublicRoute || isAdminOtpRoute) {
     return NextResponse.next();
   }
   
-  // Protect admin routes
+  // Protect admin routes (except OTP verification)
   if (path.startsWith('/admin') && !isAuthenticated) {
-    // Redirect to login with the original URL as redirect parameter
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', path);
     return NextResponse.redirect(loginUrl);
@@ -47,8 +48,8 @@ export const config = {
     '/admin/:path*',
     '/voter/:path*',
     '/login',
-    '/admin-verify-otp',
     '/verify-otp',
-    '/election-result'
+    '/election-result',
+    '/admin/admin-verify-otp',  // Add this explicitly
   ],
 };
