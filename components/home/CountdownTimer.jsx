@@ -265,7 +265,7 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
               ></div>
             </div>
             <div className="flex justify-between text-xs text-green-300 mt-2">
-              <span>{loading ? '...' : `${(totalStats?.totalVotersWhoVoted || 0).toLocaleString()} have votes`}</span>
+              <span>{loading ? '...' : `${(totalStats?.totalVotersWhoVoted || 0).toLocaleString()} voters have completed voting`}</span>
               <span>{loading ? '...' : `${(totalStats?.remainingVoters || 0).toLocaleString()} voters yet to vote`}</span>
             </div>
             <div className="flex justify-between text-xs text-green-300 mt-1">
