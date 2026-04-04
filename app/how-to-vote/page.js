@@ -4,6 +4,8 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Toaster, toast } from 'sonner';
+import AOS from 'aos';
+import 'aos/dist/aos.css';
 import {
   FaVoteYea, FaCheckCircle, FaChevronRight, FaEnvelope,
   FaKey, FaFileSignature, FaFlagCheckered, FaShieldAlt, FaLock,
@@ -63,6 +65,16 @@ const VoteProcess = () => {
   const router = useRouter();
   const [theme, setTheme] = useState('dark');
   const [mounted, setMounted] = useState(false);
+
+  // Initialize AOS
+  useEffect(() => {
+    AOS.init({
+      duration: 800,
+      once: true,
+      offset: 100,
+      easing: 'ease-in-out',
+    });
+  }, []);
 
   // Theme management
   useEffect(() => {
@@ -164,14 +176,26 @@ const VoteProcess = () => {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* ── HEADER ── */}
-        <div className="text-center mb-12 sm:mb-20">
-          <div className={`inline-flex items-center gap-2.5 ${currentTheme.badgeBg} border ${currentTheme.badgeBorder} ${currentTheme.textLight} px-4 sm:px-5 py-2 rounded-full text-xs font-semibold uppercase tracking-widest mb-6`}>
+        <div 
+          data-aos="fade-down" 
+          data-aos-duration="1000"
+          className="text-center mb-12 sm:mb-20"
+        >
+          <div 
+            data-aos="fade-up"
+            data-aos-delay="100"
+            className={`inline-flex items-center gap-2.5 ${currentTheme.badgeBg} border ${currentTheme.badgeBorder} ${currentTheme.textLight} px-4 sm:px-5 py-2 rounded-full text-xs font-semibold uppercase tracking-widest mb-6`}
+          >
             <GiStairsGoal className="text-emerald-400" />
             Secure Voting Process
             <FaLock className="text-rose-400 text-[10px]" />
           </div>
 
-          <h2 className={`text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold ${currentTheme.textPrimary} tracking-tight leading-tight`}>
+          <h2 
+            data-aos="fade-up"
+            data-aos-delay="200"
+            className={`text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold ${currentTheme.textPrimary} tracking-tight leading-tight`}
+          >
             How{" "}
             <span className="bg-gradient-to-r from-rose-400 to-emerald-400 bg-clip-text text-transparent">
               Voting
@@ -179,12 +203,20 @@ const VoteProcess = () => {
             Works
           </h2>
 
-          <p className={`mt-4 sm:mt-5 text-base sm:text-lg ${currentTheme.textSecondary} max-w-2xl mx-auto leading-relaxed`}>
+          <p 
+            data-aos="fade-up"
+            data-aos-delay="300"
+            className={`mt-4 sm:mt-5 text-base sm:text-lg ${currentTheme.textSecondary} max-w-2xl mx-auto leading-relaxed`}
+          >
             A secure, transparent, and student-friendly electronic voting process
             designed exclusively for Regent University.
           </p>
 
-          <div className="mt-6 sm:mt-7 flex flex-wrap justify-center gap-3 sm:gap-5">
+          <div 
+            data-aos="fade-up"
+            data-aos-delay="400"
+            className="mt-6 sm:mt-7 flex flex-wrap justify-center gap-3 sm:gap-5"
+          >
             <div className="flex items-center gap-2 text-emerald-400 text-xs sm:text-sm">
               <FaShieldAlt /> End-to-End Encryption
             </div>
@@ -207,11 +239,18 @@ const VoteProcess = () => {
               return (
                 <div
                   key={step.step}
+                  data-aos="fade-up"
+                  data-aos-delay={index * 100}
+                  data-aos-duration="800"
                   className={`relative flex flex-col items-center gap-6 lg:gap-0 lg:flex-row ${isRight ? "" : "lg:flex-row-reverse"}`}
                 >
                   {/* ── Card side ── */}
                   <div className={`w-full lg:w-5/12 ${isRight ? "lg:pr-12" : "lg:pl-12"}`}>
-                    <div className={`group relative ${currentTheme.cardBg} ${currentTheme.cardBorder} ${currentTheme.cardHoverBorder} rounded-2xl p-5 sm:p-6 shadow-xl transition-all duration-300`}>
+                    <div 
+                      data-aos="zoom-in"
+                      data-aos-delay={index * 150}
+                      className={`group relative ${currentTheme.cardBg} ${currentTheme.cardBorder} ${currentTheme.cardHoverBorder} rounded-2xl p-5 sm:p-6 shadow-xl transition-all duration-300 hover:shadow-2xl`}
+                    >
 
                       {/* Step pill */}
                       <div className={`absolute -top-3 ${isRight ? 'left-4 sm:left-6' : 'right-4 sm:right-6'} bg-gradient-to-r ${step.accent} text-white text-[10px] font-bold tracking-widest uppercase px-2.5 sm:px-3 py-1 rounded-full shadow-lg`}>
@@ -236,7 +275,12 @@ const VoteProcess = () => {
                         </p>
                         <ul className="space-y-1.5 sm:space-y-2">
                           {step.requirements.map((req, i) => (
-                            <li key={i} className={`flex items-center gap-2 sm:gap-2.5 ${currentTheme.textLight} text-xs sm:text-sm`}>
+                            <li 
+                              key={i} 
+                              data-aos="fade-right"
+                              data-aos-delay={(index * 100) + (i * 50)}
+                              className={`flex items-center gap-2 sm:gap-2.5 ${currentTheme.textLight} text-xs sm:text-sm`}
+                            >
                               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${step.dot}`} />
                               {req}
                             </li>
@@ -248,7 +292,11 @@ const VoteProcess = () => {
 
                   {/* ── Centre node ── */}
                   <div className="z-10 shrink-0 relative lg:absolute lg:left-1/2 lg:-translate-x-1/2">
-                    <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br ${step.accent} text-white flex items-center justify-center text-lg sm:text-xl font-bold shadow-2xl border-4 ${theme === 'dark' ? 'border-slate-900' : 'border-white'} ring-2 ring-white/10`}>
+                    <div 
+                      data-aos="zoom-in"
+                      data-aos-delay={index * 100}
+                      className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br ${step.accent} text-white flex items-center justify-center text-lg sm:text-xl font-bold shadow-2xl border-4 ${theme === 'dark' ? 'border-slate-900' : 'border-white'} ring-2 ring-white/10 transition-all duration-300 hover:scale-110`}
+                    >
                       {step.step}
                     </div>
                   </div>
@@ -262,25 +310,42 @@ const VoteProcess = () => {
         </div>
 
         {/* ── CTA ── */}
-        <div className="mt-16 sm:mt-20 lg:mt-28">
-          <div className={`relative ${currentTheme.ctaBg} border ${currentTheme.ctaBorder} rounded-2xl sm:rounded-3xl p-8 sm:p-10 lg:p-14 text-center overflow-hidden`}>
+        <div 
+          data-aos="fade-up"
+          data-aos-duration="1000"
+          data-aos-offset="50"
+          className="mt-16 sm:mt-20 lg:mt-28"
+        >
+          <div className={`relative ${currentTheme.ctaBg} border ${currentTheme.ctaBorder} rounded-2xl sm:rounded-3xl p-8 sm:p-10 lg:p-14 text-center overflow-hidden transition-all duration-300 hover:shadow-2xl`}>
 
             {/* Glow */}
             <div className={`absolute inset-0 bg-gradient-to-br ${currentTheme.glow} pointer-events-none`} />
             <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
 
-            <h3 className={`relative text-2xl sm:text-3xl lg:text-4xl font-bold ${currentTheme.textPrimary} tracking-tight mb-3 sm:mb-4`}>
+            <h3 
+              data-aos="fade-up"
+              data-aos-delay="100"
+              className={`relative text-2xl sm:text-3xl lg:text-4xl font-bold ${currentTheme.textPrimary} tracking-tight mb-3 sm:mb-4`}
+            >
               Ready to{" "}
               <span className="bg-gradient-to-r from-rose-400 to-emerald-400 bg-clip-text text-transparent">
                 Cast Your Vote?
               </span>
             </h3>
-            <p className={`relative ${currentTheme.textMuted} max-w-xl mx-auto text-sm sm:text-base leading-relaxed mb-8 sm:mb-10`}>
+            <p 
+              data-aos="fade-up"
+              data-aos-delay="200"
+              className={`relative ${currentTheme.textMuted} max-w-xl mx-auto text-sm sm:text-base leading-relaxed mb-8 sm:mb-10`}
+            >
               Ensure you have access to your Regent University email and Student ID
               before starting the secure voting process.
             </p>
 
-            <div className="relative flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
+            <div 
+              data-aos="fade-up"
+              data-aos-delay="300"
+              className="relative flex flex-col sm:flex-row justify-center gap-3 sm:gap-4"
+            >
               <button
                 onClick={() => router.push("/login")}
                 className={`group relative overflow-hidden inline-flex items-center justify-center gap-2 bg-gradient-to-r ${currentTheme.buttonPrimary} ${currentTheme.buttonPrimaryHover} text-white px-6 sm:px-8 lg:px-10 py-3 sm:py-4 rounded-xl font-semibold shadow-lg shadow-emerald-600/20 hover:shadow-emerald-500/30 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 text-sm sm:text-base`}
@@ -300,7 +365,11 @@ const VoteProcess = () => {
               </button>
             </div>
 
-            <div className={`relative mt-8 sm:mt-10 pt-6 sm:pt-8 border-t ${currentTheme.requirementBorder}`}>
+            <div 
+              data-aos="fade-up"
+              data-aos-delay="400"
+              className={`relative mt-8 sm:mt-10 pt-6 sm:pt-8 border-t ${currentTheme.requirementBorder}`}
+            >
               <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>
                 Need assistance? Contact{" "}
                 <a href="mailto:support@regent.edu.gh" className="text-emerald-400 hover:text-emerald-300 font-medium transition-colors">
@@ -314,14 +383,22 @@ const VoteProcess = () => {
         </div>
 
         {/* ── SECURITY BADGES ── */}
-        <div className="mt-10 sm:mt-14 flex flex-wrap justify-center items-center gap-4 sm:gap-6">
+        <div 
+          data-aos="fade-up"
+          data-aos-delay="500"
+          className="mt-10 sm:mt-14 flex flex-wrap justify-center items-center gap-4 sm:gap-6"
+        >
           {[
             { icon: <FaLock className="text-emerald-500" />, label: "256-bit SSL Encryption" },
             { icon: <FaShieldAlt className="text-rose-400" />, label: "GDPR Compliant" },
             { icon: <FaCheckCircle className="text-emerald-500" />, label: "ISO 27001 Certified" },
           ].map(({ icon, label }, i, arr) => (
             <React.Fragment key={label}>
-              <div className={`flex items-center gap-2 ${currentTheme.textMuted} text-xs sm:text-sm`}>
+              <div 
+                data-aos="zoom-in"
+                data-aos-delay={500 + (i * 100)}
+                className={`flex items-center gap-2 ${currentTheme.textMuted} text-xs sm:text-sm`}
+              >
                 {icon} {label}
               </div>
               {i < arr.length - 1 && <div className={`w-1 h-1 rounded-full ${currentTheme.textMuted} opacity-30`} />}
