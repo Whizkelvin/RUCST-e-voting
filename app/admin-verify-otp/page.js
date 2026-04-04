@@ -14,7 +14,9 @@ import {
   FaUserShield,
   FaClock,
   FaExclamationTriangle,
-  FaArrowLeft
+  FaArrowLeft,
+  FaSun,
+  FaMoon
 } from 'react-icons/fa';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -26,8 +28,61 @@ export default function AdminVerifyOTP() {
   const [adminData, setAdminData] = useState(null);
   const [verificationStatus, setVerificationStatus] = useState(null);
   const [timerInterval, setTimerInterval] = useState(null);
+  const [theme, setTheme] = useState('dark');
+  const [mounted, setMounted] = useState(false);
   
   const router = useRouter();
+
+  // Theme management
+  useEffect(() => {
+    setMounted(true);
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    setTheme(savedTheme);
+    document.documentElement.setAttribute('data-theme', savedTheme);
+  }, []);
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
+  };
+
+  // Theme styles
+  const themeStyles = {
+    dark: {
+      background: 'from-[#02140f] via-[#063d2e] to-[#0b2545]',
+      cardBg: 'bg-white/10 backdrop-blur-2xl',
+      cardBorder: 'border-white/20',
+      textPrimary: 'text-white',
+      textSecondary: 'text-white/70',
+      inputBg: 'bg-white/10',
+      inputBorder: 'border-white/20',
+      inputFocus: 'focus:ring-purple-400 focus:border-transparent',
+      buttonPrimary: 'from-purple-700 to-purple-600 hover:from-purple-600 hover:to-purple-500',
+      buttonSecondary: 'text-purple-300 hover:text-purple-200',
+      accent: 'purple',
+      infoCardBg: 'bg-white/5',
+      infoCardBorder: 'border-white/10'
+    },
+    light: {
+      background: 'from-purple-50 via-white to-blue-50',
+      cardBg: 'bg-white/90 backdrop-blur-2xl',
+      cardBorder: 'border-gray-200',
+      textPrimary: 'text-gray-900',
+      textSecondary: 'text-gray-600',
+      inputBg: 'bg-white',
+      inputBorder: 'border-gray-300',
+      inputFocus: 'focus:ring-purple-500 focus:border-transparent',
+      buttonPrimary: 'from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400',
+      buttonSecondary: 'text-purple-600 hover:text-purple-700',
+      accent: 'purple',
+      infoCardBg: 'bg-gray-50',
+      infoCardBorder: 'border-gray-200'
+    }
+  };
+
+  const currentTheme = themeStyles[theme];
 
   // Format time as MM:SS
   const formatTime = (seconds) => {
@@ -355,89 +410,106 @@ export default function AdminVerifyOTP() {
     router.push('/login');
   };
 
+  if (!mounted) {
+    return null;
+  }
+
   if (!adminData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#02140f] via-[#063d2e] to-[#0b2545] flex items-center justify-center">
+      <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} flex items-center justify-center`}>
         <Toaster position="top-center" richColors />
-        <FaSpinner className="animate-spin text-white text-4xl" />
+        <FaSpinner className={`animate-spin text-4xl ${currentTheme.textPrimary}`} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#02140f] via-[#063d2e] to-[#0b2545] flex items-center justify-center p-4 relative overflow-hidden">
+    <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} flex items-center justify-center p-4 relative overflow-hidden transition-all duration-300`}>
       <Toaster position="top-center" richColors closeButton />
+      
+      {/* Theme Toggle Button */}
+      <button
+        onClick={toggleTheme}
+        className="fixed top-4 right-4 z-50 p-3 rounded-full bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-110 transition-all duration-300"
+        aria-label="Toggle theme"
+      >
+        {theme === 'dark' ? (
+          <FaSun className="text-yellow-400 text-xl" />
+        ) : (
+          <FaMoon className="text-gray-700 text-xl" />
+        )}
+      </button>
       
       {/* Animated Background */}
       <div className="absolute inset-0">
-        <div className="absolute top-[-100px] right-[-100px] w-[300px] h-[300px] bg-purple-600 opacity-20 blur-3xl rounded-full animate-pulse"></div>
-        <div className="absolute bottom-[-100px] left-[-100px] w-[300px] h-[300px] bg-blue-500 opacity-20 blur-3xl rounded-full animate-pulse delay-1000"></div>
+        <div className={`absolute top-[-100px] right-[-100px] w-[300px] h-[300px] ${theme === 'dark' ? 'bg-purple-600' : 'bg-purple-400'} opacity-20 blur-3xl rounded-full animate-pulse`}></div>
+        <div className={`absolute bottom-[-100px] left-[-100px] w-[300px] h-[300px] ${theme === 'dark' ? 'bg-blue-500' : 'bg-blue-400'} opacity-20 blur-3xl rounded-full animate-pulse delay-1000`}></div>
       </div>
 
       <div className="relative w-full max-w-md">
-        <div className="bg-white/10 backdrop-blur-2xl border border-white/20 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.4)] p-8 transition-all duration-300">
+        <div className={`${currentTheme.cardBg} border ${currentTheme.cardBorder} rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.4)] p-6 sm:p-8 transition-all duration-300`}>
           
           {/* Back Button */}
           <button
             onClick={goBackToLogin}
             className="absolute top-4 left-4 text-white/70 hover:text-white transition-colors"
           >
-            <FaArrowLeft className="text-xl" />
+            <FaArrowLeft className="text-lg sm:text-xl" />
           </button>
 
           {/* Logos */}
-          <div className="flex justify-center gap-4 mb-6">
+          <div className="flex justify-center gap-3 sm:gap-4 mb-4 sm:mb-6">
             <Image 
               src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1762440313/RUCST_logo-removebg-preview_hwdial.png"
-              width={60}
-              height={60}
+              width={50}
+              height={50}
               alt="Regent University Logo"
-              className="object-contain"
+              className="h-12 w-12 sm:h-[60px] sm:w-[60px] object-contain"
             />
             <Image 
               src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1774528110/Gemini_Generated_Image_57c2xl57c2xl57c2_ykckzf.png"
-              width={60}
-              height={60}
+              width={50}
+              height={50}
               alt="E-Voting Logo"
-              className="object-contain"
+              className="h-12 w-12 sm:h-[60px] sm:w-[60px] object-contain"
             />
           </div>
 
           {/* Title */}
-          <div className="text-center mb-6">
+          <div className="text-center mb-5 sm:mb-6">
             <div className="flex justify-center mb-3">
-              <div className="p-3 bg-purple-500/20 rounded-full">
-                <FaShieldAlt className="text-purple-400 text-3xl" />
+              <div className={`p-3 ${theme === 'dark' ? 'bg-purple-500/20' : 'bg-purple-100'} rounded-full`}>
+                <FaShieldAlt className={`${theme === 'dark' ? 'text-purple-400' : 'text-purple-600'} text-2xl sm:text-3xl`} />
               </div>
             </div>
-            <h1 className="text-2xl font-bold text-white">Admin Verification</h1>
-            <p className="text-white/70 text-sm mt-1">
+            <h1 className={`text-xl sm:text-2xl font-bold ${currentTheme.textPrimary}`}>Admin Verification</h1>
+            <p className={`${currentTheme.textSecondary} text-xs sm:text-sm mt-1`}>
               Enter the OTP sent to your email
             </p>
           </div>
 
           {/* Admin Info Card */}
-          <div className="mb-6 p-4 rounded-xl bg-purple-500/20 border border-purple-400/50">
+          <div className={`mb-5 sm:mb-6 p-3 sm:p-4 rounded-xl ${theme === 'dark' ? 'bg-purple-500/20 border border-purple-400/50' : 'bg-purple-50 border border-purple-200'}`}>
             <div className="flex items-center gap-3">
-              <FaUserShield className="text-purple-400 text-xl" />
-              <div>
-                <p className="text-white font-medium">{adminData.name}</p>
-                <p className="text-white/70 text-sm">{adminData.email}</p>
-                <p className="text-purple-300 text-xs mt-1">Role: {adminData.role}</p>
+              <FaUserShield className={`${theme === 'dark' ? 'text-purple-400' : 'text-purple-600'} text-lg sm:text-xl`} />
+              <div className="flex-1 min-w-0">
+                <p className={`${currentTheme.textPrimary} font-medium text-sm sm:text-base truncate`}>{adminData.name}</p>
+                <p className={`${currentTheme.textSecondary} text-xs sm:text-sm truncate`}>{adminData.email}</p>
+                <p className={`${theme === 'dark' ? 'text-purple-300' : 'text-purple-600'} text-xs mt-0.5`}>Role: {adminData.role}</p>
               </div>
             </div>
           </div>
 
           {/* Timer Display */}
-          <div className="mb-6 text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/20">
-              <FaClock className="text-yellow-400" />
-              <span className="text-white font-mono text-lg">
+          <div className="mb-5 sm:mb-6 text-center">
+            <div className={`inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full ${currentTheme.infoCardBg} border ${currentTheme.infoCardBorder}`}>
+              <FaClock className="text-yellow-400 text-sm sm:text-base" />
+              <span className={`${currentTheme.textPrimary} font-mono text-base sm:text-lg`}>
                 {formatTime(timeLeft)}
               </span>
             </div>
             {!canResend && timeLeft > 0 && (
-              <p className="text-white/60 text-xs mt-2">
+              <p className={`${currentTheme.textSecondary} text-xs mt-2 opacity-60`}>
                 OTP expires in {formatTime(timeLeft)}
               </p>
             )}
@@ -452,8 +524,8 @@ export default function AdminVerifyOTP() {
           {verificationStatus === 'verifying' && (
             <div className="mb-4 p-3 rounded-xl bg-blue-500/20 border border-blue-400/50">
               <div className="flex items-center gap-2">
-                <FaSpinner className="animate-spin text-blue-400" />
-                <p className="text-blue-200 text-sm">Verifying OTP...</p>
+                <FaSpinner className="animate-spin text-blue-400 text-sm sm:text-base" />
+                <p className="text-blue-200 text-xs sm:text-sm">Verifying OTP...</p>
               </div>
             </div>
           )}
@@ -461,8 +533,8 @@ export default function AdminVerifyOTP() {
           {verificationStatus === 'success' && (
             <div className="mb-4 p-3 rounded-xl bg-green-500/20 border border-green-400/50">
               <div className="flex items-center gap-2">
-                <FaCheckCircle className="text-green-400" />
-                <p className="text-green-200 text-sm">Verification successful! Redirecting...</p>
+                <FaCheckCircle className="text-green-400 text-sm sm:text-base" />
+                <p className="text-green-200 text-xs sm:text-sm">Verification successful! Redirecting...</p>
               </div>
             </div>
           )}
@@ -470,8 +542,8 @@ export default function AdminVerifyOTP() {
           {verificationStatus === 'failed' && (
             <div className="mb-4 p-3 rounded-xl bg-red-500/20 border border-red-400/50">
               <div className="flex items-center gap-2">
-                <FaTimesCircle className="text-red-400" />
-                <p className="text-red-200 text-sm">Invalid OTP. Please try again.</p>
+                <FaTimesCircle className="text-red-400 text-sm sm:text-base" />
+                <p className="text-red-200 text-xs sm:text-sm">Invalid OTP. Please try again.</p>
               </div>
             </div>
           )}
@@ -479,18 +551,18 @@ export default function AdminVerifyOTP() {
           {verificationStatus === 'expired' && (
             <div className="mb-4 p-3 rounded-xl bg-yellow-500/20 border border-yellow-400/50">
               <div className="flex items-center gap-2">
-                <FaExclamationTriangle className="text-yellow-400" />
-                <p className="text-yellow-200 text-sm">OTP expired. Please request a new one.</p>
+                <FaExclamationTriangle className="text-yellow-400 text-sm sm:text-base" />
+                <p className="text-yellow-200 text-xs sm:text-sm">OTP expired. Please request a new one.</p>
               </div>
             </div>
           )}
 
           {/* OTP Input Fields */}
-          <div className="mb-8">
-            <label className="text-white/80 text-sm block mb-3">
+          <div className="mb-6 sm:mb-8">
+            <label className={`${currentTheme.textSecondary} text-xs sm:text-sm block mb-3`}>
               Enter 6-digit OTP
             </label>
-            <div className="flex gap-3 justify-center">
+            <div className="flex gap-2 sm:gap-3 justify-center flex-wrap">
               {otp.map((digit, index) => (
                 <input
                   key={index}
@@ -500,7 +572,19 @@ export default function AdminVerifyOTP() {
                   value={digit}
                   onChange={(e) => handleOtpChange(index, e.target.value)}
                   onKeyDown={(e) => handleKeyDown(index, e)}
-                  className="w-12 h-12 text-center text-2xl font-bold bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent"
+                  className={`
+                    w-10 h-12 sm:w-12 sm:h-14 
+                    text-center text-xl sm:text-2xl font-bold 
+                    ${currentTheme.inputBg} border-2 
+                    rounded-xl ${currentTheme.textPrimary}
+                    focus:outline-none focus:ring-2 ${currentTheme.inputFocus}
+                    transition-all duration-200
+                    ${digit 
+                      ? `${theme === 'dark' ? 'border-purple-400 bg-purple-500/20' : 'border-purple-500 bg-purple-50'} ring-1 ring-purple-400/50` 
+                      : currentTheme.inputBorder
+                    }
+                    ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}
+                  `}
                   disabled={isLoading}
                   autoFocus={index === 0}
                 />
@@ -512,16 +596,16 @@ export default function AdminVerifyOTP() {
           <button
             onClick={verifyOTP}
             disabled={isLoading || verificationStatus === 'success'}
-            className="w-full py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-purple-700 to-purple-600 hover:from-purple-600 hover:to-purple-500 transition-all duration-300 shadow-lg hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 mb-3"
+            className={`w-full py-2.5 sm:py-3 rounded-xl font-semibold text-white bg-gradient-to-r ${currentTheme.buttonPrimary} transition-all duration-300 shadow-lg hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 mb-3 text-sm sm:text-base`}
           >
             {isLoading ? (
               <div className="flex items-center justify-center gap-2">
-                <FaSpinner className="animate-spin" />
-                Verifying...
+                <FaSpinner className="animate-spin text-sm sm:text-base" />
+                <span>Verifying...</span>
               </div>
             ) : (
               <div className="flex items-center justify-center gap-2">
-                <FaKey /> Verify OTP
+                <FaKey className="text-sm sm:text-base" /> Verify OTP
               </div>
             )}
           </button>
@@ -530,13 +614,13 @@ export default function AdminVerifyOTP() {
           <button
             onClick={resendOTP}
             disabled={!canResend || isLoading}
-            className="w-full py-2 rounded-xl font-medium text-purple-300 hover:text-purple-200 transition-all duration-300 disabled:opacity-50"
+            className={`w-full py-2 rounded-xl font-medium ${currentTheme.buttonSecondary} transition-all duration-300 disabled:opacity-50 text-xs sm:text-sm`}
           >
             {canResend ? 'Resend OTP' : `Resend OTP in ${formatTime(timeLeft)}`}
           </button>
 
           {/* Info Footer */}
-          <div className="mt-6 text-xs text-white/40 text-center space-y-1">
+          <div className={`mt-5 sm:mt-6 text-center space-y-1 ${currentTheme.textSecondary} text-[10px] sm:text-xs opacity-60`}>
             <p>🔐 For security, this OTP expires in 5 minutes</p>
             <p>📧 Check your spam folder if you don't see the email</p>
             <p>👑 Maximum 5 verification attempts allowed</p>
