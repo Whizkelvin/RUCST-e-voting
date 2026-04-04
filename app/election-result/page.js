@@ -3,30 +3,22 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Toaster, toast } from 'sonner'; // Changed from react-toastify
-import { 
-  FaChartBar, 
-  FaVoteYea, 
-  FaUserCheck, 
-  FaSpinner, 
-  FaTrophy, 
-  FaMedal,
-  FaCheckCircle,
-  FaUsers,
-  FaCalendarAlt,
-  FaPercentage,
-  FaClock,
-  FaInfoCircle,
-  FaDownload
-} from 'react-icons/fa';
+import { Toaster, toast } from 'sonner';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
+import { 
+  FaChartBar, FaVoteYea, FaUserCheck, FaSpinner, FaTrophy, 
+  FaMedal, FaCheckCircle, FaUsers, FaCalendarAlt, FaPercentage,
+  FaClock, FaInfoCircle, FaDownload, FaSun, FaMoon, FaShieldAlt
+} from 'react-icons/fa';
 import { useElectionData } from '@/hooks/useElectionData';
 
 export default function ElectionResults() {
   const [selectedPosition, setSelectedPosition] = useState('all');
   const [resultsData, setResultsData] = useState({});
   const [totalVotes, setTotalVotes] = useState(0);
+  const [theme, setTheme] = useState('dark');
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
   
   const { 
@@ -39,10 +31,68 @@ export default function ElectionResults() {
     lastUpdated 
   } = useElectionData();
 
+  // Theme management
+  useEffect(() => {
+    setMounted(true);
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    setTheme(savedTheme);
+    document.documentElement.setAttribute('data-theme', savedTheme);
+  }, []);
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
+    toast.success(`${newTheme === 'dark' ? 'Dark' : 'Light'} mode activated`);
+  };
+
+  // Theme styles
+  const themeStyles = {
+    dark: {
+      background: 'from-[#02140f] via-[#063d2e] to-[#0b2545]',
+      cardBg: 'bg-white/10 backdrop-blur-lg',
+      cardBorder: 'border-white/20',
+      textPrimary: 'text-white',
+      textSecondary: 'text-white/80',
+      textMuted: 'text-white/70',
+      textLight: 'text-white/60',
+      buttonHover: 'hover:bg-white/20',
+      statBg: 'bg-white/10 backdrop-blur-lg',
+      winnerBg: 'bg-gradient-to-r from-yellow-400/10 to-transparent',
+      winnerBorder: 'border-yellow-400/50',
+      progressBg: 'bg-white/20',
+      progressWinner: 'bg-gradient-to-r from-yellow-400 to-amber-500',
+      progressNormal: 'bg-green-500',
+      modalBg: 'bg-white/10 backdrop-blur-lg',
+    },
+    light: {
+      background: 'from-gray-50 via-white to-gray-100',
+      cardBg: 'bg-white/80 backdrop-blur-lg',
+      cardBorder: 'border-gray-200',
+      textPrimary: 'text-gray-900',
+      textSecondary: 'text-gray-800',
+      textMuted: 'text-gray-700',
+      textLight: 'text-gray-600',
+      buttonHover: 'hover:bg-gray-200',
+      statBg: 'bg-white/80 backdrop-blur-lg',
+      winnerBg: 'bg-gradient-to-r from-yellow-100/50 to-transparent',
+      winnerBorder: 'border-yellow-400',
+      progressBg: 'bg-gray-200',
+      progressWinner: 'bg-gradient-to-r from-yellow-500 to-amber-600',
+      progressNormal: 'bg-emerald-500',
+      modalBg: 'bg-white/80 backdrop-blur-lg',
+    }
+  };
+
+  const currentTheme = themeStyles[theme];
+
   useEffect(() => {
     AOS.init({
       duration: 1000,
       once: true,
+      offset: 100,
+      easing: 'ease-in-out',
     });
   }, []);
 
@@ -134,14 +184,18 @@ export default function ElectionResults() {
     toast.success('Results exported successfully!');
   };
 
+  if (!mounted) {
+    return null;
+  }
+
   if (loading) {
     return (
       <>
         <Toaster position="top-center" richColors />
-        <div className="min-h-screen bg-gradient-to-br from-[#02140f] via-[#063d2e] to-[#0b2545] flex items-center justify-center">
+        <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} flex items-center justify-center`}>
           <div className="text-center">
             <FaSpinner className="animate-spin text-5xl text-green-500 mx-auto mb-4" />
-            <p className="text-white text-lg">Loading election results...</p>
+            <p className={`${currentTheme.textPrimary} text-lg`}>Loading election results...</p>
           </div>
         </div>
       </>
@@ -152,11 +206,11 @@ export default function ElectionResults() {
     return (
       <>
         <Toaster position="top-center" richColors />
-        <div className="min-h-screen bg-gradient-to-br from-[#02140f] via-[#063d2e] to-[#0b2545] flex items-center justify-center">
-          <div className="text-center bg-white/10 backdrop-blur-lg rounded-2xl p-8 max-w-md">
+        <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} flex items-center justify-center p-4`}>
+          <div className={`${currentTheme.cardBg} rounded-2xl p-8 max-w-md text-center border ${currentTheme.cardBorder}`}>
             <FaInfoCircle className="text-5xl text-red-400 mx-auto mb-4" />
-            <p className="text-white text-lg mb-2">Unable to load results</p>
-            <p className="text-white/70 text-sm">{error}</p>
+            <p className={`${currentTheme.textPrimary} text-lg mb-2`}>Unable to load results</p>
+            <p className={`${currentTheme.textMuted} text-sm`}>{error}</p>
             <button
               onClick={() => window.location.reload()}
               className="mt-4 px-6 py-2 bg-green-600 rounded-lg text-white hover:bg-green-500 transition"
@@ -185,48 +239,70 @@ export default function ElectionResults() {
         }}
       />
       
-      <div className="min-h-screen bg-gradient-to-br from-[#02140f] via-[#063d2e] to-[#0b2545] pt-24 pb-12">
+      {/* Theme Toggle Button */}
+      <button
+        onClick={toggleTheme}
+        className="fixed top-4 right-4 z-50 p-3 rounded-full bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-110 transition-all duration-300"
+        aria-label="Toggle theme"
+      >
+        {theme === 'dark' ? (
+          <FaSun className="text-yellow-400 text-xl" />
+        ) : (
+          <FaMoon className="text-gray-700 text-xl" />
+        )}
+      </button>
+      
+      <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} pt-20 sm:pt-24 pb-8 sm:pb-12 transition-all duration-300`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           {/* Header Section */}
-          <div data-aos="fade-up" className="text-center mb-12">
+          <div data-aos="fade-down" data-aos-duration="1000" className="text-center mb-8 sm:mb-12">
             <div className="flex justify-center gap-4 mb-4">
               <Image 
                 src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1762440313/RUCST_logo-removebg-preview_hwdial.png"
-                width={80}
-                height={80}
-                alt="logo"
-                className="object-contain"
+                width={70}
+                height={70}
+                alt="Regent Logo"
+                className="object-contain sm:w-20 sm:h-20"
+              />
+              <Image 
+                src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1774528110/Gemini_Generated_Image_57c2xl57c2xl57c2_ykckzf.png"
+                width={70}
+                height={70}
+                alt="E-Voting Logo"
+                className="object-contain sm:w-20 sm:h-20"
               />
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+            <h1 className={`text-3xl sm:text-4xl md:text-5xl font-bold ${currentTheme.textPrimary} mb-3 sm:mb-4`}>
               Election Results
             </h1>
-            <p className="text-xl text-white/80">
+            <p className={`text-base sm:text-lg md:text-xl ${currentTheme.textSecondary} max-w-2xl mx-auto`}>
               Official results of the Regent University Student Elections
             </p>
             
             {votingPeriod && (
-              <div className="mt-6 bg-white/10 backdrop-blur-lg rounded-2xl p-4 inline-block">
-                <div className="text-white/90">
-                  <div className="font-semibold text-lg mb-2">
-                    {votingPeriod.name || 'Student Elections'}
-                    {votingPeriod.year && ` ${votingPeriod.year}`}
-                  </div>
-                  <div className="text-sm flex flex-col gap-1">
-                    <div className="flex items-center justify-center gap-2">
-                      <FaCalendarAlt className="text-green-400" />
-                      <span>Started: {formatDate(votingPeriod.start_time)}</span>
+              <div data-aos="fade-up" data-aos-delay="100" className="mt-6">
+                <div className={`${currentTheme.cardBg} rounded-2xl p-4 inline-block border ${currentTheme.cardBorder}`}>
+                  <div className={`${currentTheme.textSecondary}`}>
+                    <div className="font-semibold text-base sm:text-lg mb-2">
+                      {votingPeriod.name || 'Student Elections'}
+                      {votingPeriod.year && ` ${votingPeriod.year}`}
                     </div>
-                    <div className="flex items-center justify-center gap-2">
-                      <FaClock className="text-green-400" />
-                      <span>Ends: {formatDate(votingPeriod.end_time)}</span>
-                    </div>
-                    {isVotingActive && (
-                      <div className="mt-2 px-3 py-1 bg-green-500/20 text-green-300 rounded-full text-xs inline-block">
-                        Voting In Progress
+                    <div className="text-xs sm:text-sm flex flex-col gap-1">
+                      <div className="flex items-center justify-center gap-2">
+                        <FaCalendarAlt className="text-green-400" />
+                        <span>Started: {formatDate(votingPeriod.start_time)}</span>
                       </div>
-                    )}
+                      <div className="flex items-center justify-center gap-2">
+                        <FaClock className="text-green-400" />
+                        <span>Ends: {formatDate(votingPeriod.end_time)}</span>
+                      </div>
+                      {isVotingActive && (
+                        <div className="mt-2 px-3 py-1 bg-green-500/20 text-green-300 rounded-full text-xs inline-block animate-pulse">
+                          Voting In Progress
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -234,44 +310,44 @@ export default function ElectionResults() {
           </div>
 
           {/* Statistics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-            <div data-aos="fade-up" data-aos-delay="100" className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8 sm:mb-12">
+            <div data-aos="fade-up" data-aos-delay="100" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-white/70 text-sm">Total Votes Cast</p>
-                  <p className="text-3xl font-bold text-white mt-2">{totalStats.totalVotes.toLocaleString()}</p>
+                  <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Total Votes Cast</p>
+                  <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVotes.toLocaleString()}</p>
                 </div>
-                <FaVoteYea className="text-4xl text-green-400" />
+                <FaVoteYea className="text-3xl sm:text-4xl text-green-400" />
               </div>
             </div>
 
-            <div data-aos="fade-up" data-aos-delay="200" className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+            <div data-aos="fade-up" data-aos-delay="200" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-white/70 text-sm">Registered Voters</p>
-                  <p className="text-3xl font-bold text-white mt-2">{totalStats.totalVoters.toLocaleString()}</p>
+                  <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Registered Voters</p>
+                  <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVoters.toLocaleString()}</p>
                 </div>
-                <FaUsers className="text-4xl text-blue-400" />
+                <FaUsers className="text-3xl sm:text-4xl text-blue-400" />
               </div>
             </div>
 
-            <div data-aos="fade-up" data-aos-delay="300" className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+            <div data-aos="fade-up" data-aos-delay="300" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-white/70 text-sm">Voters Who Voted</p>
-                  <p className="text-3xl font-bold text-white mt-2">{totalStats.totalVotersWhoVoted.toLocaleString()}</p>
+                  <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Voters Who Voted</p>
+                  <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVotersWhoVoted.toLocaleString()}</p>
                 </div>
-                <FaUserCheck className="text-4xl text-purple-400" />
+                <FaUserCheck className="text-3xl sm:text-4xl text-purple-400" />
               </div>
             </div>
 
-            <div data-aos="fade-up" data-aos-delay="400" className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+            <div data-aos="fade-up" data-aos-delay="400" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-white/70 text-sm">Voter Turnout</p>
-                  <p className="text-3xl font-bold text-white mt-2">{getVoterTurnout()}%</p>
+                  <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Voter Turnout</p>
+                  <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{getVoterTurnout()}%</p>
                 </div>
-                <FaPercentage className="text-4xl text-yellow-400" />
+                <FaPercentage className="text-3xl sm:text-4xl text-yellow-400" />
               </div>
             </div>
           </div>
@@ -281,7 +357,7 @@ export default function ElectionResults() {
             <div data-aos="fade-up" data-aos-delay="450" className="flex justify-end mb-6">
               <button
                 onClick={exportResults}
-                className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"
+                className={`flex items-center gap-2 px-4 py-2 ${currentTheme.statBg} ${currentTheme.buttonHover} rounded-lg ${currentTheme.textPrimary} transition text-sm sm:text-base`}
               >
                 <FaDownload />
                 Export Results as CSV
@@ -292,15 +368,17 @@ export default function ElectionResults() {
           {/* Position Filter */}
           {hasResults && (
             <div data-aos="fade-up" data-aos-delay="500" className="mb-8">
-              <div className="flex flex-wrap gap-3 justify-center">
-                {positions.map((position) => (
+              <div className="flex flex-wrap gap-2 sm:gap-3 justify-center">
+                {positions.map((position, idx) => (
                   <button
                     key={position}
                     onClick={() => setSelectedPosition(position)}
-                    className={`px-6 py-2 rounded-full font-semibold transition-all duration-300 ${
+                    data-aos="zoom-in"
+                    data-aos-delay={500 + idx * 50}
+                    className={`px-4 sm:px-6 py-1.5 sm:py-2 rounded-full font-semibold transition-all duration-300 text-xs sm:text-sm ${
                       selectedPosition === position
                         ? 'bg-gradient-to-r from-green-600 to-emerald-500 text-white shadow-lg'
-                        : 'bg-white/10 text-white/80 hover:bg-white/20'
+                        : `${currentTheme.statBg} ${currentTheme.textMuted} ${currentTheme.buttonHover}`
                     }`}
                   >
                     {position === 'all' ? 'All Positions' : position}
@@ -313,10 +391,10 @@ export default function ElectionResults() {
           {/* Results Display */}
           {!hasResults ? (
             <div data-aos="fade-up" className="text-center py-12">
-              <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8">
-                <FaChartBar className="text-6xl text-white/30 mx-auto mb-4" />
-                <p className="text-white/70 text-lg">No results available yet.</p>
-                <p className="text-white/50 text-sm mt-2">
+              <div className={`${currentTheme.cardBg} rounded-2xl p-8 border ${currentTheme.cardBorder}`}>
+                <FaChartBar className="text-5xl sm:text-6xl text-white/30 mx-auto mb-4" />
+                <p className={`${currentTheme.textMuted} text-base sm:text-lg`}>No results available yet.</p>
+                <p className={`${currentTheme.textLight} text-xs sm:text-sm mt-2`}>
                   {isVotingActive 
                     ? 'Voting is in progress. Results will appear here as votes are cast.' 
                     : 'Results will be displayed after the election concludes.'}
@@ -325,15 +403,15 @@ export default function ElectionResults() {
             </div>
           ) : (
             Object.entries(filteredResults).map(([position, candidates], idx) => (
-              <div key={position} data-aos="fade-up" data-aos-delay={600 + idx * 100} className="mb-12">
-                <div className="flex items-center gap-3 mb-6">
-                  <FaTrophy className="text-3xl text-yellow-400" />
-                  <h2 className="text-2xl font-bold text-white">{position}</h2>
+              <div key={position} data-aos="fade-up" data-aos-delay={600 + idx * 100} className="mb-10 sm:mb-12">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
+                  <FaTrophy className="text-2xl sm:text-3xl text-yellow-400" />
+                  <h2 className={`text-xl sm:text-2xl font-bold ${currentTheme.textPrimary}`}>{position}</h2>
                   <div className="flex-1 h-px bg-gradient-to-r from-white/20 to-transparent"></div>
-                  <span className="text-white/50 text-sm">{candidates.length} candidates</span>
+                  <span className={`${currentTheme.textLight} text-xs sm:text-sm`}>{candidates.length} candidates</span>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   {candidates.map((candidate, index) => {
                     const isWinner = index === 0;
                     const voteCount = candidate.vote_count || 0;
@@ -343,26 +421,28 @@ export default function ElectionResults() {
                     return (
                       <div 
                         key={candidate.id}
-                        className={`bg-white/10 backdrop-blur-lg rounded-2xl p-6 border transition-all duration-300 hover:scale-[1.02] ${
+                        data-aos="fade-right"
+                        data-aos-delay={600 + idx * 100 + index * 50}
+                        className={`${currentTheme.cardBg} rounded-xl sm:rounded-2xl p-4 sm:p-6 border transition-all duration-300 hover:scale-[1.01] sm:hover:scale-[1.02] ${
                           isWinner 
-                            ? 'border-yellow-400/50 bg-gradient-to-r from-yellow-400/10 to-transparent' 
-                            : 'border-white/20'
+                            ? `${currentTheme.winnerBorder} ${currentTheme.winnerBg}`
+                            : currentTheme.cardBorder
                         }`}
                       >
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                          <div className="flex items-center gap-4 flex-1">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+                          <div className="flex items-center gap-3 sm:gap-4 flex-1">
                             {/* Ranking Badge */}
-                            <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${
+                            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-bold text-base sm:text-lg flex-shrink-0 ${
                               index === 0 ? 'bg-yellow-400 text-gray-900' :
                               index === 1 ? 'bg-gray-400 text-gray-900' :
                               index === 2 ? 'bg-amber-600 text-white' :
                               'bg-white/20 text-white'
                             }`}>
-                              {index === 0 ? <FaTrophy /> : index === 1 ? <FaMedal /> : index + 1}
+                              {index === 0 ? <FaTrophy className="text-sm sm:text-base" /> : index === 1 ? <FaMedal className="text-sm sm:text-base" /> : index + 1}
                             </div>
 
                             {/* Candidate Image */}
-                            <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-700 flex-shrink-0">
+                            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden bg-gray-700 flex-shrink-0">
                               {candidate.image_url ? (
                                 <Image 
                                   src={candidate.image_url}
@@ -373,23 +453,23 @@ export default function ElectionResults() {
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-white/50">
-                                  <FaUserCheck size={32} />
+                                  <FaUserCheck size={24} className="sm:text-3xl" />
                                 </div>
                               )}
                             </div>
 
                             {/* Candidate Info */}
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <h3 className="text-xl font-semibold text-white">{candidate.name}</h3>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className={`text-base sm:text-xl font-semibold ${currentTheme.textPrimary} truncate`}>{candidate.name}</h3>
                                 {isWinner && (
-                                  <span className="px-2 py-1 bg-yellow-400/20 text-yellow-300 text-xs rounded-full flex items-center gap-1">
-                                    <FaCheckCircle className="text-xs" />
+                                  <span className="px-2 py-0.5 sm:py-1 bg-yellow-400/20 text-yellow-300 text-[10px] sm:text-xs rounded-full flex items-center gap-1 whitespace-nowrap">
+                                    <FaCheckCircle className="text-[8px] sm:text-xs" />
                                     Winner
                                   </span>
                                 )}
                               </div>
-                              <p className="text-white/60 text-sm">
+                              <p className={`${currentTheme.textLight} text-xs sm:text-sm truncate`}>
                                 {candidate.department || 'Department not specified'} 
                                 {candidate.year_of_study && ` • Level ${candidate.year_of_study}`}
                               </p>
@@ -397,18 +477,18 @@ export default function ElectionResults() {
                           </div>
 
                           {/* Vote Count */}
-                          <div className="text-right">
-                            <p className="text-2xl font-bold text-white">{voteCount}</p>
-                            <p className="text-white/60 text-sm">votes ({percentage}%)</p>
+                          <div className="text-left sm:text-right">
+                            <p className={`text-xl sm:text-2xl font-bold ${currentTheme.textPrimary}`}>{voteCount}</p>
+                            <p className={`${currentTheme.textLight} text-xs sm:text-sm`}>votes ({percentage}%)</p>
                           </div>
                         </div>
 
                         {/* Progress Bar */}
-                        <div className="mt-4">
-                          <div className="h-2 bg-white/20 rounded-full overflow-hidden">
+                        <div className="mt-3 sm:mt-4">
+                          <div className={`h-1.5 sm:h-2 ${currentTheme.progressBg} rounded-full overflow-hidden`}>
                             <div 
                               className={`h-full transition-all duration-1000 ${
-                                isWinner ? 'bg-gradient-to-r from-yellow-400 to-amber-500' : 'bg-green-500'
+                                isWinner ? currentTheme.progressWinner : currentTheme.progressNormal
                               }`}
                               style={{ width: `${barWidth}%` }}
                             />
@@ -417,8 +497,10 @@ export default function ElectionResults() {
 
                         {/* Manifesto Preview (for winner) */}
                         {isWinner && candidate.manifesto && (
-                          <div className="mt-4 p-4 bg-white/5 rounded-lg">
-                            <p className="text-white/70 text-sm italic">"{candidate.manifesto.substring(0, 200)}..."</p>
+                          <div className={`mt-3 sm:mt-4 p-3 sm:p-4 ${currentTheme.modalBg} rounded-lg`}>
+                            <p className={`${currentTheme.textLight} text-xs sm:text-sm italic line-clamp-2`}>
+                              "{candidate.manifesto.substring(0, 150)}..."
+                            </p>
                           </div>
                         )}
                       </div>
@@ -430,14 +512,18 @@ export default function ElectionResults() {
           )}
 
           {/* Footer Info */}
-          <div data-aos="fade-up" className="mt-12 text-center">
-            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-              <p className="text-white/70 text-sm">
-                These results are final and certified by the Electoral Commission of Regent University.
-                <br />
+          <div data-aos="fade-up" className="mt-10 sm:mt-12 text-center">
+            <div className={`${currentTheme.cardBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <FaShieldAlt className="text-green-400 text-sm sm:text-base" />
+                <p className={`${currentTheme.textLight} text-xs sm:text-sm`}>
+                  These results are final and certified by the Electoral Commission of Regent University.
+                </p>
+              </div>
+              <p className={`${currentTheme.textLight} text-xs sm:text-sm`}>
                 Last updated: {lastUpdated?.toLocaleTimeString() || 'Just now'}
                 {isVotingActive && (
-                  <span className="block mt-2 text-green-400 text-xs animate-pulse">
+                  <span className="block mt-2 text-green-400 text-[10px] sm:text-xs animate-pulse">
                     Live updates are active
                   </span>
                 )}
