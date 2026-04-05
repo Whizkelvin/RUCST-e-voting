@@ -20,8 +20,11 @@ import {
   FaUniversity,
   FaPlay,
   FaStop,
-  FaCopy,
   FaLayerGroup,
+  FaSun,
+  FaMoon,
+  FaHourglassHalf,
+  FaCalendarCheck,
 } from "react-icons/fa";
 import * as XLSX from "xlsx";
 
@@ -40,6 +43,7 @@ export default function ManageElections() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [editingElection, setEditingElection] = useState(null);
   const [editingPosition, setEditingPosition] = useState(null);
+  const [theme, setTheme] = useState("light");
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -65,8 +69,27 @@ export default function ManageElections() {
     active: 0,
     completed: 0,
     upcoming: 0,
+    expired: 0,
   });
   const router = useRouter();
+
+  // Theme management
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("adminTheme");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const initialTheme = savedTheme || (prefersDark ? "dark" : "light");
+    setTheme(initialTheme);
+    document.documentElement.setAttribute("data-theme", initialTheme);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("adminTheme", theme);
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === "light" ? "dark" : "light"));
+  };
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -122,23 +145,38 @@ export default function ManageElections() {
       setFilteredElections(validElections);
 
       const now = new Date();
-      const active = validElections.filter((e) => {
+      
+      // Calculate stats based on actual date/time
+      let active = 0;
+      let completed = 0;
+      let upcoming = 0;
+      let expired = 0;
+
+      validElections.forEach((e) => {
         const start = new Date(e.start_time);
         const end = new Date(e.end_time);
-        return e.is_active === true || (now >= start && now <= end);
-      }).length;
+        
+        if (e.is_active === true) {
+          active++;
+        } else if (end < now) {
+          completed++;
+        } else if (start > now) {
+          upcoming++;
+        }
+        
+        // Check for expired (ended but not marked as inactive)
+        if (end < now && e.is_active === true) {
+          expired++;
+        }
+      });
 
-      const completed = validElections.filter((e) => {
-        const end = new Date(e.end_time);
-        return end < now && !e.is_active;
-      }).length;
-
-      const upcoming = validElections.filter((e) => {
-        const start = new Date(e.start_time);
-        return start > now && !e.is_active;
-      }).length;
-
-      setStats({ total: validElections.length, active, completed, upcoming });
+      setStats({ 
+        total: validElections.length, 
+        active, 
+        completed, 
+        upcoming,
+        expired 
+      });
     } catch (error) {
       console.error("Error fetching elections:", error);
       toast.error("Failed to load elections");
@@ -392,16 +430,21 @@ export default function ManageElections() {
     }
   };
 
-  // Custom delete confirmation using sonner
   const confirmDeleteElection = (election) => {
     toast.custom(
       (t) => (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 max-w-sm w-full">
+        <div className={`rounded-lg shadow-lg p-4 max-w-sm w-full ${
+          theme === "light" ? "bg-white" : "bg-gray-800"
+        }`}>
           <div className="mb-4">
-            <h3 className="font-semibold text-gray-900 dark:text-white">
+            <h3 className={`font-semibold ${
+              theme === "light" ? "text-gray-900" : "text-white"
+            }`}>
               Confirm Delete
             </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            <p className={`text-sm mt-1 ${
+              theme === "light" ? "text-gray-500" : "text-gray-400"
+            }`}>
               Are you sure you want to delete{" "}
               <strong className="text-red-600">{election.title}</strong>?
               This action cannot be undone.
@@ -416,7 +459,11 @@ export default function ManageElections() {
           <div className="flex gap-2 justify-end">
             <button
               onClick={() => toast.dismiss(t)}
-              className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+              className={`px-3 py-1.5 text-sm rounded-lg transition ${
+                theme === "light"
+                  ? "bg-gray-200 hover:bg-gray-300"
+                  : "bg-gray-700 hover:bg-gray-600"
+              }`}
             >
               Cancel
             </button>
@@ -483,6 +530,15 @@ export default function ManageElections() {
   };
 
   const handleActivateElection = async (election) => {
+    // Check if election has expired
+    const now = new Date();
+    const endDate = new Date(election.end_time);
+    
+    if (endDate < now) {
+      toast.error("Cannot activate an expired election. The end date has passed.");
+      return;
+    }
+
     try {
       const { count, error: positionCheck } = await supabase
         .from("positions")
@@ -580,20 +636,20 @@ export default function ManageElections() {
   };
 
   const exportToExcel = () => {
-    const exportData = filteredElections.map((election) => ({
-      Title: election.title,
-      Year: election.election_year,
-      "Voting Period": election.voting_periods?.title || "N/A",
-      "Start Date": new Date(election.start_time).toLocaleString(),
-      "End Date": new Date(election.end_time).toLocaleString(),
-      "Positions Count": election.positions?.[0]?.count || 0,
-      Status: election.is_active
-        ? "Active"
-        : new Date(election.end_time) < new Date()
-          ? "Completed"
-          : "Upcoming",
-      Description: election.description || "N/A",
-    }));
+    const exportData = filteredElections.map((election) => {
+      const status = getElectionStatus(election);
+      return {
+        Title: election.title,
+        Year: election.election_year,
+        "Voting Period": election.voting_periods?.title || "N/A",
+        "Start Date": new Date(election.start_time).toLocaleString(),
+        "End Date": new Date(election.end_time).toLocaleString(),
+        "Positions Count": election.positions?.[0]?.count || 0,
+        Status: status.label,
+        "Has Expired": new Date(election.end_time) < new Date() ? "Yes" : "No",
+        Description: election.description || "N/A",
+      };
+    });
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
@@ -620,44 +676,73 @@ export default function ManageElections() {
     const now = new Date();
     const start = new Date(election.start_time);
     const end = new Date(election.end_time);
+    const hasExpired = end < now;
+
+    // Check if election has expired (end date passed)
+    if (hasExpired && election.is_active) {
+      return {
+        label: "Expired",
+        color: "bg-red-500/20 text-red-400",
+        icon: FaTimesCircle,
+        description: "This election has passed its end date",
+      };
+    }
 
     if (election.is_active) {
-      if (now < start)
+      if (now < start) {
         return {
           label: "Upcoming",
           color: "bg-blue-500/20 text-blue-400",
           icon: FaClock,
+          description: "Scheduled to start soon",
         };
-      if (now >= start && now <= end)
+      }
+      if (now >= start && now <= end) {
         return {
           label: "Active",
           color: "bg-green-500/20 text-green-400",
           icon: FaPlay,
+          description: "Currently ongoing",
         };
-      if (now > end)
+      }
+      if (now > end) {
         return {
-          label: "Ended",
-          color: "bg-gray-500/20 text-gray-400",
-          icon: FaStop,
+          label: "Expired",
+          color: "bg-red-500/20 text-red-400",
+          icon: FaTimesCircle,
+          description: "End date has passed",
         };
+      }
     }
-    if (now > end)
+    
+    if (now > end) {
       return {
         label: "Completed",
         color: "bg-gray-500/20 text-gray-400",
         icon: FaCheckCircle,
+        description: "Voting has ended",
       };
-    if (now < start)
+    }
+    
+    if (now < start) {
       return {
         label: "Upcoming",
         color: "bg-blue-500/20 text-blue-400",
         icon: FaClock,
+        description: `Starts ${start.toLocaleDateString()}`,
       };
+    }
+    
     return {
       label: "Inactive",
-      color: "bg-red-500/20 text-red-400",
-      icon: FaTimesCircle,
+      color: "bg-yellow-500/20 text-yellow-400",
+      icon: FaHourglassHalf,
+      description: "Not currently active",
     };
+  };
+
+  const isElectionExpired = (endTime) => {
+    return new Date(endTime) < new Date();
   };
 
   useEffect(() => {
@@ -680,11 +765,15 @@ export default function ManageElections() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center">
+      <div className={`min-h-screen flex items-center justify-center ${
+        theme === "light" ? "bg-gray-50" : "bg-gradient-to-br from-gray-900 to-gray-800"
+      }`}>
         <Toaster position="top-center" richColors />
         <div className="text-center">
-          <FaSpinner className="animate-spin text-4xl text-green-500 mx-auto mb-4" />
-          <p className="text-white">Loading elections...</p>
+          <FaSpinner className="animate-spin text-4xl text-teal-500 mx-auto mb-4" />
+          <p className={theme === "light" ? "text-gray-600" : "text-white"}>
+            Loading elections...
+          </p>
         </div>
       </div>
     );
@@ -693,94 +782,176 @@ export default function ManageElections() {
   if (!isAuthenticated) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800">
+    <div className={`min-h-screen transition-colors duration-300 ${
+      theme === "light" ? "bg-gray-50" : "bg-gradient-to-br from-gray-900 to-gray-800"
+    }`}>
       <Toaster position="top-center" richColors closeButton />
+
+      {/* Theme Toggle Button */}
+      <button
+        onClick={toggleTheme}
+        className="fixed bottom-6 right-6 z-50 p-3 rounded-full shadow-lg transition-all duration-300 hover:scale-110"
+        style={{
+          backgroundColor: theme === "light" ? "#0f766e" : "#fbbf24",
+          color: theme === "light" ? "#ffffff" : "#1f2937",
+        }}
+      >
+        {theme === "light" ? <FaMoon size={20} /> : <FaSun size={20} />}
+      </button>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">Manage Elections</h1>
-          <p className="text-gray-300 mt-2">
+          <h1 className={`text-3xl font-bold ${
+            theme === "light" ? "text-gray-900" : "text-white"
+          }`}>
+            Manage Elections
+          </h1>
+          <p className={`mt-2 ${
+            theme === "light" ? "text-gray-600" : "text-gray-300"
+          }`}>
             Create elections, manage positions, and oversee voting periods
           </p>
-          <p className="text-green-400 text-sm mt-1">
+          <p className="text-teal-600 dark:text-teal-400 text-sm mt-1">
             Logged in as: {admin?.email}
           </p>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          <div className={`rounded-xl p-4 border ${
+            theme === "light"
+              ? "bg-white border-gray-200 shadow-sm"
+              : "bg-white/10 backdrop-blur-lg border-white/20"
+          }`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white/70 text-xs">Total Elections</p>
-                <p className="text-2xl font-bold text-white mt-1">
-                  {stats.total}
-                </p>
+                <p className={`text-xs ${
+                  theme === "light" ? "text-gray-500" : "text-white/70"
+                }`}>Total Elections</p>
+                <p className={`text-2xl font-bold mt-1 ${
+                  theme === "light" ? "text-gray-900" : "text-white"
+                }`}>{stats.total}</p>
               </div>
-              <FaUniversity className="text-2xl text-blue-400" />
+              <FaUniversity className={`text-2xl ${
+                theme === "light" ? "text-teal-500" : "text-blue-400"
+              }`} />
             </div>
           </div>
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
+          
+          <div className={`rounded-xl p-4 border ${
+            theme === "light"
+              ? "bg-white border-gray-200 shadow-sm"
+              : "bg-white/10 backdrop-blur-lg border-white/20"
+          }`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white/70 text-xs">Active</p>
-                <p className="text-2xl font-bold text-green-400 mt-1">
+                <p className={`text-xs ${
+                  theme === "light" ? "text-gray-500" : "text-white/70"
+                }`}>Active</p>
+                <p className="text-2xl font-bold mt-1 text-green-600 dark:text-green-400">
                   {stats.active}
                 </p>
               </div>
-              <FaPlay className="text-2xl text-green-400" />
+              <FaPlay className="text-2xl text-green-500" />
             </div>
           </div>
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
+          
+          <div className={`rounded-xl p-4 border ${
+            theme === "light"
+              ? "bg-white border-gray-200 shadow-sm"
+              : "bg-white/10 backdrop-blur-lg border-white/20"
+          }`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white/70 text-xs">Upcoming</p>
-                <p className="text-2xl font-bold text-blue-400 mt-1">
+                <p className={`text-xs ${
+                  theme === "light" ? "text-gray-500" : "text-white/70"
+                }`}>Upcoming</p>
+                <p className="text-2xl font-bold mt-1 text-blue-600 dark:text-blue-400">
                   {stats.upcoming}
                 </p>
               </div>
-              <FaClock className="text-2xl text-blue-400" />
+              <FaClock className="text-2xl text-blue-500" />
             </div>
           </div>
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
+          
+          <div className={`rounded-xl p-4 border ${
+            theme === "light"
+              ? "bg-white border-gray-200 shadow-sm"
+              : "bg-white/10 backdrop-blur-lg border-white/20"
+          }`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white/70 text-xs">Completed</p>
-                <p className="text-2xl font-bold text-gray-400 mt-1">
+                <p className={`text-xs ${
+                  theme === "light" ? "text-gray-500" : "text-white/70"
+                }`}>Completed</p>
+                <p className="text-2xl font-bold mt-1 text-gray-600 dark:text-gray-400">
                   {stats.completed}
                 </p>
               </div>
-              <FaCheckCircle className="text-2xl text-gray-400" />
+              <FaCheckCircle className="text-2xl text-gray-500" />
+            </div>
+          </div>
+
+          <div className={`rounded-xl p-4 border ${
+            theme === "light"
+              ? "bg-white border-gray-200 shadow-sm"
+              : "bg-white/10 backdrop-blur-lg border-white/20"
+          }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-xs ${
+                  theme === "light" ? "text-gray-500" : "text-white/70"
+                }`}>Expired</p>
+                <p className="text-2xl font-bold mt-1 text-red-600 dark:text-red-400">
+                  {stats.expired}
+                </p>
+              </div>
+              <FaTimesCircle className="text-2xl text-red-500" />
             </div>
           </div>
         </div>
 
         {/* Filters Bar */}
-        <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 sm:p-6 border border-white/20 mb-6">
+        <div className={`rounded-xl p-4 sm:p-6 border mb-6 ${
+          theme === "light"
+            ? "bg-white border-gray-200 shadow-sm"
+            : "bg-white/10 backdrop-blur-lg border-white/20"
+        }`}>
           <div className="flex flex-col sm:flex-row gap-4 justify-between items-stretch sm:items-center">
             <div className="flex-1 min-w-[200px]">
               <div className="relative">
-                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 ${
+                  theme === "light" ? "text-gray-400" : "text-gray-500"
+                }`} />
                 <input
                   type="text"
                   placeholder="Search by title or year..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-green-500"
+                  className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    theme === "light"
+                      ? "bg-white border-gray-300 text-gray-900 placeholder-gray-400"
+                      : "bg-white/5 border-white/20 text-white placeholder-gray-400"
+                  }`}
                 />
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap">
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-green-500"
+                className={`px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                  theme === "light"
+                    ? "bg-white border-gray-300 text-gray-900"
+                    : "bg-white/5 border-white/20 text-white"
+                }`}
               >
                 <option value="all">All Status</option>
                 <option value="active">Active</option>
                 <option value="upcoming">Upcoming</option>
                 <option value="completed">Completed</option>
+                <option value="expired">Expired</option>
               </select>
               <button
                 onClick={() => {
@@ -788,7 +959,7 @@ export default function ManageElections() {
                   setEditingElection(null);
                   setShowAddModal(true);
                 }}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white transition"
+                className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition"
               >
                 <FaPlus /> Create Election
               </button>
@@ -803,41 +974,46 @@ export default function ManageElections() {
         </div>
 
         {/* Elections Table */}
-        <div className="bg-white/10 backdrop-blur-lg rounded-xl border border-white/20 overflow-hidden">
+        <div className={`rounded-xl border overflow-hidden ${
+          theme === "light"
+            ? "bg-white border-gray-200 shadow-sm"
+            : "bg-white/10 backdrop-blur-lg border-white/20"
+        }`}>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1000px]">
-              <thead className="bg-white/5 border-b border-white/10">
+              <thead className={`border-b ${
+                theme === "light" ? "bg-gray-50 border-gray-200" : "bg-white/5 border-white/10"
+              }`}>
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                     Election Title
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                     Voting Period
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                     Year
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                     Positions
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                     Date Range
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/10">
+              <tbody className={`divide-y ${
+                theme === "light" ? "divide-gray-100" : "divide-white/10"
+              }`}>
                 {filteredElections.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan="7"
-                      className="px-6 py-12 text-center text-gray-400"
-                    >
+                    <td colSpan="7" className="px-6 py-12 text-center text-gray-400">
                       No elections found
                     </td>
                   </tr>
@@ -846,41 +1022,60 @@ export default function ManageElections() {
                     const status = getElectionStatus(election);
                     const StatusIcon = status.icon;
                     const positionsCount = election.positions?.[0]?.count || 0;
+                    const expired = isElectionExpired(election.end_time);
+                    
                     return (
                       <tr
                         key={election.id}
-                        className="hover:bg-white/5 transition"
+                        className={`transition ${
+                          theme === "light" ? "hover:bg-gray-50" : "hover:bg-white/5"
+                        } ${expired && !election.is_active ? "opacity-75" : ""}`}
                       >
                         <td className="px-6 py-4">
-                          <div className="text-white font-medium">
+                          <div className={`font-medium ${
+                            theme === "light" ? "text-gray-900" : "text-white"
+                          }`}>
                             {election.title}
                           </div>
                           {election.description && (
-                            <div className="text-gray-400 text-xs truncate max-w-[250px]">
+                            <div className={`text-xs truncate max-w-[250px] mt-1 ${
+                              theme === "light" ? "text-gray-500" : "text-gray-400"
+                            }`}>
                               {election.description}
                             </div>
                           )}
+                          {expired && (
+                            <span className="inline-block mt-1 text-xs text-red-500">
+                              ⚠️ Expired
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4">
-                          <div className="text-gray-300 text-sm">
+                          <div className={`text-sm ${
+                            theme === "light" ? "text-gray-600" : "text-gray-300"
+                          }`}>
                             {election.voting_periods?.title || "N/A"}
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="text-white text-sm">
+                          <div className={`text-sm ${
+                            theme === "light" ? "text-gray-900" : "text-white"
+                          }`}>
                             {election.election_year}
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <button
                             onClick={() => handleManagePositions(election)}
-                            className="flex items-center gap-2 text-blue-400 hover:text-blue-300 transition text-sm"
+                            className="flex items-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 transition text-sm"
                           >
                             <FaLayerGroup /> {positionsCount} Positions
                           </button>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="text-gray-300 text-xs">
+                          <div className={`text-xs ${
+                            theme === "light" ? "text-gray-600" : "text-gray-400"
+                          }`}>
                             <div>{formatDateTime(election.start_time)}</div>
                             <div>to</div>
                             <div>{formatDateTime(election.end_time)}</div>
@@ -889,6 +1084,7 @@ export default function ManageElections() {
                         <td className="px-6 py-4">
                           <span
                             className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${status.color}`}
+                            title={status.description}
                           >
                             <StatusIcon className="text-xs" />
                             {status.label}
@@ -898,15 +1094,15 @@ export default function ManageElections() {
                           <div className="flex items-center gap-2 flex-wrap">
                             <button
                               onClick={() => handleManagePositions(election)}
-                              className="text-purple-400 hover:text-purple-300 transition"
+                              className="text-purple-600 dark:text-purple-400 hover:text-purple-500 transition"
                               title="Manage Positions"
                             >
                               <FaLayerGroup />
                             </button>
-                            {!election.is_active && (
+                            {!election.is_active && !expired && (
                               <button
                                 onClick={() => handleActivateElection(election)}
-                                className="text-green-400 hover:text-green-300 transition"
+                                className="text-green-600 dark:text-green-400 hover:text-green-500 transition"
                                 title="Activate election"
                               >
                                 <FaPlay />
@@ -914,10 +1110,8 @@ export default function ManageElections() {
                             )}
                             {election.is_active && (
                               <button
-                                onClick={() =>
-                                  handleDeactivateElection(election)
-                                }
-                                className="text-yellow-400 hover:text-yellow-300 transition"
+                                onClick={() => handleDeactivateElection(election)}
+                                className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-500 transition"
                                 title="Deactivate election"
                               >
                                 <FaStop />
@@ -925,15 +1119,14 @@ export default function ManageElections() {
                             )}
                             <button
                               onClick={() => editElection(election)}
-                              className="text-blue-400 hover:text-blue-300 transition"
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-500 transition"
                               title="Edit election"
                             >
                               <FaEdit />
                             </button>
-                            {/* Delete Button with Confirmation */}
                             <button
                               onClick={() => confirmDeleteElection(election)}
-                              className="text-red-400 hover:text-red-300 transition"
+                              className="text-red-600 dark:text-red-400 hover:text-red-500 transition"
                               title="Delete election"
                             >
                               <FaTrash />
@@ -953,9 +1146,15 @@ export default function ManageElections() {
       {/* Add/Edit Election Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center p-6 border-b border-white/10">
-              <h2 className="text-2xl font-bold text-white">
+          <div className={`rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto ${
+            theme === "light" ? "bg-white" : "bg-gray-800"
+          }`}>
+            <div className={`flex justify-between items-center p-6 border-b ${
+              theme === "light" ? "border-gray-200" : "border-white/10"
+            }`}>
+              <h2 className={`text-2xl font-bold ${
+                theme === "light" ? "text-gray-900" : "text-white"
+              }`}>
                 {editingElection ? "Edit Election" : "Create New Election"}
               </h2>
               <button
@@ -964,96 +1163,108 @@ export default function ManageElections() {
                   setEditingElection(null);
                   resetForm();
                 }}
-                className="text-gray-400 hover:text-white transition"
+                className={`transition ${
+                  theme === "light" ? "text-gray-400 hover:text-gray-600" : "text-gray-400 hover:text-white"
+                }`}
               >
                 <FaTimes />
               </button>
             </div>
             <form
-              onSubmit={
-                editingElection ? handleUpdateElection : handleAddElection
-              }
+              onSubmit={editingElection ? handleUpdateElection : handleAddElection}
               className="p-6 space-y-5"
             >
               <div>
-                <label className="block text-gray-300 mb-2">
+                <label className={`block mb-2 ${
+                  theme === "light" ? "text-gray-700" : "text-gray-300"
+                }`}>
                   Election Title *
                 </label>
                 <input
                   type="text"
                   value={formData.title}
-                  onChange={(e) =>
-                    setFormData({ ...formData, title: e.target.value })
-                  }
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    theme === "light"
+                      ? "bg-white border-gray-300 text-gray-900"
+                      : "bg-gray-700 border-gray-600 text-white"
+                  }`}
                   placeholder="Student Government Elections 2025"
                   required
                 />
                 {formErrors.title && (
-                  <p className="text-red-400 text-xs mt-1">
-                    {formErrors.title}
-                  </p>
+                  <p className="text-red-500 text-xs mt-1">{formErrors.title}</p>
                 )}
               </div>
+              
               <div>
-                <label className="block text-gray-300 mb-2">
+                <label className={`block mb-2 ${
+                  theme === "light" ? "text-gray-700" : "text-gray-300"
+                }`}>
                   Voting Period *
                 </label>
                 <select
                   value={formData.voting_period_id}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      voting_period_id: e.target.value,
-                    })
-                  }
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                  onChange={(e) => setFormData({ ...formData, voting_period_id: e.target.value })}
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    theme === "light"
+                      ? "bg-white border-gray-300 text-gray-900"
+                      : "bg-gray-700 border-gray-600 text-white"
+                  }`}
                   required
                 >
                   <option value="">Select a voting period...</option>
                   {votingPeriods.map((period) => (
                     <option key={period.id} value={period.id}>
-                      {period.title} (
-                      {new Date(period.start_date).toLocaleDateString()} -{" "}
+                      {period.title} ({new Date(period.start_date).toLocaleDateString()} -{" "}
                       {new Date(period.end_date).toLocaleDateString()})
                       {period.is_active && " - ACTIVE"}
                     </option>
                   ))}
                 </select>
                 {formErrors.voting_period_id && (
-                  <p className="text-red-400 text-xs mt-1">
-                    {formErrors.voting_period_id}
-                  </p>
+                  <p className="text-red-500 text-xs mt-1">{formErrors.voting_period_id}</p>
                 )}
               </div>
+              
               <div>
-                <label className="block text-gray-300 mb-2">Description</label>
+                <label className={`block mb-2 ${
+                  theme === "light" ? "text-gray-700" : "text-gray-300"
+                }`}>
+                  Description
+                </label>
                 <textarea
                   value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={3}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    theme === "light"
+                      ? "bg-white border-gray-300 text-gray-900"
+                      : "bg-gray-700 border-gray-600 text-white"
+                  }`}
                   placeholder="Brief description of this election..."
                 />
               </div>
+              
               <div>
-                <label className="block text-gray-300 mb-2">
+                <label className={`block mb-2 ${
+                  theme === "light" ? "text-gray-700" : "text-gray-300"
+                }`}>
                   Election Year *
                 </label>
                 <div className="relative">
-                  <FaCalendarAlt className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <FaCalendarAlt className={`absolute left-3 top-1/2 -translate-y-1/2 ${
+                    theme === "light" ? "text-gray-400" : "text-gray-500"
+                  }`} />
                   <input
                     type="number"
                     value={formData.election_year}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        election_year: e.target.value,
-                      })
-                    }
-                    className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                    onChange={(e) => setFormData({ ...formData, election_year: e.target.value })}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      theme === "light"
+                        ? "bg-white border-gray-300 text-gray-900"
+                        : "bg-gray-700 border-gray-600 text-white"
+                    }`}
                     placeholder="2025"
                     min="2000"
                     max="2100"
@@ -1061,94 +1272,109 @@ export default function ManageElections() {
                   />
                 </div>
               </div>
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-gray-300 mb-2">
+                  <label className={`block mb-2 ${
+                    theme === "light" ? "text-gray-700" : "text-gray-300"
+                  }`}>
                     Start Date *
                   </label>
                   <input
                     type="date"
                     value={formData.start_date}
-                    onChange={(e) =>
-                      setFormData({ ...formData, start_date: e.target.value })
-                    }
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                    onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      theme === "light"
+                        ? "bg-white border-gray-300 text-gray-900"
+                        : "bg-gray-700 border-gray-600 text-white"
+                    }`}
                     required
                   />
-                  {formErrors.start_date && (
-                    <p className="text-red-400 text-xs mt-1">
-                      {formErrors.start_date}
-                    </p>
-                  )}
                 </div>
                 <div>
-                  <label className="block text-gray-300 mb-2">
+                  <label className={`block mb-2 ${
+                    theme === "light" ? "text-gray-700" : "text-gray-300"
+                  }`}>
                     Start Time *
                   </label>
                   <input
                     type="time"
                     value={formData.start_time}
-                    onChange={(e) =>
-                      setFormData({ ...formData, start_time: e.target.value })
-                    }
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                    onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      theme === "light"
+                        ? "bg-white border-gray-300 text-gray-900"
+                        : "bg-gray-700 border-gray-600 text-white"
+                    }`}
                     required
                   />
                 </div>
               </div>
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-gray-300 mb-2">End Date *</label>
+                  <label className={`block mb-2 ${
+                    theme === "light" ? "text-gray-700" : "text-gray-300"
+                  }`}>
+                    End Date *
+                  </label>
                   <input
                     type="date"
                     value={formData.end_date}
-                    onChange={(e) =>
-                      setFormData({ ...formData, end_date: e.target.value })
-                    }
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                    onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      theme === "light"
+                        ? "bg-white border-gray-300 text-gray-900"
+                        : "bg-gray-700 border-gray-600 text-white"
+                    }`}
                     required
                   />
                   {formErrors.end_date && (
-                    <p className="text-red-400 text-xs mt-1">
-                      {formErrors.end_date}
-                    </p>
+                    <p className="text-red-500 text-xs mt-1">{formErrors.end_date}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-gray-300 mb-2">End Time *</label>
+                  <label className={`block mb-2 ${
+                    theme === "light" ? "text-gray-700" : "text-gray-300"
+                  }`}>
+                    End Time *
+                  </label>
                   <input
                     type="time"
                     value={formData.end_time}
-                    onChange={(e) =>
-                      setFormData({ ...formData, end_time: e.target.value })
-                    }
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                    onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      theme === "light"
+                        ? "bg-white border-gray-300 text-gray-900"
+                        : "bg-gray-700 border-gray-600 text-white"
+                    }`}
                     required
                   />
                 </div>
               </div>
+              
               <div className="flex items-center gap-3">
                 <input
                   type="checkbox"
                   id="is_active"
                   checked={formData.is_active}
-                  onChange={(e) =>
-                    setFormData({ ...formData, is_active: e.target.checked })
-                  }
-                  className="w-4 h-4"
+                  onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                  className="w-4 h-4 text-teal-600"
                 />
-                <label htmlFor="is_active" className="text-gray-300">
+                <label htmlFor="is_active" className={theme === "light" ? "text-gray-700" : "text-gray-300"}>
                   Activate this election immediately
                 </label>
               </div>
+              
               {formData.is_active && (
                 <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-3">
-                  <p className="text-yellow-400 text-sm">
-                    ⚠️ Activating this election will deactivate any currently
-                    active election.
+                  <p className="text-yellow-600 dark:text-yellow-400 text-sm">
+                    ⚠️ Activating this election will deactivate any currently active election.
                   </p>
                 </div>
               )}
+              
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
@@ -1157,22 +1383,20 @@ export default function ManageElections() {
                     setEditingElection(null);
                     resetForm();
                   }}
-                  className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition"
+                  className={`flex-1 px-4 py-2 rounded-lg transition ${
+                    theme === "light"
+                      ? "bg-gray-200 hover:bg-gray-300 text-gray-700"
+                      : "bg-gray-700 hover:bg-gray-600 text-white"
+                  }`}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white transition disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition disabled:opacity-50"
                 >
-                  {submitting ? (
-                    <FaSpinner className="animate-spin mx-auto" />
-                  ) : editingElection ? (
-                    "Update"
-                  ) : (
-                    "Create"
-                  )}
+                  {submitting ? <FaSpinner className="animate-spin mx-auto" /> : editingElection ? "Update" : "Create"}
                 </button>
               </div>
             </form>
@@ -1183,13 +1407,21 @@ export default function ManageElections() {
       {/* Manage Positions Modal */}
       {showPositionsModal && selectedElection && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center p-6 border-b border-white/10">
+          <div className={`rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto ${
+            theme === "light" ? "bg-white" : "bg-gray-800"
+          }`}>
+            <div className={`flex justify-between items-center p-6 border-b ${
+              theme === "light" ? "border-gray-200" : "border-white/10"
+            }`}>
               <div>
-                <h2 className="text-2xl font-bold text-white">
+                <h2 className={`text-2xl font-bold ${
+                  theme === "light" ? "text-gray-900" : "text-white"
+                }`}>
                   Manage Positions
                 </h2>
-                <p className="text-gray-400 text-sm mt-1">
+                <p className={`text-sm mt-1 ${
+                  theme === "light" ? "text-gray-500" : "text-gray-400"
+                }`}>
                   {selectedElection.title}
                 </p>
               </div>
@@ -1200,65 +1432,75 @@ export default function ManageElections() {
                   setPositions([]);
                   setEditingPosition(null);
                 }}
-                className="text-gray-400 hover:text-white transition"
+                className={`transition ${
+                  theme === "light" ? "text-gray-400 hover:text-gray-600" : "text-gray-400 hover:text-white"
+                }`}
               >
                 <FaTimes />
               </button>
             </div>
+            
             <div className="p-6">
-              <div className="bg-white/5 rounded-lg p-4 mb-6">
-                <h3 className="text-lg font-semibold text-white mb-4">
+              <div className={`rounded-lg p-4 mb-6 ${
+                theme === "light" ? "bg-gray-50" : "bg-white/5"
+              }`}>
+                <h3 className={`text-lg font-semibold mb-4 ${
+                  theme === "light" ? "text-gray-900" : "text-white"
+                }`}>
                   {editingPosition ? "Edit Position" : "Add New Position"}
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-gray-300 text-sm mb-2">
+                    <label className={`block text-sm mb-2 ${
+                      theme === "light" ? "text-gray-700" : "text-gray-300"
+                    }`}>
                       Position Title *
                     </label>
                     <input
                       type="text"
                       value={positionForm.title}
-                      onChange={(e) =>
-                        setPositionForm({
-                          ...positionForm,
-                          title: e.target.value,
-                        })
-                      }
-                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                      onChange={(e) => setPositionForm({ ...positionForm, title: e.target.value })}
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                        theme === "light"
+                          ? "bg-white border-gray-300 text-gray-900"
+                          : "bg-gray-700 border-gray-600 text-white"
+                      }`}
                       placeholder="President"
                     />
                   </div>
                   <div>
-                    <label className="block text-gray-300 text-sm mb-2">
+                    <label className={`block text-sm mb-2 ${
+                      theme === "light" ? "text-gray-700" : "text-gray-300"
+                    }`}>
                       Order Number
                     </label>
                     <input
                       type="number"
                       value={positionForm.order_number}
-                      onChange={(e) =>
-                        setPositionForm({
-                          ...positionForm,
-                          order_number: parseInt(e.target.value),
-                        })
-                      }
-                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                      onChange={(e) => setPositionForm({ ...positionForm, order_number: parseInt(e.target.value) })}
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                        theme === "light"
+                          ? "bg-white border-gray-300 text-gray-900"
+                          : "bg-gray-700 border-gray-600 text-white"
+                      }`}
                       placeholder="1, 2, 3..."
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-gray-300 text-sm mb-2">
+                    <label className={`block text-sm mb-2 ${
+                      theme === "light" ? "text-gray-700" : "text-gray-300"
+                    }`}>
                       Description
                     </label>
                     <textarea
                       value={positionForm.description}
-                      onChange={(e) =>
-                        setPositionForm({
-                          ...positionForm,
-                          description: e.target.value,
-                        })
-                      }
+                      onChange={(e) => setPositionForm({ ...positionForm, description: e.target.value })}
                       rows={2}
-                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                        theme === "light"
+                          ? "bg-white border-gray-300 text-gray-900"
+                          : "bg-gray-700 border-gray-600 text-white"
+                      }`}
                       placeholder="Brief description of this position..."
                     />
                   </div>
@@ -1268,41 +1510,37 @@ export default function ManageElections() {
                     <button
                       onClick={() => {
                         setEditingPosition(null);
-                        setPositionForm({
-                          title: "",
-                          description: "",
-                          order_number: 999,
-                          max_votes: 1,
-                        });
+                        setPositionForm({ title: "", description: "", order_number: 999, max_votes: 1 });
                       }}
-                      className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg text-white transition"
+                      className={`px-4 py-2 rounded-lg transition ${
+                        theme === "light"
+                          ? "bg-gray-200 hover:bg-gray-300 text-gray-700"
+                          : "bg-gray-700 hover:bg-gray-600 text-white"
+                      }`}
                     >
                       Cancel Edit
                     </button>
                   )}
                   <button
-                    onClick={
-                      editingPosition ? handleUpdatePosition : handleAddPosition
-                    }
+                    onClick={editingPosition ? handleUpdatePosition : handleAddPosition}
                     disabled={submitting}
-                    className="px-6 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white transition disabled:opacity-50"
+                    className="px-6 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition disabled:opacity-50"
                   >
-                    {submitting ? (
-                      <FaSpinner className="animate-spin" />
-                    ) : editingPosition ? (
-                      "Update"
-                    ) : (
-                      "Add"
-                    )}
+                    {submitting ? <FaSpinner className="animate-spin" /> : editingPosition ? "Update" : "Add"}
                   </button>
                 </div>
               </div>
+              
               <div>
-                <h3 className="text-lg font-semibold text-white mb-4">
+                <h3 className={`text-lg font-semibold mb-4 ${
+                  theme === "light" ? "text-gray-900" : "text-white"
+                }`}>
                   Current Positions
                 </h3>
                 {positions.length === 0 ? (
-                  <div className="text-center py-8 text-gray-400">
+                  <div className={`text-center py-8 ${
+                    theme === "light" ? "text-gray-500" : "text-gray-400"
+                  }`}>
                     No positions added yet. Add your first position above.
                   </div>
                 ) : (
@@ -1310,19 +1548,27 @@ export default function ManageElections() {
                     {positions.map((position, idx) => (
                       <div
                         key={position.id}
-                        className="bg-white/5 rounded-lg p-4 flex items-start justify-between"
+                        className={`rounded-lg p-4 flex items-start justify-between ${
+                          theme === "light" ? "bg-gray-50" : "bg-white/5"
+                        }`}
                       >
                         <div className="flex-1">
                           <div className="flex items-center gap-3">
-                            <span className="text-gray-400 text-sm">
+                            <span className={`text-sm ${
+                              theme === "light" ? "text-gray-500" : "text-gray-400"
+                            }`}>
                               #{position.order_number || idx + 1}
                             </span>
-                            <h4 className="text-white font-medium">
+                            <h4 className={`font-medium ${
+                              theme === "light" ? "text-gray-900" : "text-white"
+                            }`}>
                               {position.title}
                             </h4>
                           </div>
                           {position.description && (
-                            <p className="text-gray-400 text-sm mt-1">
+                            <p className={`text-sm mt-1 ${
+                              theme === "light" ? "text-gray-500" : "text-gray-400"
+                            }`}>
                               {position.description}
                             </p>
                           )}
@@ -1330,14 +1576,14 @@ export default function ManageElections() {
                         <div className="flex gap-2">
                           <button
                             onClick={() => editPosition(position)}
-                            className="text-blue-400 hover:text-blue-300 transition"
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-500 transition"
                             title="Edit position"
                           >
                             <FaEdit />
                           </button>
                           <button
                             onClick={() => handleDeletePosition(position.id)}
-                            className="text-red-400 hover:text-red-300 transition"
+                            className="text-red-600 dark:text-red-400 hover:text-red-500 transition"
                             title="Delete position"
                           >
                             <FaTrash />
@@ -1348,13 +1594,14 @@ export default function ManageElections() {
                   </div>
                 )}
               </div>
-              <div className="mt-6 pt-4 border-t border-white/10">
+              
+              <div className="mt-6 pt-4 border-t border-gray-200 dark:border-white/10">
                 <button
                   onClick={() => {
                     setShowPositionsModal(false);
                     fetchElections();
                   }}
-                  className="w-full px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white transition"
+                  className="w-full px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition"
                 >
                   Done
                 </button>

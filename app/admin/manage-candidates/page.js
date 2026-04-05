@@ -9,7 +9,8 @@ import {
   FaSpinner, FaUserPlus, FaTrash, FaEdit, FaSearch, FaDownload, 
   FaEnvelope, FaIdCard, FaGraduationCap, FaBuilding, FaCheckCircle,
   FaTimesCircle, FaUserCheck, FaEye, FaEyeSlash, FaFileExcel,
-  FaTimes, FaImage, FaCalendarAlt, FaUniversity, FaCamera, FaTrashAlt
+  FaTimes, FaImage, FaCalendarAlt, FaUniversity, FaCamera, FaTrashAlt,
+  FaSun, FaMoon, FaChartLine
 } from 'react-icons/fa';
 import * as XLSX from 'xlsx';
 
@@ -27,6 +28,7 @@ export default function ManageCandidates() {
   const [editingCandidate, setEditingCandidate] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
+  const [theme, setTheme] = useState('light');
   const fileInputRef = useRef(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -54,6 +56,24 @@ export default function ManageCandidates() {
   });
   const [positions, setPositions] = useState([]);
   const router = useRouter();
+
+  // Theme management
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('candidatesTheme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+    setTheme(initialTheme);
+    document.documentElement.setAttribute('data-theme', initialTheme);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('candidatesTheme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -119,52 +139,50 @@ export default function ManageCandidates() {
     }
   };
 
-  // Function to sync position to positions table
-const syncPositionToTable = async (electionId, positionTitle, orderNumber = null) => {
-  if (!electionId || !positionTitle) return null;
-  
-  try {
-    // Check if position already exists for this election
-    const { data: existingPosition } = await supabase
-      .from('positions')
-      .select('id')
-      .eq('election_id', electionId)
-      .eq('title', positionTitle)
-      .maybeSingle();
+  const syncPositionToTable = async (electionId, positionTitle, orderNumber = null) => {
+    if (!electionId || !positionTitle) return null;
     
-    if (existingPosition) {
-      return existingPosition.id;
+    try {
+      const { data: existingPosition } = await supabase
+        .from('positions')
+        .select('id')
+        .eq('election_id', electionId)
+        .eq('title', positionTitle)
+        .maybeSingle();
+      
+      if (existingPosition) {
+        return existingPosition.id;
+      }
+      
+      const { data: newPosition, error } = await supabase
+        .from('positions')
+        .insert({
+          election_id: electionId,
+          title: positionTitle,
+          description: `Candidates for ${positionTitle}`,
+          order_number: orderNumber || 999,
+          order_index: orderNumber || 999,
+          max_votes: 1,
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error creating position:', error);
+        throw error;
+      }
+      
+      toast.success(`Position "${positionTitle}" created automatically`);
+      return newPosition.id;
+      
+    } catch (error) {
+      console.error('Error syncing position:', error);
+      toast.error(`Failed to create position: ${error.message}`);
+      return null;
     }
-    
-    // Create new position - using correct column names from your table
-    const { data: newPosition, error } = await supabase
-      .from('positions')
-      .insert({
-        election_id: electionId,
-        title: positionTitle,
-        description: `Candidates for ${positionTitle}`,
-        order_number: orderNumber || 999,
-        order_index: orderNumber || 999,
-        max_votes: 1,
-        created_at: new Date().toISOString()
-      })
-      .select()
-      .single();
-    
-    if (error) {
-      console.error('Error creating position:', error);
-      throw error;
-    }
-    
-    toast.success(`Position "${positionTitle}" created automatically`);
-    return newPosition.id;
-    
-  } catch (error) {
-    console.error('Error syncing position:', error);
-    toast.error(`Failed to create position: ${error.message}`);
-    return null;
-  }
-};
+  };
+
   const fetchCandidates = async () => {
     try {
       let query = supabase
@@ -190,7 +208,6 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
       setCandidates(data || []);
       setFilteredCandidates(data || []);
       
-      // Extract unique positions for filter
       const uniquePositions = [...new Set((data || []).map(c => c.position).filter(p => p))];
       setPositions(uniquePositions);
       
@@ -320,7 +337,6 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
     let imageUrl = formData.image_url;
     
     try {
-      // FIRST: Sync position to positions table
       const positionId = await syncPositionToTable(
         formData.election_id,
         formData.position.trim()
@@ -331,13 +347,11 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
         return;
       }
       
-      // THEN: Upload image if any
       if (formData.image_file) {
         const uploadedUrl = await uploadImage(formData.image_file);
         if (uploadedUrl) imageUrl = uploadedUrl;
       }
       
-      // FINALLY: Insert candidate with position_id
       const candidateData = {
         name: formData.name.trim(),
         position: formData.position.trim(),
@@ -379,7 +393,6 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
     let imageUrl = formData.image_url;
     
     try {
-      // Sync position if changed
       let positionId = editingCandidate.position_id;
       if (editingCandidate.position !== formData.position.trim() || 
           editingCandidate.election_id !== formData.election_id) {
@@ -389,11 +402,9 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
         );
       }
       
-      // Upload new image if any
       if (formData.image_file) {
         const uploadedUrl = await uploadImage(formData.image_file);
         if (uploadedUrl) {
-          // Delete old image
           if (editingCandidate?.image_url) {
             const oldImagePath = editingCandidate.image_url.split('/').pop();
             if (oldImagePath) {
@@ -645,7 +656,7 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
 
   const getStatusBadge = (candidate) => {
     if (candidate.is_approved) {
-      return { label: 'Approved', color: 'bg-green-500/20 text-green-400', icon: FaCheckCircle };
+      return { label: 'Approved', color: 'bg-teal-500/20 text-teal-400', icon: FaCheckCircle };
     } else if (candidate.rejection_reason) {
       return { label: 'Rejected', color: 'bg-red-500/20 text-red-400', icon: FaTimesCircle };
     } else {
@@ -655,11 +666,13 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center">
+      <div className={`min-h-screen flex items-center justify-center ${
+        theme === 'light' ? 'bg-gray-50' : 'bg-gradient-to-br from-gray-900 to-gray-800'
+      }`}>
         <Toaster position="top-center" richColors />
         <div className="text-center">
-          <FaSpinner className="animate-spin text-4xl text-green-500 mx-auto mb-4" />
-          <p className="text-white">Loading candidates...</p>
+          <FaSpinner className="animate-spin text-4xl text-teal-500 mx-auto mb-4" />
+          <p className={theme === 'light' ? 'text-gray-600' : 'text-white'}>Loading candidates...</p>
         </div>
       </div>
     );
@@ -668,74 +681,130 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
   if (!isAuthenticated) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800">
+    <div className={`min-h-screen transition-colors duration-300 ${
+      theme === 'light' ? 'bg-gray-50' : 'bg-gradient-to-br from-gray-900 to-gray-800'
+    }`}>
       <Toaster position="top-center" richColors closeButton />
       
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      {/* Theme Toggle Button */}
+      <button
+        onClick={toggleTheme}
+        className="fixed bottom-6 right-6 z-50 p-3 rounded-full shadow-lg transition-all duration-300 hover:scale-110"
+        style={{
+          backgroundColor: theme === 'light' ? '#0f766e' : '#fbbf24',
+          color: theme === 'light' ? '#ffffff' : '#1f2937',
+        }}
+      >
+        {theme === 'light' ? <FaMoon size={20} /> : <FaSun size={20} />}
+      </button>
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pt-24">
         
         {/* Header */}
         <div className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-white">Manage Candidates</h1>
-          <p className="text-gray-300 mt-1 sm:mt-2 text-sm sm:text-base">
+          <h1 className={`text-2xl sm:text-3xl font-bold ${
+            theme === 'light' ? 'text-gray-900' : 'text-white'
+          }`}>
+            Manage Candidates
+          </h1>
+          <p className={`mt-1 sm:mt-2 text-sm sm:text-base ${
+            theme === 'light' ? 'text-gray-600' : 'text-gray-300'
+          }`}>
             View, approve, and manage election candidates across all years
           </p>
-          <p className="text-green-400 text-xs sm:text-sm mt-1">
+          <p className="text-teal-600 dark:text-teal-400 text-xs sm:text-sm mt-1">
             Logged in as: {admin?.email}
           </p>
         </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-3 sm:p-4 border border-white/20">
+          <div className={`rounded-xl p-3 sm:p-4 border ${
+            theme === 'light'
+              ? 'bg-white border-gray-200 shadow-sm'
+              : 'bg-white/10 backdrop-blur-lg border-white/20'
+          }`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white/70 text-xs">Total Candidates</p>
-                <p className="text-xl sm:text-2xl font-bold text-white mt-1">{stats.total}</p>
+                <p className={`text-xs ${
+                  theme === 'light' ? 'text-gray-500' : 'text-white/70'
+                }`}>Total Candidates</p>
+                <p className={`text-xl sm:text-2xl font-bold mt-1 ${
+                  theme === 'light' ? 'text-gray-900' : 'text-white'
+                }`}>{stats.total}</p>
               </div>
-              <FaUserPlus className="text-xl sm:text-2xl text-blue-400" />
+              <FaUserPlus className="text-xl sm:text-2xl text-teal-500" />
             </div>
           </div>
           
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-3 sm:p-4 border border-white/20">
+          <div className={`rounded-xl p-3 sm:p-4 border ${
+            theme === 'light'
+              ? 'bg-white border-gray-200 shadow-sm'
+              : 'bg-white/10 backdrop-blur-lg border-white/20'
+          }`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white/70 text-xs">Approved</p>
-                <p className="text-xl sm:text-2xl font-bold text-green-400 mt-1">{stats.approved}</p>
+                <p className={`text-xs ${
+                  theme === 'light' ? 'text-gray-500' : 'text-white/70'
+                }`}>Approved</p>
+                <p className="text-xl sm:text-2xl font-bold mt-1 text-teal-600 dark:text-teal-400">{stats.approved}</p>
               </div>
-              <FaCheckCircle className="text-xl sm:text-2xl text-green-400" />
+              <FaCheckCircle className="text-xl sm:text-2xl text-teal-500" />
             </div>
           </div>
           
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-3 sm:p-4 border border-white/20">
+          <div className={`rounded-xl p-3 sm:p-4 border ${
+            theme === 'light'
+              ? 'bg-white border-gray-200 shadow-sm'
+              : 'bg-white/10 backdrop-blur-lg border-white/20'
+          }`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white/70 text-xs">Pending</p>
-                <p className="text-xl sm:text-2xl font-bold text-yellow-400 mt-1">{stats.pending}</p>
+                <p className={`text-xs ${
+                  theme === 'light' ? 'text-gray-500' : 'text-white/70'
+                }`}>Pending</p>
+                <p className="text-xl sm:text-2xl font-bold mt-1 text-yellow-600 dark:text-yellow-400">{stats.pending}</p>
               </div>
-              <FaUserCheck className="text-xl sm:text-2xl text-yellow-400" />
+              <FaUserCheck className="text-xl sm:text-2xl text-teal-500" />
             </div>
           </div>
           
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-3 sm:p-4 border border-white/20">
+          <div className={`rounded-xl p-3 sm:p-4 border ${
+            theme === 'light'
+              ? 'bg-white border-gray-200 shadow-sm'
+              : 'bg-white/10 backdrop-blur-lg border-white/20'
+          }`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white/70 text-xs">Rejected</p>
-                <p className="text-xl sm:text-2xl font-bold text-red-400 mt-1">{stats.rejected}</p>
+                <p className={`text-xs ${
+                  theme === 'light' ? 'text-gray-500' : 'text-white/70'
+                }`}>Rejected</p>
+                <p className="text-xl sm:text-2xl font-bold mt-1 text-red-600 dark:text-red-400">{stats.rejected}</p>
               </div>
-              <FaTimesCircle className="text-xl sm:text-2xl text-red-400" />
+              <FaTimesCircle className="text-xl sm:text-2xl text-teal-500" />
             </div>
           </div>
         </div>
 
         {/* Filters Bar */}
-        <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 sm:p-6 border border-white/20 mb-6">
+        <div className={`rounded-xl p-4 sm:p-6 border mb-6 ${
+          theme === 'light'
+            ? 'bg-white border-gray-200 shadow-sm'
+            : 'bg-white/10 backdrop-blur-lg border-white/20'
+        }`}>
           <div className="flex flex-col gap-4">
             <div className="w-full">
-              <label className="block text-gray-300 text-sm mb-2">Filter by Election</label>
+              <label className={`block text-sm mb-2 ${
+                theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+              }`}>Filter by Election</label>
               <select
                 value={selectedElection}
                 onChange={(e) => setSelectedElection(e.target.value)}
-                className="w-full sm:w-80 px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
+                className={`w-full sm:w-80 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm ${
+                  theme === 'light'
+                    ? 'bg-white border-gray-300 text-gray-900'
+                    : 'bg-white/5 border-white/20 text-white'
+                }`}
               >
                 <option value="all">All Elections</option>
                 {elections.map(election => (
@@ -749,13 +818,19 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <div className="flex-1">
                 <div className="relative">
-                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                  <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 text-sm ${
+                    theme === 'light' ? 'text-gray-400' : 'text-gray-500'
+                  }`} />
                   <input
                     type="text"
                     placeholder="Search by name, position..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-green-500 text-sm"
+                    className={`w-full pl-9 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+                        : 'bg-white/5 border-white/20 text-white placeholder-gray-400'
+                    }`}
                   />
                 </div>
               </div>
@@ -764,7 +839,11 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
                 <select
                   value={selectedPosition}
                   onChange={(e) => setSelectedPosition(e.target.value)}
-                  className="flex-1 sm:flex-none px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
+                  className={`flex-1 sm:flex-none px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm ${
+                    theme === 'light'
+                      ? 'bg-white border-gray-300 text-gray-900'
+                      : 'bg-white/5 border-white/20 text-white'
+                  }`}
                 >
                   <option value="all">All Positions</option>
                   {positions.map(pos => (
@@ -775,7 +854,11 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
                 <select
                   value={selectedStatus}
                   onChange={(e) => setSelectedStatus(e.target.value)}
-                  className="flex-1 sm:flex-none px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
+                  className={`flex-1 sm:flex-none px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm ${
+                    theme === 'light'
+                      ? 'bg-white border-gray-300 text-gray-900'
+                      : 'bg-white/5 border-white/20 text-white'
+                  }`}
                 >
                   <option value="all">All Status</option>
                   <option value="approved">Approved</option>
@@ -785,14 +868,14 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
                 
                 <button
                   onClick={() => setShowAddModal(true)}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white transition text-sm"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition text-sm"
                 >
                   <FaUserPlus /> Add
                 </button>
                 
                 <button
                   onClick={exportToExcel}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white transition text-sm"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition text-sm"
                 >
                   <FaFileExcel /> Export
                 </button>
@@ -802,20 +885,40 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
         </div>
 
         {/* Candidates Table */}
-        <div className="bg-white/10 backdrop-blur-lg rounded-xl border border-white/20 overflow-hidden">
+        <div className={`rounded-xl border overflow-hidden ${
+          theme === 'light'
+            ? 'bg-white border-gray-200 shadow-sm'
+            : 'bg-white/10 backdrop-blur-lg border-white/20'
+        }`}>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[800px]">
-              <thead className="bg-white/5 border-b border-white/10">
+              <thead className={`border-b ${
+                theme === 'light' ? 'bg-gray-50 border-gray-200' : 'bg-white/5 border-white/10'
+              }`}>
                 <tr>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Candidate</th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Position</th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Dept</th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider hidden md:table-cell">Election</th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                    Candidate
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                    Position
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                    Dept
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider hidden md:table-cell">
+                    Election
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/10">
+              <tbody className={`divide-y ${
+                theme === 'light' ? 'divide-gray-100' : 'divide-white/10'
+              }`}>
                 {filteredCandidates.length === 0 ? (
                   <tr>
                     <td colSpan="6" className="px-6 py-12 text-center text-gray-400">
@@ -829,7 +932,12 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
                     const election = elections.find(e => e.id === candidate.election_id);
                     
                     return (
-                      <tr key={candidate.id} className="hover:bg-white/5 transition">
+                      <tr
+                        key={candidate.id}
+                        className={`transition ${
+                          theme === 'light' ? 'hover:bg-gray-50' : 'hover:bg-white/5'
+                        }`}
+                      >
                         <td className="px-4 sm:px-6 py-4">
                           <div className="flex items-center gap-3">
                             {candidate.image_url ? (
@@ -845,27 +953,47 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
                                 />
                               </div>
                             ) : (
-                              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0">
-                                <FaUserCheck className="text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
+                              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                theme === 'light' ? 'bg-gray-100' : 'bg-gray-700'
+                              }`}>
+                                <FaUserCheck className={`w-4 h-4 sm:w-5 sm:h-5 ${
+                                  theme === 'light' ? 'text-teal-500' : 'text-gray-400'
+                                }`} />
                               </div>
                             )}
                             <div>
-                              <div className="text-white font-medium text-sm sm:text-base">{candidate.name}</div>
-                              <div className="text-gray-400 text-xs hidden sm:block truncate max-w-[150px]">
+                              <div className={`font-medium text-sm sm:text-base ${
+                                theme === 'light' ? 'text-gray-900' : 'text-white'
+                              }`}>
+                                {candidate.name}
+                              </div>
+                              <div className={`text-xs hidden sm:block truncate max-w-[150px] ${
+                                theme === 'light' ? 'text-gray-500' : 'text-gray-400'
+                              }`}>
                                 {candidate.manifesto?.substring(0, 50)}...
                               </div>
                             </div>
                           </div>
                         </td>
                         <td className="px-4 sm:px-6 py-4">
-                          <div className="text-white text-xs sm:text-sm">{candidate.position}</div>
+                          <div className={`text-xs sm:text-sm ${
+                            theme === 'light' ? 'text-gray-900' : 'text-white'
+                          }`}>
+                            {candidate.position}
+                          </div>
                         </td>
                         <td className="px-4 sm:px-6 py-4">
-                          <div className="text-gray-300 text-xs sm:text-sm">{candidate.department || 'N/A'}</div>
+                          <div className={`text-xs sm:text-sm ${
+                            theme === 'light' ? 'text-gray-600' : 'text-gray-300'
+                          }`}>
+                            {candidate.department || 'N/A'}
+                          </div>
                         </td>
                         <td className="px-4 sm:px-6 py-4 hidden md:table-cell">
-                          <div className="flex items-center gap-1 text-gray-300 text-xs sm:text-sm">
-                            <FaUniversity className="text-xs" />
+                          <div className={`flex items-center gap-1 text-xs sm:text-sm ${
+                            theme === 'light' ? 'text-gray-600' : 'text-gray-300'
+                          }`}>
+                            <FaUniversity className="text-teal-500 text-xs" />
                             {election ? `${election.title.substring(0, 15)}...` : 'N/A'}
                           </div>
                         </td>
@@ -881,14 +1009,14 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
                               <>
                                 <button
                                   onClick={() => handleApproveCandidate(candidate)}
-                                  className="text-green-400 hover:text-green-300 transition"
+                                  className="text-teal-600 dark:text-teal-400 hover:text-teal-500 transition"
                                   title="Approve candidate"
                                 >
                                   <FaCheckCircle />
                                 </button>
                                 <button
                                   onClick={() => handleRejectCandidate(candidate)}
-                                  className="text-red-400 hover:text-red-300 transition"
+                                  className="text-red-500 hover:text-red-600 transition"
                                   title="Reject candidate"
                                 >
                                   <FaTimesCircle />
@@ -897,14 +1025,14 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
                             )}
                             <button
                               onClick={() => editCandidate(candidate)}
-                              className="text-blue-400 hover:text-blue-300 transition"
+                              className="text-teal-600 dark:text-teal-400 hover:text-teal-500 transition"
                               title="Edit candidate"
                             >
                               <FaEdit />
                             </button>
                             <button
                               onClick={() => setShowDeleteConfirm(candidate)}
-                              className="text-red-400 hover:text-red-300 transition"
+                              className="text-red-500 hover:text-red-600 transition"
                               title="Delete candidate"
                             >
                               <FaTrash />
@@ -924,9 +1052,15 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
       {/* Add/Edit Candidate Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-gray-800 rounded-xl max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-gray-800 flex justify-between items-center p-4 sm:p-6 border-b border-white/10">
-              <h2 className="text-xl sm:text-2xl font-bold text-white">
+          <div className={`rounded-xl max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto ${
+            theme === 'light' ? 'bg-white' : 'bg-gray-800'
+          }`}>
+            <div className={`sticky top-0 flex justify-between items-center p-4 sm:p-6 border-b ${
+              theme === 'light' ? 'border-gray-200' : 'border-white/10'
+            } ${theme === 'light' ? 'bg-white' : 'bg-gray-800'}`}>
+              <h2 className={`text-xl sm:text-2xl font-bold ${
+                theme === 'light' ? 'text-gray-900' : 'text-white'
+              }`}>
                 {editingCandidate ? 'Edit Candidate' : 'Add New Candidate'}
               </h2>
               <button
@@ -935,7 +1069,9 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
                   setEditingCandidate(null);
                   resetForm();
                 }}
-                className="text-gray-400 hover:text-white transition"
+                className={`transition ${
+                  theme === 'light' ? 'text-gray-400 hover:text-gray-600' : 'text-gray-400 hover:text-white'
+                }`}
               >
                 <FaTimes />
               </button>
@@ -943,86 +1079,150 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
             
             <form onSubmit={editingCandidate ? handleUpdateCandidate : handleAddCandidate} className="p-4 sm:p-6 space-y-4 sm:space-y-5">
               <div>
-                <label className="block text-gray-300 text-sm mb-2">Full Name *</label>
+                <label className={`block text-sm mb-2 ${
+                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                }`}>Full Name *</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm ${
+                    theme === 'light'
+                      ? 'bg-white border-gray-300 text-gray-900'
+                      : 'bg-gray-700 border-gray-600 text-white'
+                  }`}
                   placeholder="John Doe"
                 />
-                {formErrors.name && <p className="text-red-400 text-xs mt-1">{formErrors.name}</p>}
+                {formErrors.name && <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>}
               </div>
               
               <div>
-                <label className="block text-gray-300 text-sm mb-2">Email (Optional)</label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
-                  placeholder="candidate@example.com"
-                />
+                <label className={`block text-sm mb-2 ${
+                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                }`}>Email (Optional)</label>
+                <div className="relative">
+                  <FaEnvelope className={`absolute left-3 top-1/2 -translate-y-1/2 text-sm ${
+                    theme === 'light' ? 'text-gray-400' : 'text-gray-500'
+                  }`} />
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({...formData, email: e.target.value})}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900'
+                        : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
+                    placeholder="candidate@example.com"
+                  />
+                </div>
               </div>
               
               <div>
-                <label className="block text-gray-300 text-sm mb-2">School ID (Optional)</label>
-                <input
-                  type="text"
-                  value={formData.school_id}
-                  onChange={(e) => setFormData({...formData, school_id: e.target.value})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
-                  placeholder="STU-12345"
-                />
+                <label className={`block text-sm mb-2 ${
+                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                }`}>School ID (Optional)</label>
+                <div className="relative">
+                  <FaIdCard className={`absolute left-3 top-1/2 -translate-y-1/2 text-sm ${
+                    theme === 'light' ? 'text-gray-400' : 'text-gray-500'
+                  }`} />
+                  <input
+                    type="text"
+                    value={formData.school_id}
+                    onChange={(e) => setFormData({...formData, school_id: e.target.value})}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900'
+                        : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
+                    placeholder="STU-12345"
+                  />
+                </div>
               </div>
               
               <div>
-                <label className="block text-gray-300 text-sm mb-2">Position *</label>
+                <label className={`block text-sm mb-2 ${
+                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                }`}>Position *</label>
                 <input
                   type="text"
                   value={formData.position}
                   onChange={(e) => setFormData({...formData, position: e.target.value})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm ${
+                    theme === 'light'
+                      ? 'bg-white border-gray-300 text-gray-900'
+                      : 'bg-gray-700 border-gray-600 text-white'
+                  }`}
                   placeholder="President"
                 />
-                {formErrors.position && <p className="text-red-400 text-xs mt-1">{formErrors.position}</p>}
+                {formErrors.position && <p className="text-red-500 text-xs mt-1">{formErrors.position}</p>}
               </div>
               
               <div>
-                <label className="block text-gray-300 text-sm mb-2">Department *</label>
-                <input
-                  type="text"
-                  value={formData.department}
-                  onChange={(e) => setFormData({...formData, department: e.target.value})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
-                  placeholder="Computer Science"
-                />
-                {formErrors.department && <p className="text-red-400 text-xs mt-1">{formErrors.department}</p>}
-              </div>
-              
-              <div>
-                <label className="block text-gray-300 text-sm mb-2">Year of Study</label>
-                <select
-                  value={formData.year_of_study}
-                  onChange={(e) => setFormData({...formData, year_of_study: e.target.value})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
-                >
-                  <option value="">Select Year</option>
-                  <option value="100">Level 100</option>
-                  <option value="200">Level 200</option>
-                  <option value="300">Level 300</option>
-                  <option value="400">Level 400</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-gray-300 text-sm mb-2">Election *</label>
+                <label className={`block text-sm mb-2 ${
+                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                }`}>Department *</label>
                 <div className="relative">
-                  <FaCalendarAlt className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                  <FaBuilding className={`absolute left-3 top-1/2 -translate-y-1/2 text-sm ${
+                    theme === 'light' ? 'text-gray-400' : 'text-gray-500'
+                  }`} />
+                  <input
+                    type="text"
+                    value={formData.department}
+                    onChange={(e) => setFormData({...formData, department: e.target.value})}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900'
+                        : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
+                    placeholder="Computer Science"
+                  />
+                </div>
+                {formErrors.department && <p className="text-red-500 text-xs mt-1">{formErrors.department}</p>}
+              </div>
+              
+              <div>
+                <label className={`block text-sm mb-2 ${
+                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                }`}>Year of Study</label>
+                <div className="relative">
+                  <FaGraduationCap className={`absolute left-3 top-1/2 -translate-y-1/2 text-sm ${
+                    theme === 'light' ? 'text-gray-400' : 'text-gray-500'
+                  }`} />
+                  <select
+                    value={formData.year_of_study}
+                    onChange={(e) => setFormData({...formData, year_of_study: e.target.value})}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900'
+                        : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
+                  >
+                    <option value="">Select Year</option>
+                    <option value="100">Level 100</option>
+                    <option value="200">Level 200</option>
+                    <option value="300">Level 300</option>
+                    <option value="400">Level 400</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div>
+                <label className={`block text-sm mb-2 ${
+                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                }`}>Election *</label>
+                <div className="relative">
+                  <FaCalendarAlt className={`absolute left-3 top-1/2 -translate-y-1/2 text-sm ${
+                    theme === 'light' ? 'text-gray-400' : 'text-gray-500'
+                  }`} />
                   <select
                     value={formData.election_id}
                     onChange={(e) => handleElectionChange(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900'
+                        : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
                   >
                     <option value="">Select Election</option>
                     {elections.map(election => (
@@ -1032,15 +1232,17 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
                     ))}
                   </select>
                 </div>
-                {formErrors.election_id && <p className="text-red-400 text-xs mt-1">{formErrors.election_id}</p>}
+                {formErrors.election_id && <p className="text-red-500 text-xs mt-1">{formErrors.election_id}</p>}
               </div>
               
               <input type="hidden" value={formData.voting_period_id} />
-              {formErrors.voting_period_id && <p className="text-red-400 text-xs mt-1">{formErrors.voting_period_id}</p>}
+              {formErrors.voting_period_id && <p className="text-red-500 text-xs mt-1">{formErrors.voting_period_id}</p>}
               
               {/* Image Upload Section */}
               <div>
-                <label className="block text-gray-300 text-sm mb-2">Candidate Photo</label>
+                <label className={`block text-sm mb-2 ${
+                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                }`}>Candidate Photo</label>
                 <div className="flex flex-col sm:flex-row items-start gap-4">
                   {imagePreview && (
                     <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden bg-gray-700 flex-shrink-0">
@@ -1071,21 +1273,31 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
                       />
                       <label
                         htmlFor="candidate-image"
-                        className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-gray-700 border-2 border-dashed border-gray-500 rounded-lg cursor-pointer hover:border-green-500 transition group"
+                        className={`flex items-center justify-center gap-2 w-full px-4 py-3 border-2 border-dashed rounded-lg cursor-pointer transition group ${
+                          theme === 'light'
+                            ? 'border-gray-300 hover:border-teal-500 bg-gray-50'
+                            : 'border-gray-600 hover:border-teal-500 bg-gray-700'
+                        }`}
                       >
                         {uploadingImage ? (
-                          <FaSpinner className="animate-spin text-green-500" />
+                          <FaSpinner className="animate-spin text-teal-500" />
                         ) : (
                           <>
-                            <FaCamera className="text-gray-400 group-hover:text-green-500 transition" />
-                            <span className="text-gray-300 group-hover:text-green-400 transition text-sm">
+                            <FaCamera className={`transition ${
+                              theme === 'light' ? 'text-gray-400 group-hover:text-teal-500' : 'text-gray-500 group-hover:text-teal-400'
+                            }`} />
+                            <span className={`text-sm transition ${
+                              theme === 'light' ? 'text-gray-600 group-hover:text-teal-600' : 'text-gray-400 group-hover:text-teal-400'
+                            }`}>
                               {imagePreview ? 'Change Photo' : 'Click to Upload Photo'}
                             </span>
                           </>
                         )}
                       </label>
                     </div>
-                    <p className="text-gray-400 text-xs mt-2">
+                    <p className={`text-xs mt-2 ${
+                      theme === 'light' ? 'text-gray-500' : 'text-gray-400'
+                    }`}>
                       Supported: JPEG, PNG, GIF, WebP. Max 5MB
                     </p>
                   </div>
@@ -1093,16 +1305,24 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
               </div>
               
               <div>
-                <label className="block text-gray-300 text-sm mb-2">Manifesto *</label>
+                <label className={`block text-sm mb-2 ${
+                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                }`}>Manifesto *</label>
                 <textarea
                   value={formData.manifesto}
                   onChange={(e) => setFormData({...formData, manifesto: e.target.value})}
                   rows={5}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500 text-sm"
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm ${
+                    theme === 'light'
+                      ? 'bg-white border-gray-300 text-gray-900'
+                      : 'bg-gray-700 border-gray-600 text-white'
+                  }`}
                   placeholder="Write your manifesto here... (minimum 100 characters)"
                 />
-                {formErrors.manifesto && <p className="text-red-400 text-xs mt-1">{formErrors.manifesto}</p>}
-                <p className="text-gray-400 text-xs mt-1">
+                {formErrors.manifesto && <p className="text-red-500 text-xs mt-1">{formErrors.manifesto}</p>}
+                <p className={`text-xs mt-1 ${
+                  theme === 'light' ? 'text-gray-500' : 'text-gray-400'
+                }`}>
                   {formData.manifesto?.length || 0}/2000 characters (minimum 100)
                 </p>
               </div>
@@ -1113,9 +1333,11 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
                   id="is_approved"
                   checked={formData.is_approved}
                   onChange={(e) => setFormData({...formData, is_approved: e.target.checked})}
-                  className="w-4 h-4"
+                  className="w-4 h-4 text-teal-600 rounded"
                 />
-                <label htmlFor="is_approved" className="text-gray-300 text-sm">
+                <label htmlFor="is_approved" className={`text-sm ${
+                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                }`}>
                   Approve this candidate immediately
                 </label>
               </div>
@@ -1128,14 +1350,18 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
                     setEditingCandidate(null);
                     resetForm();
                   }}
-                  className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition text-sm"
+                  className={`flex-1 px-4 py-2 rounded-lg transition text-sm ${
+                    theme === 'light'
+                      ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                      : 'bg-gray-700 hover:bg-gray-600 text-white'
+                  }`}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting || uploadingImage}
-                  className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  className="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                 >
                   {submitting || uploadingImage ? <FaSpinner className="animate-spin mx-auto" /> : (editingCandidate ? 'Update Candidate' : 'Add Candidate')}
                 </button>
@@ -1148,15 +1374,25 @@ const syncPositionToTable = async (electionId, positionTitle, orderNumber = null
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-xl max-w-md w-full p-4 sm:p-6">
-            <h2 className="text-xl sm:text-2xl font-bold text-white mb-4">Confirm Delete</h2>
-            <p className="text-gray-300 text-sm sm:text-base mb-6">
-              Are you sure you want to delete <strong className="text-white">{showDeleteConfirm.name}</strong>?
+          <div className={`rounded-xl max-w-md w-full p-4 sm:p-6 ${
+            theme === 'light' ? 'bg-white' : 'bg-gray-800'
+          }`}>
+            <h2 className={`text-xl sm:text-2xl font-bold mb-4 ${
+              theme === 'light' ? 'text-gray-900' : 'text-white'
+            }`}>Confirm Delete</h2>
+            <p className={`text-sm sm:text-base mb-6 ${
+              theme === 'light' ? 'text-gray-600' : 'text-gray-300'
+            }`}>
+              Are you sure you want to delete <strong className={theme === 'light' ? 'text-gray-900' : 'text-white'}>{showDeleteConfirm.name}</strong>?
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDeleteConfirm(null)}
-                className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition text-sm"
+                className={`flex-1 px-4 py-2 rounded-lg transition text-sm ${
+                  theme === 'light'
+                    ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                    : 'bg-gray-700 hover:bg-gray-600 text-white'
+                }`}
               >
                 Cancel
               </button>

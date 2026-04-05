@@ -1,14 +1,29 @@
 // app/admin/generate-nomination-codes/page.js
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { toast } from 'react-toastify';
-import { FaKey, FaSpinner, FaDownload, FaCopy, FaTrash } from 'react-icons/fa';
+import { Toaster, toast } from 'sonner';
+import { 
+  FaKey, 
+  FaSpinner, 
+  FaDownload, 
+  FaCopy, 
+  FaTrash, 
+  FaSun, 
+  FaMoon,
+  FaEnvelope,
+  FaUser,
+  FaBriefcase,
+  FaBuilding,
+  FaGraduationCap,
+  FaHashtag
+} from 'react-icons/fa';
 
 export default function GenerateNominationCodes() {
   const [isLoading, setIsLoading] = useState(false);
   const [codes, setCodes] = useState([]);
+  const [theme, setTheme] = useState('light');
   const [formData, setFormData] = useState({
     candidate_email: '',
     candidate_name: '',
@@ -17,6 +32,44 @@ export default function GenerateNominationCodes() {
     year_of_study: '',
     number_of_codes: 1
   });
+
+  // Theme management
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('nominationTheme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+    setTheme(initialTheme);
+    document.documentElement.setAttribute('data-theme', initialTheme);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('nominationTheme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
+
+  // Fetch existing codes on load
+  useEffect(() => {
+    fetchCodes();
+  }, []);
+
+  const fetchCodes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('nomination_codes')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setCodes(data || []);
+    } catch (error) {
+      console.error('Error fetching codes:', error);
+      toast.error('Failed to load existing codes');
+    }
+  };
 
   const generateSecretCode = () => {
     const prefix = 'EC';
@@ -39,7 +92,9 @@ export default function GenerateNominationCodes() {
           position: formData.position,
           department: formData.department,
           year_of_study: formData.year_of_study ? parseInt(formData.year_of_study) : null,
-          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          is_used: false,
+          created_at: new Date().toISOString()
         });
       }
       
@@ -50,7 +105,7 @@ export default function GenerateNominationCodes() {
       
       if (error) throw error;
       
-      setCodes([...codes, ...data]);
+      setCodes([...data, ...codes]);
       toast.success(`Successfully generated ${data.length} nomination code(s)`);
       
       // Reset form
@@ -77,7 +132,7 @@ export default function GenerateNominationCodes() {
   };
 
   const downloadCodes = () => {
-    const headers = ['Code', 'Email', 'Name', 'Position', 'Department', 'Year', 'Expires At'];
+    const headers = ['Code', 'Email', 'Name', 'Position', 'Department', 'Year', 'Status', 'Expires At'];
     const rows = codes.map(code => [
       code.code,
       code.candidate_email,
@@ -85,6 +140,7 @@ export default function GenerateNominationCodes() {
       code.position,
       code.department || '',
       code.year_of_study || '',
+      code.is_used ? 'Used' : 'Available',
       new Date(code.expires_at).toLocaleString()
     ]);
     
@@ -118,116 +174,255 @@ export default function GenerateNominationCodes() {
     }
   };
 
+  const positions = [
+    'President',
+    'Vice President',
+    'General Secretary',
+    'Treasurer',
+    'Academic Affairs',
+    'Welfare Officer',
+    'Sports Officer',
+    'Public Relations Officer',
+    'Organizing Secretary',
+    'Financial Secretary'
+  ];
+
   return (
-    <div className="min-h-screen bg-gray-900 p-8">
-      <div className="max-w-6xl mx-auto">
-        <h1 className="text-3xl font-bold text-white mb-8">Generate Nomination Codes</h1>
+    <div className={`min-h-screen transition-colors duration-300 ${
+      theme === 'light' ? 'bg-gray-50' : 'bg-gradient-to-br from-gray-900 to-gray-800'
+    }`}>
+      <Toaster position="top-center" richColors closeButton />
+
+      {/* Theme Toggle Button */}
+      <button
+        onClick={toggleTheme}
+        className="fixed bottom-6 right-6 z-50 p-3 rounded-full shadow-lg transition-all duration-300 hover:scale-110"
+        style={{
+          backgroundColor: theme === 'light' ? '#0f766e' : '#fbbf24',
+          color: theme === 'light' ? '#ffffff' : '#1f2937',
+        }}
+      >
+        {theme === 'light' ? <FaMoon size={20} /> : <FaSun size={20} />}
+      </button>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-24">
+        <h1 className={`text-3xl font-bold mb-2 ${
+          theme === 'light' ? 'text-gray-900' : 'text-white'
+        }`}>
+          Generate Nomination Codes
+        </h1>
+        <p className={`mb-8 ${
+          theme === 'light' ? 'text-gray-600' : 'text-gray-300'
+        }`}>
+          Create secure nomination codes for candidates to register for elections
+        </p>
         
-        <div className="grid lg:grid-cols-2 gap-8">
+        <div className="grid lg:grid-cols-2 gap-6">
           {/* Form Section */}
-          <div className="bg-gray-800 rounded-xl p-6">
-            <h2 className="text-xl font-semibold text-white mb-4">Create New Code(s)</h2>
+          <div className={`rounded-xl p-6 ${
+            theme === 'light'
+              ? 'bg-white border border-gray-200 shadow-sm'
+              : 'bg-gray-800/50 backdrop-blur-sm border border-gray-700'
+          }`}>
+            <h2 className={`text-xl font-semibold mb-4 ${
+              theme === 'light' ? 'text-gray-900' : 'text-white'
+            }`}>
+              Create New Code(s)
+            </h2>
+            
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-gray-300 mb-2">Candidate Email *</label>
-                <input
-                  type="email"
-                  required
-                  value={formData.candidate_email}
-                  onChange={(e) => setFormData({...formData, candidate_email: e.target.value})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
-                  placeholder="candidate@regent.edu.gh"
-                />
+                <label className={`block mb-2 text-sm font-medium ${
+                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                }`}>
+                  Candidate Email *
+                </label>
+                <div className="relative">
+                  <FaEnvelope className={`absolute left-3 top-1/2 -translate-y-1/2 ${
+                    theme === 'light' ? 'text-teal-500' : 'text-teal-400'
+                  }`} />
+                  <input
+                    type="email"
+                    required
+                    value={formData.candidate_email}
+                    onChange={(e) => setFormData({...formData, candidate_email: e.target.value})}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+                        : 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
+                    }`}
+                    placeholder="candidate@regent.edu.gh"
+                  />
+                </div>
               </div>
               
               <div>
-                <label className="block text-gray-300 mb-2">Candidate Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.candidate_name}
-                  onChange={(e) => setFormData({...formData, candidate_name: e.target.value})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
-                  placeholder="Full name"
-                />
+                <label className={`block mb-2 text-sm font-medium ${
+                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                }`}>
+                  Candidate Name *
+                </label>
+                <div className="relative">
+                  <FaUser className={`absolute left-3 top-1/2 -translate-y-1/2 ${
+                    theme === 'light' ? 'text-teal-500' : 'text-teal-400'
+                  }`} />
+                  <input
+                    type="text"
+                    required
+                    value={formData.candidate_name}
+                    onChange={(e) => setFormData({...formData, candidate_name: e.target.value})}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900'
+                        : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
+                    placeholder="Full name"
+                  />
+                </div>
               </div>
               
               <div>
-                <label className="block text-gray-300 mb-2">Position *</label>
-                <select
-                  required
-                  value={formData.position}
-                  onChange={(e) => setFormData({...formData, position: e.target.value})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
-                >
-                  <option value="">Select position</option>
-                  <option value="President">President</option>
-                  <option value="Vice President">Vice President</option>
-                  <option value="General Secretary">General Secretary</option>
-                  <option value="Treasurer">Treasurer</option>
-                  <option value="Academic Affairs">Academic Affairs</option>
-                  <option value="Welfare Officer">Welfare Officer</option>
-                  <option value="Sports Officer">Sports Officer</option>
-                  <option value="Public Relations Officer">Public Relations Officer</option>
-                </select>
+                <label className={`block mb-2 text-sm font-medium ${
+                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                }`}>
+                  Position *
+                </label>
+                <div className="relative">
+                  <FaBriefcase className={`absolute left-3 top-1/2 -translate-y-1/2 ${
+                    theme === 'light' ? 'text-teal-500' : 'text-teal-400'
+                  }`} />
+                  <select
+                    required
+                    value={formData.position}
+                    onChange={(e) => setFormData({...formData, position: e.target.value})}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900'
+                        : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
+                  >
+                    <option value="">Select position</option>
+                    {positions.map(pos => (
+                      <option key={pos} value={pos}>{pos}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
               
               <div>
-                <label className="block text-gray-300 mb-2">Department</label>
-                <input
-                  type="text"
-                  value={formData.department}
-                  onChange={(e) => setFormData({...formData, department: e.target.value})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
-                  placeholder="Department (optional)"
-                />
+                <label className={`block mb-2 text-sm font-medium ${
+                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                }`}>
+                  Department
+                </label>
+                <div className="relative">
+                  <FaBuilding className={`absolute left-3 top-1/2 -translate-y-1/2 ${
+                    theme === 'light' ? 'text-teal-500' : 'text-teal-400'
+                  }`} />
+                  <input
+                    type="text"
+                    value={formData.department}
+                    onChange={(e) => setFormData({...formData, department: e.target.value})}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900'
+                        : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
+                    placeholder="Department (optional)"
+                  />
+                </div>
               </div>
               
               <div>
-                <label className="block text-gray-300 mb-2">Year of Study</label>
-                <select
-                  value={formData.year_of_study}
-                  onChange={(e) => setFormData({...formData, year_of_study: e.target.value})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
-                >
-                  <option value="">Select year (optional)</option>
-                  <option value="100">100 Level</option>
-                  <option value="200">200 Level</option>
-                  <option value="300">300 Level</option>
-                  <option value="400">400 Level</option>
-                </select>
+                <label className={`block mb-2 text-sm font-medium ${
+                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                }`}>
+                  Year of Study
+                </label>
+                <div className="relative">
+                  <FaGraduationCap className={`absolute left-3 top-1/2 -translate-y-1/2 ${
+                    theme === 'light' ? 'text-teal-500' : 'text-teal-400'
+                  }`} />
+                  <select
+                    value={formData.year_of_study}
+                    onChange={(e) => setFormData({...formData, year_of_study: e.target.value})}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900'
+                        : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
+                  >
+                    <option value="">Select year (optional)</option>
+                    <option value="100">100 Level</option>
+                    <option value="200">200 Level</option>
+                    <option value="300">300 Level</option>
+                    <option value="400">400 Level</option>
+                  </select>
+                </div>
               </div>
               
               <div>
-                <label className="block text-gray-300 mb-2">Number of Codes</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={formData.number_of_codes}
-                  onChange={(e) => setFormData({...formData, number_of_codes: parseInt(e.target.value)})}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-green-500"
-                />
+                <label className={`block mb-2 text-sm font-medium ${
+                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+                }`}>
+                  Number of Codes
+                </label>
+                <div className="relative">
+                  <FaHashtag className={`absolute left-3 top-1/2 -translate-y-1/2 ${
+                    theme === 'light' ? 'text-teal-500' : 'text-teal-400'
+                  }`} />
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={formData.number_of_codes}
+                    onChange={(e) => setFormData({...formData, number_of_codes: parseInt(e.target.value)})}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900'
+                        : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
+                  />
+                </div>
+                <p className={`text-xs mt-1 ${
+                  theme === 'light' ? 'text-gray-500' : 'text-gray-400'
+                }`}>
+                  Generate up to 10 codes at once
+                </p>
               </div>
               
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-3 bg-gradient-to-r from-green-600 to-green-500 rounded-lg font-semibold text-white hover:from-green-500 hover:to-green-400 transition disabled:opacity-50"
+                className="w-full py-3 bg-teal-600 hover:bg-teal-500 rounded-lg font-semibold text-white transition disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {isLoading ? <FaSpinner className="animate-spin mx-auto" /> : 'Generate Code(s)'}
+                {isLoading ? <FaSpinner className="animate-spin" /> : <FaKey />}
+                {isLoading ? 'Generating...' : 'Generate Code(s)'}
               </button>
             </form>
           </div>
           
           {/* Generated Codes Section */}
-          <div className="bg-gray-800 rounded-xl p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-white">Generated Codes</h2>
+          <div className={`rounded-xl p-6 ${
+            theme === 'light'
+              ? 'bg-white border border-gray-200 shadow-sm'
+              : 'bg-gray-800/50 backdrop-blur-sm border border-gray-700'
+          }`}>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+              <h2 className={`text-xl font-semibold ${
+                theme === 'light' ? 'text-gray-900' : 'text-white'
+              }`}>
+                Generated Codes
+                <span className={`text-sm ml-2 ${
+                  theme === 'light' ? 'text-gray-500' : 'text-gray-400'
+                }`}>
+                  ({codes.length} total)
+                </span>
+              </h2>
               {codes.length > 0 && (
                 <button
                   onClick={downloadCodes}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 rounded-lg text-white hover:bg-blue-500 transition"
+                  className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition text-sm"
                 >
                   <FaDownload /> Download CSV
                 </button>
@@ -235,65 +430,99 @@ export default function GenerateNominationCodes() {
             </div>
             
             {codes.length > 0 ? (
-              <div className="space-y-3 max-h-[500px] overflow-y-auto">
+              <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                 {codes.map((code) => (
-                  <div key={code.id} className="bg-gray-700 rounded-lg p-4">
-                    <div className="flex justify-between items-start">
+                  <div
+                    key={code.id}
+                    className={`rounded-lg p-4 transition ${
+                      theme === 'light'
+                        ? 'bg-gray-50 border border-gray-200'
+                        : 'bg-gray-700/50 border border-gray-600'
+                    } ${code.is_used ? 'opacity-75' : ''}`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
                       <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <FaKey className="text-green-400" />
-                          <code className="text-green-400 font-mono text-lg font-bold">{code.code}</code>
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <FaKey className="text-teal-500" />
+                          <code className="text-teal-600 dark:text-teal-400 font-mono text-base sm:text-lg font-bold">
+                            {code.code}
+                          </code>
                           <button
                             onClick={() => copyToClipboard(code.code)}
-                            className="text-gray-400 hover:text-white transition"
+                            className={`p-1 rounded transition ${
+                              theme === 'light'
+                                ? 'text-gray-400 hover:text-gray-600'
+                                : 'text-gray-500 hover:text-gray-300'
+                            }`}
                             title="Copy code"
                           >
-                            <FaCopy />
+                            <FaCopy size={14} />
                           </button>
                         </div>
-                        <p className="text-gray-300 text-sm">
-                          <strong>Candidate:</strong> {code.candidate_name}
-                        </p>
-                        <p className="text-gray-300 text-sm">
-                          <strong>Email:</strong> {code.candidate_email}
-                        </p>
-                        <p className="text-gray-300 text-sm">
-                          <strong>Position:</strong> {code.position}
-                        </p>
-                        {code.department && (
-                          <p className="text-gray-300 text-sm">
-                            <strong>Department:</strong> {code.department}
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                          <p className={theme === 'light' ? 'text-gray-600' : 'text-gray-300'}>
+                            <strong>Candidate:</strong> {code.candidate_name}
                           </p>
-                        )}
-                        <p className="text-gray-400 text-xs mt-2">
+                          <p className={theme === 'light' ? 'text-gray-600' : 'text-gray-300'}>
+                            <strong>Email:</strong> {code.candidate_email}
+                          </p>
+                          <p className={theme === 'light' ? 'text-gray-600' : 'text-gray-300'}>
+                            <strong>Position:</strong> {code.position}
+                          </p>
+                          {code.department && (
+                            <p className={theme === 'light' ? 'text-gray-600' : 'text-gray-300'}>
+                              <strong>Department:</strong> {code.department}
+                            </p>
+                          )}
+                          {code.year_of_study && (
+                            <p className={theme === 'light' ? 'text-gray-600' : 'text-gray-300'}>
+                              <strong>Year:</strong> Level {code.year_of_study}
+                            </p>
+                          )}
+                        </div>
+                        
+                        <p className={`text-xs mt-2 ${
+                          theme === 'light' ? 'text-gray-400' : 'text-gray-500'
+                        }`}>
                           Expires: {new Date(code.expires_at).toLocaleString()}
                         </p>
-                        {code.is_used && (
-                          <p className="text-yellow-400 text-xs mt-1">
+                        
+                        {code.is_used && code.used_at && (
+                          <p className={`text-xs mt-1 ${
+                            theme === 'light' ? 'text-amber-600' : 'text-amber-400'
+                          }`}>
                             Used on: {new Date(code.used_at).toLocaleString()}
                           </p>
                         )}
                       </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <span className={`text-xs px-2 py-1 rounded ${code.is_used ? 'bg-yellow-600 text-yellow-100' : 'bg-green-600 text-green-100'}`}>
+                      
+                      <div className="flex flex-row sm:flex-col items-center gap-2 sm:items-end">
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs whitespace-nowrap ${
+                          code.is_used
+                            ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                            : 'bg-teal-500/20 text-teal-600 dark:text-teal-400'
+                        }`}>
                           {code.is_used ? 'Used' : 'Available'}
                         </span>
                         {!code.is_used && (
                           <button
                             onClick={() => deleteCode(code.id)}
-                            className="text-red-400 hover:text-red-300 transition"
+                            className="text-red-500 hover:text-red-600 transition p-1"
                             title="Delete code"
                           >
                             <FaTrash />
                           </button>
                         )}
                       </div>
-                    </div>ac
+                    </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center text-gray-400 py-8">
+              <div className={`text-center py-12 ${
+                theme === 'light' ? 'text-gray-400' : 'text-gray-500'
+              }`}>
                 <FaKey className="text-4xl mx-auto mb-3 opacity-50" />
                 <p>No codes generated yet</p>
                 <p className="text-sm mt-1">Fill out the form to create nomination codes</p>
@@ -302,6 +531,23 @@ export default function GenerateNominationCodes() {
           </div>
         </div>
       </div>
+
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: ${theme === 'light' ? '#f1f1f1' : '#374151'};
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: ${theme === 'light' ? '#cbd5e1' : '#4b5563'};
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: ${theme === 'light' ? '#94a3b8' : '#6b7280'};
+        }
+      `}</style>
     </div>
   );
 }
