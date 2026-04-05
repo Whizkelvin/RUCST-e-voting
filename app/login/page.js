@@ -938,12 +938,12 @@ function LoginContent() {
 
             {/* Info Footer */}
             <div className={`mt-6 text-xs ${currentTheme.textSecondary} text-center space-y-1`}>
-              <p>🔐 Enter your email and school ID to login</p>
-              <p>👥 Students: OTP will be sent to your email</p>
-              <p>👑 Staff/Admin: Use your School ID as password</p>
+              <p>Enter your email and school ID to login</p>
+              <p>Students: OTP will be sent to your email</p>
+        
               {process.env.NODE_ENV === 'development' && (
                 <p className="text-yellow-400 text-xs mt-2">
-                  💡 Dev: Press Ctrl+Shift+D to fill admin credentials
+                  
                 </p>
               )}
             </div>
