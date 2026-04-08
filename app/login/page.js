@@ -67,9 +67,9 @@ function LoginContent() {
 
   // Helper function to set authentication cookies
   const setAuthCookies = useCallback((isAuthenticated, userRole, userEmail, userId = null) => {
-    // Set cookies for middleware with 30 minute expiry
-    const maxAge = 30 * 60; // 30 minutes in seconds
-    const cookieOptions = `path=/; max-age=${maxAge}; SameSite=Lax`;
+    const maxAge = 30 * 60;
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieOptions = `path=/; max-age=${maxAge}; SameSite=Strict${isProduction ? '; Secure; HttpOnly' : ''}`;
     
     document.cookie = `is_authenticated=${isAuthenticated}; ${cookieOptions}`;
     document.cookie = `user_role=${userRole}; ${cookieOptions}`;
@@ -79,14 +79,11 @@ function LoginContent() {
       document.cookie = `user_id=${userId}; ${cookieOptions}`;
     }
     
-    // Also store in localStorage for session persistence
     localStorage.setItem('is_authenticated', isAuthenticated);
     localStorage.setItem('user_role', userRole);
     localStorage.setItem('user_email', userEmail);
     if (userId) localStorage.setItem('user_id', userId);
     localStorage.setItem('last_activity', Date.now().toString());
-    
-    console.log('Auth cookies set:', { isAuthenticated, userRole, userEmail });
   }, []);
 
   // Helper function to clear authentication cookies
@@ -105,7 +102,7 @@ function LoginContent() {
     localStorage.removeItem('last_activity');
   }, []);
 
-  // Role configuration (built-in)
+  // Role configuration
   const getRoleConfig = useCallback((role) => {
     const roleMap = {
       dean: {
@@ -143,16 +140,11 @@ function LoginContent() {
     return roleMap[role] || null;
   }, []);
 
-  // Get redirect path based on role
   const getRedirectPath = useCallback((role) => {
     const roleConfig = getRoleConfig(role);
-    if (roleConfig) {
-      return roleConfig.redirectPath;
-    }
-    return '/admin/manage-voters';
+    return roleConfig ? roleConfig.redirectPath : '/admin/manage-voters';
   }, [getRoleConfig]);
 
-  // Get role icon
   const getRoleIcon = useCallback(() => {
     const roleConfig = getRoleConfig(adminRole);
     if (roleConfig) {
@@ -162,14 +154,12 @@ function LoginContent() {
     return <FaUserShield className="text-purple-400 text-lg" />;
   }, [adminRole, getRoleConfig]);
 
-  // Get role name
   const getRoleName = useCallback(() => {
     const roleConfig = getRoleConfig(adminRole);
     return roleConfig ? roleConfig.name : 'Administrator';
   }, [adminRole, getRoleConfig]);
 
-  // Check rate limit
-  const checkRateLimit = useCallback(() => {
+  const checkRateLimit = useCallback(async (identifier, type = 'login') => {
     if (lockoutUntil && new Date() < new Date(lockoutUntil)) {
       const remainingMinutes = Math.ceil((new Date(lockoutUntil) - new Date()) / 60000);
       toast.error(`Too many attempts. Try again in ${remainingMinutes} minute(s).`);
@@ -194,7 +184,6 @@ function LoginContent() {
       const userEmail = localStorage.getItem('user_email');
       const lastActivity = localStorage.getItem('last_activity');
       
-      // Check session timeout (30 minutes)
       if (lastActivity) {
         const inactiveTime = Date.now() - parseInt(lastActivity);
         if (inactiveTime > 30 * 60 * 1000) {
@@ -208,7 +197,6 @@ function LoginContent() {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session) {
-          // Refresh cookies
           setAuthCookies(true, userRole, userEmail);
           const redirectPath = getRedirectPath(userRole);
           router.push(redirectPath);
@@ -307,13 +295,11 @@ function LoginContent() {
     };
     
     checkVotingPeriod();
-    
-    // Refresh every minute
     const interval = setInterval(checkVotingPeriod, 60000);
     return () => clearInterval(interval);
   }, []);
 
-  // Check user type when typing - MODIFIED to only use admins table
+  // Check user type
   useEffect(() => {
     const checkUserType = async () => {
       if (watchedEmail && watchedSchoolId) {
@@ -324,7 +310,6 @@ function LoginContent() {
           const cleanEmail = watchedEmail.toLowerCase().trim();
           const cleanSchoolId = watchedSchoolId.trim().padStart(8, '0');
           
-          // Check voters first
           const { data: voter, error: voterError } = await supabase
             .from('voters')
             .select('has_voted, voted_at')
@@ -340,7 +325,6 @@ function LoginContent() {
             return;
           }
           
-          // Check ONLY admins table (removed user_roles)
           const { data: admin, error: adminError } = await supabase
             .from('admins')
             .select('role')
@@ -349,7 +333,6 @@ function LoginContent() {
             .maybeSingle();
           
           if (admin && !adminError) {
-            console.log('Admin found:', admin);
             setLoginStatus('admin');
             setAdminRole(admin.role || 'admin');
             setVoterStatus(null);
@@ -392,7 +375,6 @@ function LoginContent() {
       const cleanEmail = email.toLowerCase().trim();
       const cleanSchoolId = schoolId.trim().padStart(8, '0');
       
-      // Step 1: Check if admin exists in admins table
       const { data: adminData, error: adminCheckError } = await supabase
         .from('admins')
         .select('*')
@@ -402,12 +384,11 @@ function LoginContent() {
       
       if (!adminData || adminCheckError) {
         setLoginAttempts(prev => prev + 1);
-        toast.error('❌ Admin not found. Please check your credentials.');
+        toast.error('Invalid credentials. Please try again.');
         setIsLoading(false);
         return;
       }
       
-      // Step 2: Authenticate with Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password: cleanSchoolId
@@ -415,23 +396,14 @@ function LoginContent() {
       
       if (authError) {
         setLoginAttempts(prev => prev + 1);
-        
-        if (authError.message === 'Invalid login credentials') {
-          toast.error('❌ Invalid School ID. Please check your credentials.');
-        } else if (authError.message === 'Email not confirmed') {
-          toast.error('❌ Email not confirmed. Please check your inbox for verification link.');
-        } else {
-          toast.error('❌ Authentication failed: ' + authError.message);
-        }
+        toast.error('Invalid credentials. Please try again.');
         setIsLoading(false);
         return;
       }
       
-      // Step 3: Generate Admin OTP
       const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
+      const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
       
-      // Step 4: Store OTP in database
       const { error: updateError } = await supabase
         .from('admins')
         .update({
@@ -444,20 +416,17 @@ function LoginContent() {
         .eq('id', adminData.id);
       
       if (updateError) {
-        console.error('Error storing OTP:', updateError);
         toast.error('Failed to generate OTP. Please try again.');
         setIsLoading(false);
         return;
       }
       
-      // Step 5: Store temporary data in localStorage for verification page
       localStorage.setItem('temp_admin_id', adminData.id);
       localStorage.setItem('temp_admin_email', cleanEmail);
       localStorage.setItem('temp_admin_name', adminData.name || 'Admin User');
       localStorage.setItem('temp_admin_role', adminData.role || 'admin');
       localStorage.setItem('temp_admin_auth_id', authData.user.id);
       
-      // Step 6: Send OTP via email
       try {
         const response = await fetch('/api/send-admin-otp', {
           method: 'POST',
@@ -473,28 +442,18 @@ function LoginContent() {
         const result = await response.json();
         
         if (result.success) {
-          toast.success(`✅ Admin OTP sent to ${cleanEmail}. Please verify to continue.`);
+          toast.success(`✅ Admin OTP sent to ${cleanEmail}.`);
         } else {
-          console.log('🔑 Admin OTP for testing:', otpCode);
-          toast.info(`🔑 Development OTP: ${otpCode} (Check console)`, {
-            duration: 10000
-          });
+          toast.info(`🔑 Development OTP: ${otpCode}`);
         }
       } catch (emailError) {
-        console.error('Email sending failed:', emailError);
-        toast.info(`🔑 Development OTP: ${otpCode}`, {
-          duration: 10000
-        });
+        toast.info(`🔑 Development OTP: ${otpCode}`);
       }
       
       setLoginAttempts(0);
       setLockoutUntil(null);
-      
-      // Step 7: Set temporary auth cookie (will be fully set after OTP verification)
-      // This allows access to OTP verification page
       setAuthCookies(false, adminData.role || 'admin', cleanEmail, adminData.id);
       
-      // Step 8: Redirect to OTP verification page
       setTimeout(() => {
         router.push('/admin-verify-otp');
       }, 1500);
@@ -513,15 +472,14 @@ function LoginContent() {
       const cleanEmail = email.toLowerCase().trim();
       const cleanSchoolId = schoolId.trim().padStart(8, '0');
       
-      // ========== 1. CHECK VOTING PERIOD ==========
+      // Check voting period
       const { data: votingSettings, error: settingsError } = await supabase
         .from('voting_settings')
         .select('is_active, start_date, end_date')
         .single();
       
       if (settingsError) {
-        console.error('Error fetching voting settings:', settingsError);
-        toast.error('Unable to verify voting period. Please try again later.');
+        toast.error('Unable to verify voting period.');
         setIsLoading(false);
         return;
       }
@@ -530,49 +488,26 @@ function LoginContent() {
       const startDate = new Date(votingSettings.start_date);
       const endDate = new Date(votingSettings.end_date);
       
-      // Check if voting is active
       if (!votingSettings?.is_active) {
-        toast.error('❌ Voting is currently disabled. Please contact the electoral commission.', {
-          duration: 5000
-        });
+        toast.error('❌ Voting is currently disabled.');
         setIsLoading(false);
         return;
       }
       
-      // Check if voting has started
       if (now < startDate) {
-        const startDateFormatted = startDate.toLocaleString();
-        toast.error(`❌ Voting has not started yet. Voting begins on ${startDateFormatted}`, {
-          duration: 5000
-        });
+        toast.error(`❌ Voting starts on ${startDate.toLocaleString()}`);
         setIsLoading(false);
         return;
       }
       
-      // Check if voting has ended
       if (now > endDate) {
-        toast.error('❌ Voting period has ended. Thank you for your participation!', {
-          duration: 5000
-        });
-        setTimeout(() => {
-          router.push('/election-result');
-        }, 2000);
+        toast.error('❌ Voting period has ended.');
+        setTimeout(() => router.push('/election-result'), 2000);
         setIsLoading(false);
         return;
       }
       
-      // Optional: Show how much time is left
-      const timeLeft = endDate - now;
-      const hoursLeft = Math.floor(timeLeft / (1000 * 60 * 60));
-      const minutesLeft = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-      
-      if (hoursLeft < 24 && hoursLeft > 0) {
-        toast.info(`⏰ Voting ends in ${hoursLeft} hours and ${minutesLeft} minutes`, {
-          duration: 4000
-        });
-      }
-      
-      // ========== 2. GET VOTER DATA ==========
+      // Get voter data
       const { data: voter, error: voterError } = await supabase
         .from('voters')
         .select('*')
@@ -582,16 +517,14 @@ function LoginContent() {
       
       if (voterError || !voter) {
         setLoginAttempts(prev => prev + 1);
-        toast.error('Voter not found. Please check your credentials.');
+        toast.error('Invalid credentials. Please try again.');
         setIsLoading(false);
         return;
       }
       
       if (voter.has_voted === true) {
-        toast.error('❌ You have already voted. Redirecting to results page...');
-        setTimeout(() => {
-          router.push('/election-result');
-        }, 3000);
+        toast.error('❌ You have already voted.');
+        setTimeout(() => router.push('/election-result'), 3000);
         setIsLoading(false);
         return;
       }
@@ -608,86 +541,73 @@ function LoginContent() {
           .update({ has_voted: true, voted_at: new Date().toISOString() })
           .eq('id', voter.id);
         
-        toast.error('❌ You have already voted. Redirecting to results page...');
-        setTimeout(() => {
-          router.push('/election-result');
-        }, 3000);
+        toast.error('❌ You have already voted.');
+        setTimeout(() => router.push('/election-result'), 3000);
         setIsLoading(false);
         return;
       }
       
-      // ========== 3. CHECK FOR EXISTING OTP ==========
+      // Check for existing valid OTP
       const { data: existingOtp, error: fetchOtpError } = await supabase
         .from('otp_codes')
         .select('*')
         .eq('voter_id', voter.id)
+        .eq('used', false)
+        .gt('expires_at', new Date().toISOString())
         .maybeSingle();
       
       let otpCode;
       let otpExpiry;
-      let isNewOtp = false;
       
       if (existingOtp && !fetchOtpError) {
+        // OTP exists and is valid - generate new one but invalidate old first
         const expiryTime = new Date(existingOtp.expires_at);
-        const isExpired = now > expiryTime;
+        const timeLeft = Math.ceil((expiryTime - now) / 60000);
         
-        if (!isExpired) {
-          // OTP is still valid - NEED TO RETRIEVE OR REGENERATE
-          // Note: Since we only store hash, we can't retrieve original OTP
-          // So we generate a new one but keep the same expiry
-          otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-          otpExpiry = expiryTime;
-          const timeLeft = Math.ceil((expiryTime - now) / 60000);
-          
-          toast.info(`📧 Resending OTP (valid for ${timeLeft} more minutes)`, {
-            duration: 4000
-          });
-          isNewOtp = true; // We need to update the hash in DB
-        } else {
-          // OTP expired - generate new one
-          isNewOtp = true;
-          otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-          otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
-          toast.info('Previous OTP expired. Sending a new OTP.', {
-            duration: 3000
-          });
-        }
+        // Invalidate old OTP
+        await supabase
+          .from('otp_codes')
+          .update({ used: true, invalidated_at: new Date().toISOString() })
+          .eq('id', existingOtp.id);
+        
+        otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+        toast.info(`Previous OTP invalidated. Sending new OTP.`, { duration: 3000 });
       } else {
-        // No existing OTP - create new one
-        isNewOtp = true;
         otpCode = Math.floor(100000 + Math.random() * 900000).toString();
         otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
       }
       
-      // ========== 4. SAVE OTP TO DATABASE ==========
-      if (isNewOtp) {
-        const hashedOtp = await hashCode(otpCode);
-        
-        // Delete old OTPs first
-        await supabase.from('otp_codes').delete().eq('voter_id', voter.id);
-        
-        // Insert new OTP (without updated_at)
-        const { error: otpError } = await supabase
-          .from('otp_codes')
-          .insert({
-            voter_id: voter.id,
-            email: cleanEmail,
-            school_id: cleanSchoolId,
-            code_hash: hashedOtp,
-            expires_at: otpExpiry.toISOString(),
-            used: false,
-            created_at: new Date().toISOString()
-          });
-        
-        if (otpError) {
-          console.error('OTP insertion error:', otpError);
-          toast.error('Failed to generate OTP. Please try again.');
-          setIsLoading(false);
-          return;
-        }
+      const hashedOtp = await hashCode(otpCode);
+      
+      // Delete any expired OTPs
+      await supabase
+        .from('otp_codes')
+        .delete()
+        .eq('voter_id', voter.id)
+        .lt('expires_at', new Date().toISOString());
+      
+      // Insert new OTP
+      const { error: otpError } = await supabase
+        .from('otp_codes')
+        .insert({
+          voter_id: voter.id,
+          email: cleanEmail,
+          school_id: cleanSchoolId,
+          code_hash: hashedOtp,
+          expires_at: otpExpiry.toISOString(),
+          used: false,
+          created_at: new Date().toISOString()
+        });
+      
+      if (otpError) {
+        console.error('OTP insertion error:', otpError);
+        toast.error('Failed to generate OTP. Please try again.');
+        setIsLoading(false);
+        return;
       }
       
-      // ========== 5. SEND OTP VIA EMAIL ==========
+      // Send email
       try {
         const response = await fetch('/api/send-otp', {
           method: 'POST',
@@ -703,25 +623,14 @@ function LoginContent() {
         const result = await response.json();
         
         if (!result.success) {
-          toast.info(`🔑 Development OTP: ${otpCode} (Check console for email details)`, {
-            duration: 10000
-          });
-          console.log('OTP for testing:', otpCode);
+          toast.info(`🔑 Development OTP: ${otpCode}`);
         } else {
-          if (!existingOtp || new Date(existingOtp.expires_at) < now) {
-            toast.success(`✅ New OTP sent to ${email}. Check your inbox.`);
-          } else {
-            toast.success(`📧 OTP resent to ${email}. Same code is still valid.`);
-          }
+          toast.success(`✅ OTP sent to ${email}`);
         }
       } catch (emailError) {
-        console.error('Email sending failed:', emailError);
-        toast.info(`🔑 Development OTP: ${otpCode} (Email service temporarily unavailable)`, {
-          duration: 10000
-        });
+        toast.info(`🔑 Development OTP: ${otpCode}`);
       }
       
-      // ========== 6. STORE IN LOCALSTORAGE ==========
       localStorage.setItem('temp_voter_email', cleanEmail);
       localStorage.setItem('temp_voter_school_id', cleanSchoolId);
       localStorage.setItem('temp_voter_id', voter.id);
@@ -736,10 +645,7 @@ function LoginContent() {
       });
       
       toast.success('Redirecting to verification...');
-      
-      setTimeout(() => {
-        router.push("/verify-otp");
-      }, 1500);
+      setTimeout(() => router.push("/verify-otp"), 1500);
       
     } catch (error) {
       console.error('Voter login error:', error);
@@ -750,7 +656,7 @@ function LoginContent() {
   }, [router, hashCode, clientIP]);
 
   const onSubmit = useCallback(async (formData) => {
-    if (!checkRateLimit()) return;
+    if (!await checkRateLimit()) return;
     
     const { email, schoolId } = formData;
     
@@ -761,7 +667,7 @@ function LoginContent() {
         await handleAdminLogin(email, schoolId);
       } else {
         setLoginAttempts(prev => prev + 1);
-        toast.error('Invalid credentials. Please check your email and school ID.');
+        toast.error('Invalid credentials. Please try again.');
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -769,16 +675,14 @@ function LoginContent() {
     }
   }, [loginStatus, handleVoterLogin, handleAdminLogin, checkRateLimit, setLoginAttempts]);
 
-  // Debug mode for testing (Ctrl+Shift+D)
+  // Debug mode
   useEffect(() => {
     const handleKeyPress = (e) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'D') {
         if (process.env.NODE_ENV === 'development') {
           setValue('email', 'admin@regent.edu.gh');
           setValue('schoolId', '00000001');
-          toast.info('Debug credentials filled: admin@regent.edu.gh / 00000001', {
-            duration: 2000
-          });
+          toast.info('Debug credentials filled');
         }
       }
     };
@@ -786,7 +690,6 @@ function LoginContent() {
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [setValue]);
-  
 
   const themeStyles = useMemo(() => ({
     dark: {
@@ -839,7 +742,6 @@ function LoginContent() {
 
   const currentTheme = themeStyles[theme];
 
-  // Get admin status card class
   const getAdminStatusClass = useCallback(() => {
     switch(adminRole) {
       case 'dean': return currentTheme.statusCard.admin.dean;
@@ -851,7 +753,6 @@ function LoginContent() {
     }
   }, [adminRole, currentTheme]);
 
-  // Get admin text color
   const getAdminTextColor = useCallback(() => {
     switch(adminRole) {
       case 'dean': return theme === 'dark' ? 'text-purple-200' : 'text-purple-700';
@@ -869,7 +770,6 @@ function LoginContent() {
 
   return (
     <>
-      {/* Sonner Toaster Component */}
       <Toaster 
         position="top-center" 
         richColors 
@@ -888,16 +788,7 @@ function LoginContent() {
           <div className={`absolute bottom-[-100px] left-[-100px] w-[300px] h-[300px] ${theme === 'dark' ? 'bg-yellow-500' : 'bg-yellow-400'} opacity-20 blur-3xl rounded-full animate-pulse delay-1000`}></div>
         </div>
 
-        {/* Home Button - Top Left */}
-        <Link 
-          href="/"
-          className="fixed top-4 left-4 z-50 p-3 rounded-full bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-110 transition-all duration-300 group"
-          aria-label="Go to Home"
-        >
-          <FaHome className={`text-xl ${theme === 'dark' ? 'text-white/80 group-hover:text-green-400' : 'text-gray-700 group-hover:text-green-500'} transition`} />
-        </Link>
-
-        {/* Theme Toggle Button */}
+        {/* Theme Toggle Button - Top Right */}
         <button
           onClick={toggleTheme}
           className="fixed top-4 right-4 z-50 p-3 rounded-full bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-110 transition-all duration-300"
@@ -980,7 +871,7 @@ function LoginContent() {
                 <div className="flex items-center gap-2">
                   <FaExclamationTriangle className="text-yellow-400" />
                   <p className="text-sm text-yellow-200">
-                    Warning: {5 - loginAttempts} attempts remaining before 15-minute lockout
+                    Warning: {5 - loginAttempts} attempts remaining
                   </p>
                 </div>
               </div>
@@ -1019,12 +910,12 @@ function LoginContent() {
                 </div>
                 {voterStatus === 'can_vote' && (
                   <p className={`text-xs mt-1 flex items-center gap-1 ${theme === 'dark' ? 'text-green-300' : 'text-green-600'}`}>
-                    <FaCheckCircle className="text-xs" /> You are eligible to vote. OTP will be sent to your email.
+                    <FaCheckCircle className="text-xs" /> You are eligible to vote.
                   </p>
                 )}
                 {voterStatus === 'already_voted' && (
                   <p className={`text-xs mt-1 flex items-center gap-1 ${theme === 'dark' ? 'text-amber-300' : 'text-amber-600'}`}>
-                    <FaExclamationTriangle className="text-xs" /> You have already voted. You will be redirected to results.
+                    <FaExclamationTriangle className="text-xs" /> You have already voted.
                   </p>
                 )}
               </div>
@@ -1049,7 +940,7 @@ function LoginContent() {
                 <div className="flex items-center gap-2">
                   <FaTimesCircle className={theme === 'dark' ? 'text-red-300' : 'text-red-600'} />
                   <p className={`text-sm ${theme === 'dark' ? 'text-red-200' : 'text-red-700'}`}>
-                    Invalid credentials. Please check your email and school ID.
+                    Invalid credentials. Please try again.
                   </p>
                 </div>
               </div>
@@ -1147,15 +1038,24 @@ function LoginContent() {
             </form>
 
             {/* Info Footer */}
-            <div className={`mt-6 text-xs ${currentTheme.textSecondary} text-center space-y-1`}>
+            <div className={`mt-6 text-xs ${currentTheme.textSecondary} text-center space-y-3`}>
               <p>Enter your email and school ID to login</p>
               <p>Students: OTP will be sent to your email</p>
-            
-              {process.env.NODE_ENV === 'development' && (
-                <p className="text-yellow-400 text-xs mt-2">
-                  Debug: Press Ctrl+Shift+D to fill demo credentials
-                </p>
-              )}
+              
+              {/* Home Button moved here - under the info */}
+              <div className="pt-2">
+                <Link 
+                  href="/"
+                  className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 hover:scale-105 ${
+                    theme === 'dark' 
+                      ? 'bg-white/5 hover:bg-white/10 text-white/80' 
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  <FaHome className="text-sm" />
+                  <span>Go to Home</span>
+                </Link>
+              </div>
             </div>
 
             <div className={`mt-4 flex justify-center gap-3 text-xs ${theme === 'dark' ? 'text-white/40' : 'text-gray-400'}`}>
