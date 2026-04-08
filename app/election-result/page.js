@@ -11,7 +11,7 @@ import {
   FaChartBar, FaVoteYea, FaUserCheck, FaSpinner, FaTrophy, 
   FaMedal, FaCheckCircle, FaUsers, FaCalendarAlt, FaPercentage,
   FaClock, FaInfoCircle, FaDownload, FaSun, FaMoon, FaShieldAlt,
-  FaHome
+  FaHome, FaEye, FaEyeSlash, FaChartLine
 } from 'react-icons/fa';
 import { useElectionData } from '@/hooks/useElectionData';
 
@@ -21,6 +21,7 @@ export default function ElectionResults() {
   const [totalVotes, setTotalVotes] = useState(0);
   const [theme, setTheme] = useState('dark');
   const [mounted, setMounted] = useState(false);
+  const [showStatistics, setShowStatistics] = useState(true); // Toggle state for statistics
   const router = useRouter();
   
   const { 
@@ -39,6 +40,12 @@ export default function ElectionResults() {
     const savedTheme = localStorage.getItem('theme') || 'dark';
     setTheme(savedTheme);
     document.documentElement.setAttribute('data-theme', savedTheme);
+    
+    // Load saved preference for showing statistics
+    const savedShowStats = localStorage.getItem('show_election_statistics');
+    if (savedShowStats !== null) {
+      setShowStatistics(savedShowStats === 'true');
+    }
   }, []);
 
   const toggleTheme = () => {
@@ -47,6 +54,14 @@ export default function ElectionResults() {
     localStorage.setItem('theme', newTheme);
     document.documentElement.setAttribute('data-theme', newTheme);
     toast.success(`${newTheme === 'dark' ? 'Dark' : 'Light'} mode activated`);
+  };
+
+  // Toggle statistics visibility
+  const toggleStatistics = () => {
+    const newValue = !showStatistics;
+    setShowStatistics(newValue);
+    localStorage.setItem('show_election_statistics', newValue.toString());
+    toast.success(newValue ? 'Statistics summary shown' : 'Statistics summary hidden');
   };
 
   // Theme styles
@@ -67,6 +82,7 @@ export default function ElectionResults() {
       progressWinner: 'bg-gradient-to-r from-yellow-400 to-amber-500',
       progressNormal: 'bg-green-500',
       modalBg: 'bg-white/10 backdrop-blur-lg',
+      toggleButton: 'bg-white/10 hover:bg-white/20',
     },
     light: {
       background: 'from-gray-50 via-white to-gray-100',
@@ -84,6 +100,7 @@ export default function ElectionResults() {
       progressWinner: 'bg-gradient-to-r from-yellow-500 to-amber-600',
       progressNormal: 'bg-emerald-500',
       modalBg: 'bg-white/80 backdrop-blur-lg',
+      toggleButton: 'bg-gray-100 hover:bg-gray-200',
     }
   };
 
@@ -320,9 +337,10 @@ export default function ElectionResults() {
             )}
           </div>
 
-          {/* Export Button */}
-          {hasResults && (
-            <div data-aos="fade-up" data-aos-delay="100" className="flex justify-end mb-6">
+          {/* Action Buttons Row - Export & Toggle Statistics */}
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+            {/* Export Button */}
+            {hasResults && (
               <button
                 onClick={exportResults}
                 className={`flex items-center gap-2 px-4 py-2 ${currentTheme.statBg} ${currentTheme.buttonHover} rounded-lg ${currentTheme.textPrimary} transition text-sm sm:text-base`}
@@ -330,8 +348,26 @@ export default function ElectionResults() {
                 <FaDownload />
                 Export Results as CSV
               </button>
-            </div>
-          )}
+            )}
+            
+            {/* Toggle Statistics Button */}
+            <button
+              onClick={toggleStatistics}
+              className={`flex items-center gap-2 px-4 py-2 ${currentTheme.toggleButton} rounded-lg ${currentTheme.textPrimary} transition-all duration-300 hover:scale-105 text-sm sm:text-base`}
+            >
+              {showStatistics ? (
+                <>
+                  <FaEyeSlash />
+                  Hide Statistics Summary
+                </>
+              ) : (
+                <>
+                  <FaEye />
+                  Show Statistics Summary
+                </>
+              )}
+            </button>
+          </div>
 
           {/* Position Filter */}
           {hasResults && (
@@ -479,58 +515,66 @@ export default function ElectionResults() {
             ))
           )}
 
-          {/* ========== STATISTICS SUMMARY - MOVED TO BOTTOM ========== */}
-          <div data-aos="fade-up" data-aos-delay="300" className="mt-10 sm:mt-12">
-            <div className="text-center mb-6">
-              <h2 className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mb-2`}>
-                Election Statistics Summary
-              </h2>
-              <div className="w-20 h-1 bg-gradient-to-r from-green-500 to-emerald-500 mx-auto rounded-full"></div>
+          {/* ========== STATISTICS SUMMARY - OPTIONAL TOGGLE ========== */}
+          {showStatistics && hasResults && (
+            <div data-aos="fade-up" data-aos-delay="300" className="mt-10 sm:mt-12">
+              <div className="text-center mb-6">
+                <div className="flex items-center justify-center gap-3 mb-2">
+                  <FaChartLine className="text-2xl text-green-400" />
+                  <h2 className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary}`}>
+                    Election Statistics Summary
+                  </h2>
+                </div>
+                <div className="w-20 h-1 bg-gradient-to-r from-green-500 to-emerald-500 mx-auto rounded-full"></div>
+                <p className={`${currentTheme.textLight} text-xs mt-2`}>
+                  Click the "Hide Statistics" button above to collapse this section
+                </p>
+              </div>
+
+              {/* Statistics Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
+                <div data-aos="fade-up" data-aos-delay="350" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder} transition-all duration-300 hover:scale-105`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Total Votes Cast</p>
+                      <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVotes.toLocaleString()}</p>
+                    </div>
+                    <FaVoteYea className="text-3xl sm:text-4xl text-green-400" />
+                  </div>
+                </div>
+
+                <div data-aos="fade-up" data-aos-delay="400" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder} transition-all duration-300 hover:scale-105`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Registered Voters</p>
+                      <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVoters.toLocaleString()}</p>
+                    </div>
+                    <FaUsers className="text-3xl sm:text-4xl text-blue-400" />
+                  </div>
+                </div>
+
+                <div data-aos="fade-up" data-aos-delay="450" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder} transition-all duration-300 hover:scale-105`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Voters Who Voted</p>
+                      <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVotersWhoVoted.toLocaleString()}</p>
+                    </div>
+                    <FaUserCheck className="text-3xl sm:text-4xl text-purple-400" />
+                  </div>
+                </div>
+
+                <div data-aos="fade-up" data-aos-delay="500" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder} transition-all duration-300 hover:scale-105`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Voter Turnout</p>
+                      <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{getVoterTurnout()}%</p>
+                    </div>
+                    <FaPercentage className="text-3xl sm:text-4xl text-yellow-400" />
+                  </div>
+                </div>
+              </div>
             </div>
-
-            {/* Statistics Cards - Now at the bottom */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
-              <div data-aos="fade-up" data-aos-delay="350" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Total Votes Cast</p>
-                    <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVotes.toLocaleString()}</p>
-                  </div>
-                  <FaVoteYea className="text-3xl sm:text-4xl text-green-400" />
-                </div>
-              </div>
-
-              <div data-aos="fade-up" data-aos-delay="400" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Registered Voters</p>
-                    <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVoters.toLocaleString()}</p>
-                  </div>
-                  <FaUsers className="text-3xl sm:text-4xl text-blue-400" />
-                </div>
-              </div>
-
-              <div data-aos="fade-up" data-aos-delay="450" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Voters Who Voted</p>
-                    <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVotersWhoVoted.toLocaleString()}</p>
-                  </div>
-                  <FaUserCheck className="text-3xl sm:text-4xl text-purple-400" />
-                </div>
-              </div>
-
-              <div data-aos="fade-up" data-aos-delay="500" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Voter Turnout</p>
-                    <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{getVoterTurnout()}%</p>
-                  </div>
-                  <FaPercentage className="text-3xl sm:text-4xl text-yellow-400" />
-                </div>
-              </div>
-            </div>
-          </div>
+          )}
 
           {/* Footer Info */}
           <div data-aos="fade-up" className="mt-6 sm:mt-8 text-center">
