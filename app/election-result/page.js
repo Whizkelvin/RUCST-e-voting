@@ -6,10 +6,12 @@ import Image from 'next/image';
 import { Toaster, toast } from 'sonner';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
+import Link from 'next/link';
 import { 
   FaChartBar, FaVoteYea, FaUserCheck, FaSpinner, FaTrophy, 
   FaMedal, FaCheckCircle, FaUsers, FaCalendarAlt, FaPercentage,
-  FaClock, FaInfoCircle, FaDownload, FaSun, FaMoon, FaShieldAlt
+  FaClock, FaInfoCircle, FaDownload, FaSun, FaMoon, FaShieldAlt,
+  FaHome
 } from 'react-icons/fa';
 import { useElectionData } from '@/hooks/useElectionData';
 
@@ -251,6 +253,15 @@ export default function ElectionResults() {
           <FaMoon className="text-gray-700 text-xl" />
         )}
       </button>
+
+      {/* Home Button - Top Left */}
+      <Link
+        href="/"
+        className="fixed top-4 left-4 z-50 p-3 rounded-full bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-110 transition-all duration-300 group"
+        aria-label="Go to Home"
+      >
+        <FaHome className={`text-xl ${theme === 'dark' ? 'text-white/80 group-hover:text-green-400' : 'text-gray-700 group-hover:text-green-500'} transition`} />
+      </Link>
       
       <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} pt-20 sm:pt-24 pb-8 sm:pb-12 transition-all duration-300`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -309,52 +320,9 @@ export default function ElectionResults() {
             )}
           </div>
 
-          {/* Statistics Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8 sm:mb-12">
-            <div data-aos="fade-up" data-aos-delay="100" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Total Votes Cast</p>
-                  <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVotes.toLocaleString()}</p>
-                </div>
-                <FaVoteYea className="text-3xl sm:text-4xl text-green-400" />
-              </div>
-            </div>
-
-            <div data-aos="fade-up" data-aos-delay="200" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Registered Voters</p>
-                  <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVoters.toLocaleString()}</p>
-                </div>
-                <FaUsers className="text-3xl sm:text-4xl text-blue-400" />
-              </div>
-            </div>
-
-            <div data-aos="fade-up" data-aos-delay="300" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Voters Who Voted</p>
-                  <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVotersWhoVoted.toLocaleString()}</p>
-                </div>
-                <FaUserCheck className="text-3xl sm:text-4xl text-purple-400" />
-              </div>
-            </div>
-
-            <div data-aos="fade-up" data-aos-delay="400" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Voter Turnout</p>
-                  <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{getVoterTurnout()}%</p>
-                </div>
-                <FaPercentage className="text-3xl sm:text-4xl text-yellow-400" />
-              </div>
-            </div>
-          </div>
-
           {/* Export Button */}
           {hasResults && (
-            <div data-aos="fade-up" data-aos-delay="450" className="flex justify-end mb-6">
+            <div data-aos="fade-up" data-aos-delay="100" className="flex justify-end mb-6">
               <button
                 onClick={exportResults}
                 className={`flex items-center gap-2 px-4 py-2 ${currentTheme.statBg} ${currentTheme.buttonHover} rounded-lg ${currentTheme.textPrimary} transition text-sm sm:text-base`}
@@ -367,7 +335,7 @@ export default function ElectionResults() {
 
           {/* Position Filter */}
           {hasResults && (
-            <div data-aos="fade-up" data-aos-delay="500" className="mb-8">
+            <div data-aos="fade-up" data-aos-delay="150" className="mb-8">
               <div className="flex flex-wrap gap-2 sm:gap-3 justify-center">
                 {positions.map((position, idx) => (
                   <button
@@ -388,7 +356,7 @@ export default function ElectionResults() {
             </div>
           )}
 
-          {/* Results Display */}
+          {/* Results Display - COMES FIRST */}
           {!hasResults ? (
             <div data-aos="fade-up" className="text-center py-12">
               <div className={`${currentTheme.cardBg} rounded-2xl p-8 border ${currentTheme.cardBorder}`}>
@@ -403,7 +371,7 @@ export default function ElectionResults() {
             </div>
           ) : (
             Object.entries(filteredResults).map(([position, candidates], idx) => (
-              <div key={position} data-aos="fade-up" data-aos-delay={600 + idx * 100} className="mb-10 sm:mb-12">
+              <div key={position} data-aos="fade-up" data-aos-delay={200 + idx * 100} className="mb-10 sm:mb-12">
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
                   <FaTrophy className="text-2xl sm:text-3xl text-yellow-400" />
                   <h2 className={`text-xl sm:text-2xl font-bold ${currentTheme.textPrimary}`}>{position}</h2>
@@ -422,7 +390,7 @@ export default function ElectionResults() {
                       <div 
                         key={candidate.id}
                         data-aos="fade-right"
-                        data-aos-delay={600 + idx * 100 + index * 50}
+                        data-aos-delay={200 + idx * 100 + index * 50}
                         className={`${currentTheme.cardBg} rounded-xl sm:rounded-2xl p-4 sm:p-6 border transition-all duration-300 hover:scale-[1.01] sm:hover:scale-[1.02] ${
                           isWinner 
                             ? `${currentTheme.winnerBorder} ${currentTheme.winnerBg}`
@@ -511,8 +479,61 @@ export default function ElectionResults() {
             ))
           )}
 
+          {/* ========== STATISTICS SUMMARY - MOVED TO BOTTOM ========== */}
+          <div data-aos="fade-up" data-aos-delay="300" className="mt-10 sm:mt-12">
+            <div className="text-center mb-6">
+              <h2 className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mb-2`}>
+                Election Statistics Summary
+              </h2>
+              <div className="w-20 h-1 bg-gradient-to-r from-green-500 to-emerald-500 mx-auto rounded-full"></div>
+            </div>
+
+            {/* Statistics Cards - Now at the bottom */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
+              <div data-aos="fade-up" data-aos-delay="350" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Total Votes Cast</p>
+                    <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVotes.toLocaleString()}</p>
+                  </div>
+                  <FaVoteYea className="text-3xl sm:text-4xl text-green-400" />
+                </div>
+              </div>
+
+              <div data-aos="fade-up" data-aos-delay="400" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Registered Voters</p>
+                    <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVoters.toLocaleString()}</p>
+                  </div>
+                  <FaUsers className="text-3xl sm:text-4xl text-blue-400" />
+                </div>
+              </div>
+
+              <div data-aos="fade-up" data-aos-delay="450" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Voters Who Voted</p>
+                    <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVotersWhoVoted.toLocaleString()}</p>
+                  </div>
+                  <FaUserCheck className="text-3xl sm:text-4xl text-purple-400" />
+                </div>
+              </div>
+
+              <div data-aos="fade-up" data-aos-delay="500" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Voter Turnout</p>
+                    <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{getVoterTurnout()}%</p>
+                  </div>
+                  <FaPercentage className="text-3xl sm:text-4xl text-yellow-400" />
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Footer Info */}
-          <div data-aos="fade-up" className="mt-10 sm:mt-12 text-center">
+          <div data-aos="fade-up" className="mt-6 sm:mt-8 text-center">
             <div className={`${currentTheme.cardBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
               <div className="flex items-center justify-center gap-2 mb-2">
                 <FaShieldAlt className="text-green-400 text-sm sm:text-base" />
