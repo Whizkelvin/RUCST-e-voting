@@ -5,7 +5,8 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from 'react-hook-form';
 import Image from 'next/image';
-import { Toaster, toast } from 'sonner';  // ← Changed from react-toastify
+import { Toaster, toast } from 'sonner';
+import Link from 'next/link';
 import { 
   FaEnvelope, 
   FaIdCard, 
@@ -21,7 +22,8 @@ import {
   FaMoon,
   FaShieldAlt,
   FaClock,
-  FaExclamationTriangle
+  FaExclamationTriangle,
+  FaHome
 } from 'react-icons/fa';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
@@ -508,24 +510,112 @@ function LoginContent() {
         return;
       }
       
+      // ========== FIXED: Check for existing valid OTP before creating new one ==========
+      // Check localStorage for pending OTP first
+      const pendingVoterId = localStorage.getItem('temp_voter_id');
+      const otpExpiry = localStorage.getItem('temp_voter_expiry');
+      
+      if (pendingVoterId === voter.id && otpExpiry && Date.now() < parseInt(otpExpiry)) {
+        toast.info('You already have a valid OTP. Redirecting to verification page...', {
+          duration: 3000
+        });
+        // Ensure localStorage has all required data
+        localStorage.setItem('temp_voter_email', cleanEmail);
+        localStorage.setItem('temp_voter_school_id', cleanSchoolId);
+        localStorage.setItem('temp_voter_name', voter.name);
+        setTimeout(() => router.push("/verify-otp"), 1500);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Check database for active unused OTP
+      const { data: existingActiveOtp, error: checkOtpError } = await supabase
+        .from('otp_codes')
+        .select('*')
+        .eq('voter_id', voter.id)
+        .eq('used', false)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
+      
+      if (existingActiveOtp && !checkOtpError) {
+        const timeLeft = Math.ceil((new Date(existingActiveOtp.expires_at) - new Date()) / 60000);
+        toast.warning(`You already have an active OTP. Please check your email or wait ${timeLeft} minutes.`, {
+          duration: 5000
+        });
+        
+        // Update localStorage with existing OTP data
+        localStorage.setItem('temp_voter_email', cleanEmail);
+        localStorage.setItem('temp_voter_school_id', cleanSchoolId);
+        localStorage.setItem('temp_voter_id', voter.id);
+        localStorage.setItem('temp_voter_name', voter.name);
+        localStorage.setItem('temp_voter_expiry', new Date(existingActiveOtp.expires_at).getTime().toString());
+        
+        setTimeout(() => router.push("/verify-otp"), 1500);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Delete ONLY expired OTPs (not active ones)
+      const { error: deleteError } = await supabase
+        .from('otp_codes')
+        .delete()
+        .eq('voter_id', voter.id)
+        .lt('expires_at', new Date().toISOString());
+      
+      if (deleteError) {
+        console.error('Error deleting expired OTPs:', deleteError);
+      }
+      
+      // Generate new OTP
       const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
       const hashedOtp = await hashCode(otpCode);
       
-      await supabase.from('otp_codes').delete().eq('voter_id', voter.id);
-      
+      // Insert new OTP with conflict handling
       const { error: otpError } = await supabase
         .from('otp_codes')
-        .insert({
+        .upsert({
           voter_id: voter.id,
           email: cleanEmail,
           school_id: cleanSchoolId,
           code_hash: hashedOtp,
           expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-          used: false
+          used: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'voter_id',
+          ignoreDuplicates: false
         });
       
-      if (otpError) throw otpError;
+      if (otpError) {
+        console.error('OTP insertion error:', otpError);
+        
+        // If unique violation, force delete and retry once
+        if (otpError.code === '23505') {
+          console.log('Unique violation detected, forcing cleanup and retry...');
+          await supabase.from('otp_codes').delete().eq('voter_id', voter.id);
+          
+          const { error: retryError } = await supabase
+            .from('otp_codes')
+            .insert({
+              voter_id: voter.id,
+              email: cleanEmail,
+              school_id: cleanSchoolId,
+              code_hash: hashedOtp,
+              expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+              used: false,
+              created_at: new Date().toISOString()
+            });
+          
+          if (retryError) {
+            throw retryError;
+          }
+        } else {
+          throw otpError;
+        }
+      }
       
+      // Send email with OTP
       try {
         const response = await fetch('/api/send-otp', {
           method: 'POST',
@@ -555,6 +645,7 @@ function LoginContent() {
         });
       }
       
+      // Store in localStorage
       localStorage.setItem('temp_voter_email', cleanEmail);
       localStorage.setItem('temp_voter_school_id', cleanSchoolId);
       localStorage.setItem('temp_voter_id', voter.id);
@@ -720,6 +811,15 @@ function LoginContent() {
           <div className={`absolute top-[-100px] right-[-100px] w-[300px] h-[300px] ${theme === 'dark' ? 'bg-green-600' : 'bg-green-400'} opacity-20 blur-3xl rounded-full animate-pulse`}></div>
           <div className={`absolute bottom-[-100px] left-[-100px] w-[300px] h-[300px] ${theme === 'dark' ? 'bg-yellow-500' : 'bg-yellow-400'} opacity-20 blur-3xl rounded-full animate-pulse delay-1000`}></div>
         </div>
+
+        {/* Home Button - Top Left */}
+        <Link 
+          href="/"
+          className="fixed top-4 left-4 z-50 p-3 rounded-full bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-110 transition-all duration-300 group"
+          aria-label="Go to Home"
+        >
+          <FaHome className={`text-xl ${theme === 'dark' ? 'text-white/80 group-hover:text-green-400' : 'text-gray-700 group-hover:text-green-500'} transition`} />
+        </Link>
 
         {/* Theme Toggle Button */}
         <button
@@ -940,7 +1040,7 @@ function LoginContent() {
             <div className={`mt-6 text-xs ${currentTheme.textSecondary} text-center space-y-1`}>
               <p>Enter your email and school ID to login</p>
               <p>Students: OTP will be sent to your email</p>
-        
+            
               {process.env.NODE_ENV === 'development' && (
                 <p className="text-yellow-400 text-xs mt-2">
                   
