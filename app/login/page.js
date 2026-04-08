@@ -42,6 +42,7 @@ function LoginContent() {
   const [mounted, setMounted] = useState(false);
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [lockoutUntil, setLockoutUntil] = useState(null);
+  const [votingStatus, setVotingStatus] = useState(null);
   const formRef = useRef(null);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -267,6 +268,51 @@ function LoginContent() {
     getIP();
   }, []);
 
+  // Check voting period status
+  useEffect(() => {
+    const checkVotingPeriod = async () => {
+      try {
+        const { data: settings, error } = await supabase
+          .from('voting_settings')
+          .select('is_active, start_date, end_date')
+          .single();
+        
+        if (error) throw error;
+        
+        const now = new Date();
+        const startDate = new Date(settings.start_date);
+        const endDate = new Date(settings.end_date);
+        const hasStarted = now >= startDate;
+        const hasEnded = now > endDate;
+        
+        let timeRemaining = '';
+        if (!hasEnded && hasStarted) {
+          const timeLeft = endDate - now;
+          const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+          const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+          timeRemaining = `${hours}h ${minutes}m remaining`;
+        }
+        
+        setVotingStatus({
+          isActive: settings.is_active && hasStarted && !hasEnded,
+          hasStarted,
+          hasEnded,
+          startDate: settings.start_date,
+          endDate: settings.end_date,
+          timeRemaining
+        });
+      } catch (error) {
+        console.error('Error checking voting period:', error);
+      }
+    };
+    
+    checkVotingPeriod();
+    
+    // Refresh every minute
+    const interval = setInterval(checkVotingPeriod, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Check user type when typing - MODIFIED to only use admins table
   useEffect(() => {
     const checkUserType = async () => {
@@ -467,6 +513,66 @@ function LoginContent() {
       const cleanEmail = email.toLowerCase().trim();
       const cleanSchoolId = schoolId.trim().padStart(8, '0');
       
+      // ========== 1. CHECK VOTING PERIOD ==========
+      const { data: votingSettings, error: settingsError } = await supabase
+        .from('voting_settings')
+        .select('is_active, start_date, end_date')
+        .single();
+      
+      if (settingsError) {
+        console.error('Error fetching voting settings:', settingsError);
+        toast.error('Unable to verify voting period. Please try again later.');
+        setIsLoading(false);
+        return;
+      }
+      
+      const now = new Date();
+      const startDate = new Date(votingSettings.start_date);
+      const endDate = new Date(votingSettings.end_date);
+      
+      // Check if voting is active
+      if (!votingSettings?.is_active) {
+        toast.error('❌ Voting is currently disabled. Please contact the electoral commission.', {
+          duration: 5000
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      // Check if voting has started
+      if (now < startDate) {
+        const startDateFormatted = startDate.toLocaleString();
+        toast.error(`❌ Voting has not started yet. Voting begins on ${startDateFormatted}`, {
+          duration: 5000
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      // Check if voting has ended
+      if (now > endDate) {
+        toast.error('❌ Voting period has ended. Thank you for your participation!', {
+          duration: 5000
+        });
+        setTimeout(() => {
+          router.push('/election-result');
+        }, 2000);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Optional: Show how much time is left
+      const timeLeft = endDate - now;
+      const hoursLeft = Math.floor(timeLeft / (1000 * 60 * 60));
+      const minutesLeft = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+      
+      if (hoursLeft < 24 && hoursLeft > 0) {
+        toast.info(`⏰ Voting ends in ${hoursLeft} hours and ${minutesLeft} minutes`, {
+          duration: 4000
+        });
+      }
+      
+      // ========== 2. GET VOTER DATA ==========
       const { data: voter, error: voterError } = await supabase
         .from('voters')
         .select('*')
@@ -510,112 +616,78 @@ function LoginContent() {
         return;
       }
       
-      // ========== FIXED: Check for existing valid OTP before creating new one ==========
-      // Check localStorage for pending OTP first
-      const pendingVoterId = localStorage.getItem('temp_voter_id');
-      const otpExpiry = localStorage.getItem('temp_voter_expiry');
-      
-      if (pendingVoterId === voter.id && otpExpiry && Date.now() < parseInt(otpExpiry)) {
-        toast.info('You already have a valid OTP. Redirecting to verification page...', {
-          duration: 3000
-        });
-        // Ensure localStorage has all required data
-        localStorage.setItem('temp_voter_email', cleanEmail);
-        localStorage.setItem('temp_voter_school_id', cleanSchoolId);
-        localStorage.setItem('temp_voter_name', voter.name);
-        setTimeout(() => router.push("/verify-otp"), 1500);
-        setIsLoading(false);
-        return;
-      }
-      
-      // Check database for active unused OTP
-      const { data: existingActiveOtp, error: checkOtpError } = await supabase
+      // ========== 3. CHECK FOR EXISTING OTP ==========
+      const { data: existingOtp, error: fetchOtpError } = await supabase
         .from('otp_codes')
         .select('*')
         .eq('voter_id', voter.id)
-        .eq('used', false)
-        .gt('expires_at', new Date().toISOString())
         .maybeSingle();
       
-      if (existingActiveOtp && !checkOtpError) {
-        const timeLeft = Math.ceil((new Date(existingActiveOtp.expires_at) - new Date()) / 60000);
-        toast.warning(`You already have an active OTP. Please check your email or wait ${timeLeft} minutes.`, {
-          duration: 5000
-        });
+      let otpCode;
+      let otpExpiry;
+      let isNewOtp = false;
+      
+      if (existingOtp && !fetchOtpError) {
+        const expiryTime = new Date(existingOtp.expires_at);
+        const isExpired = now > expiryTime;
         
-        // Update localStorage with existing OTP data
-        localStorage.setItem('temp_voter_email', cleanEmail);
-        localStorage.setItem('temp_voter_school_id', cleanSchoolId);
-        localStorage.setItem('temp_voter_id', voter.id);
-        localStorage.setItem('temp_voter_name', voter.name);
-        localStorage.setItem('temp_voter_expiry', new Date(existingActiveOtp.expires_at).getTime().toString());
-        
-        setTimeout(() => router.push("/verify-otp"), 1500);
-        setIsLoading(false);
-        return;
-      }
-      
-      // Delete ONLY expired OTPs (not active ones)
-      const { error: deleteError } = await supabase
-        .from('otp_codes')
-        .delete()
-        .eq('voter_id', voter.id)
-        .lt('expires_at', new Date().toISOString());
-      
-      if (deleteError) {
-        console.error('Error deleting expired OTPs:', deleteError);
-      }
-      
-      // Generate new OTP
-      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const hashedOtp = await hashCode(otpCode);
-      
-      // Insert new OTP with conflict handling
-      const { error: otpError } = await supabase
-        .from('otp_codes')
-        .upsert({
-          voter_id: voter.id,
-          email: cleanEmail,
-          school_id: cleanSchoolId,
-          code_hash: hashedOtp,
-          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-          used: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'voter_id',
-          ignoreDuplicates: false
-        });
-      
-      if (otpError) {
-        console.error('OTP insertion error:', otpError);
-        
-        // If unique violation, force delete and retry once
-        if (otpError.code === '23505') {
-          console.log('Unique violation detected, forcing cleanup and retry...');
-          await supabase.from('otp_codes').delete().eq('voter_id', voter.id);
+        if (!isExpired) {
+          // OTP is still valid - NEED TO RETRIEVE OR REGENERATE
+          // Note: Since we only store hash, we can't retrieve original OTP
+          // So we generate a new one but keep the same expiry
+          otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+          otpExpiry = expiryTime;
+          const timeLeft = Math.ceil((expiryTime - now) / 60000);
           
-          const { error: retryError } = await supabase
-            .from('otp_codes')
-            .insert({
-              voter_id: voter.id,
-              email: cleanEmail,
-              school_id: cleanSchoolId,
-              code_hash: hashedOtp,
-              expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-              used: false,
-              created_at: new Date().toISOString()
-            });
-          
-          if (retryError) {
-            throw retryError;
-          }
+          toast.info(`📧 Resending OTP (valid for ${timeLeft} more minutes)`, {
+            duration: 4000
+          });
+          isNewOtp = true; // We need to update the hash in DB
         } else {
-          throw otpError;
+          // OTP expired - generate new one
+          isNewOtp = true;
+          otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+          otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+          toast.info('Previous OTP expired. Sending a new OTP.', {
+            duration: 3000
+          });
+        }
+      } else {
+        // No existing OTP - create new one
+        isNewOtp = true;
+        otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+      }
+      
+      // ========== 4. SAVE OTP TO DATABASE ==========
+      if (isNewOtp) {
+        const hashedOtp = await hashCode(otpCode);
+        
+        // Delete old OTPs first
+        await supabase.from('otp_codes').delete().eq('voter_id', voter.id);
+        
+        // Insert new OTP (without updated_at)
+        const { error: otpError } = await supabase
+          .from('otp_codes')
+          .insert({
+            voter_id: voter.id,
+            email: cleanEmail,
+            school_id: cleanSchoolId,
+            code_hash: hashedOtp,
+            expires_at: otpExpiry.toISOString(),
+            used: false,
+            created_at: new Date().toISOString()
+          });
+        
+        if (otpError) {
+          console.error('OTP insertion error:', otpError);
+          toast.error('Failed to generate OTP. Please try again.');
+          setIsLoading(false);
+          return;
         }
       }
       
-      // Send email with OTP
+      // ========== 5. SEND OTP VIA EMAIL ==========
       try {
         const response = await fetch('/api/send-otp', {
           method: 'POST',
@@ -636,7 +708,11 @@ function LoginContent() {
           });
           console.log('OTP for testing:', otpCode);
         } else {
-          toast.success(`✅ OTP sent to ${email}. Check your inbox.`);
+          if (!existingOtp || new Date(existingOtp.expires_at) < now) {
+            toast.success(`✅ New OTP sent to ${email}. Check your inbox.`);
+          } else {
+            toast.success(`📧 OTP resent to ${email}. Same code is still valid.`);
+          }
         }
       } catch (emailError) {
         console.error('Email sending failed:', emailError);
@@ -645,12 +721,12 @@ function LoginContent() {
         });
       }
       
-      // Store in localStorage
+      // ========== 6. STORE IN LOCALSTORAGE ==========
       localStorage.setItem('temp_voter_email', cleanEmail);
       localStorage.setItem('temp_voter_school_id', cleanSchoolId);
       localStorage.setItem('temp_voter_id', voter.id);
       localStorage.setItem('temp_voter_name', voter.name);
-      localStorage.setItem('temp_voter_expiry', (Date.now() + 10 * 60 * 1000).toString());
+      localStorage.setItem('temp_voter_expiry', otpExpiry.getTime().toString());
       
       await logOtpGeneration({
         voter_id: voter.id,
@@ -659,7 +735,7 @@ function LoginContent() {
         success: true
       });
       
-      toast.success('OTP sent! Redirecting to verification...');
+      toast.success('Redirecting to verification...');
       
       setTimeout(() => {
         router.push("/verify-otp");
@@ -793,7 +869,7 @@ function LoginContent() {
 
   return (
     <>
-      {/* Sonner Toaster Component - Add this once */}
+      {/* Sonner Toaster Component */}
       <Toaster 
         position="top-center" 
         richColors 
@@ -863,6 +939,40 @@ function LoginContent() {
               <h1 className={`text-2xl font-bold ${currentTheme.textPrimary}`}>Regent E-Voting Portal</h1>
               <p className={`text-sm ${currentTheme.textSecondary} mt-1`}>Secure access to cast your vote</p>
             </div>
+
+            {/* Voting Period Status Banner */}
+            {votingStatus && (
+              <div className={`mb-4 p-3 rounded-xl ${
+                votingStatus.hasEnded 
+                  ? 'bg-red-500/20 border border-red-400/50'
+                  : !votingStatus.hasStarted
+                  ? 'bg-yellow-500/20 border border-yellow-400/50'
+                  : 'bg-green-500/20 border border-green-400/50'
+              }`}>
+                <div className="flex items-center gap-2">
+                  {votingStatus.hasEnded ? (
+                    <FaTimesCircle className="text-red-400" />
+                  ) : !votingStatus.hasStarted ? (
+                    <FaClock className="text-yellow-400 animate-pulse" />
+                  ) : (
+                    <FaCheckCircle className="text-green-400" />
+                  )}
+                  <p className={`text-sm font-medium ${
+                    votingStatus.hasEnded 
+                      ? 'text-red-200'
+                      : !votingStatus.hasStarted
+                      ? 'text-yellow-200'
+                      : 'text-green-200'
+                  }`}>
+                    {votingStatus.hasEnded 
+                      ? 'Voting Period Has Ended'
+                      : !votingStatus.hasStarted
+                      ? `Voting Starts: ${new Date(votingStatus.startDate).toLocaleString()}`
+                      : `Voting Active - ${votingStatus.timeRemaining}`}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Rate Limit Warning */}
             {loginAttempts > 3 && loginAttempts < 5 && (
@@ -1004,7 +1114,7 @@ function LoginContent() {
               {/* Login Button */}
               <button
                 type="submit"
-                disabled={isLoading || loginStatus === 'invalid' || (loginStatus === 'voter' && voterStatus === 'already_voted') || (lockoutUntil && new Date() < new Date(lockoutUntil))}
+                disabled={isLoading || loginStatus === 'invalid' || (loginStatus === 'voter' && voterStatus === 'already_voted') || (lockoutUntil && new Date() < new Date(lockoutUntil)) || (votingStatus?.hasEnded) || (votingStatus?.hasStarted === false)}
                 className={`w-full py-3 rounded-xl font-semibold text-white transition-all duration-300 shadow-lg hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 ${
                   loginStatus === 'admin' 
                     ? 'bg-gradient-to-r from-purple-700 to-purple-600 hover:from-purple-600 hover:to-purple-500'
@@ -1043,7 +1153,7 @@ function LoginContent() {
             
               {process.env.NODE_ENV === 'development' && (
                 <p className="text-yellow-400 text-xs mt-2">
-                  
+                  Debug: Press Ctrl+Shift+D to fill demo credentials
                 </p>
               )}
             </div>
