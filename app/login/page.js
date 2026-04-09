@@ -187,7 +187,6 @@ function LoginContent() {
   // Check voting period status (runs on mount and every minute)
   const checkVotingPeriod = useCallback(async () => {
     try {
-      // FIXED: Using correct table name 'voting_periods'
       const { data: settings, error } = await supabase
         .from('voting_periods')
         .select('is_active, start_date, end_date')
@@ -195,7 +194,6 @@ function LoginContent() {
       
       if (error) {
         console.error('Error fetching voting settings:', error);
-        // Don't block login if we can't fetch settings - default to allowing voting
         setVotingStatus({
           isActive: true,
           hasStarted: true,
@@ -214,10 +212,6 @@ function LoginContent() {
       const hasStarted = now >= startDate;
       const hasEnded = now > endDate;
       
-      // Voting is active ONLY if ALL conditions are met:
-      // 1. is_active === true
-      // 2. Current time is AFTER or EQUAL to start_date
-      // 3. Current time is BEFORE end_date
       const isActive = settings.is_active === true && hasStarted && !hasEnded;
       
       let message = '';
@@ -490,10 +484,10 @@ function LoginContent() {
         if (result.success) {
           toast.success(`✅ Admin OTP sent to ${cleanEmail}.`);
         } else {
-          toast.info(`🔑 Development OTP: ${otpCode}`);
+          toast.error('Failed to send OTP. Please try again.');
         }
       } catch (emailError) {
-        toast.info(`🔑 Development OTP: ${otpCode}`);
+        toast.error('Failed to send OTP. Please try again.');
       }
       
       setLoginAttempts(0);
@@ -518,7 +512,7 @@ function LoginContent() {
       const cleanEmail = email.toLowerCase().trim();
       const cleanSchoolId = schoolId.trim().padStart(8, '0');
       
-      // ========== STEP 1: GET VOTER DATA FIRST ==========
+      // ========== STEP 1: GET VOTER DATA ==========
       const { data: voter, error: voterError } = await supabase
         .from('voters')
         .select('*')
@@ -541,7 +535,7 @@ function LoginContent() {
         return;
       }
       
-      // Double-check by looking for actual votes
+      // Double-check votes table
       const { data: existingVote } = await supabase
         .from('votes')
         .select('id')
@@ -561,7 +555,6 @@ function LoginContent() {
       }
       
       // ========== STEP 3: CHECK VOTING PERIOD ==========
-      // FIXED: Using correct table name 'voting_periods'
       const { data: votingSettings, error: settingsError } = await supabase
         .from('voting_periods')
         .select('is_active, start_date, end_date')
@@ -577,14 +570,12 @@ function LoginContent() {
       const startDate = new Date(votingSettings.start_date);
       const endDate = new Date(votingSettings.end_date);
       
-      // Check if voting hasn't started
       if (now < startDate) {
         toast.error(`❌ Voting has not started yet. Begins on ${startDate.toLocaleString()}`);
         setIsLoading(false);
         return;
       }
       
-      // Check if voting has ended
       if (now > endDate) {
         toast.error('❌ Voting period has ended. Redirecting to results...');
         setTimeout(() => router.push('/election-result'), 2000);
@@ -592,71 +583,88 @@ function LoginContent() {
         return;
       }
       
-      // Check if voting is active/enabled
       if (!votingSettings?.is_active) {
-        toast.error('❌ Voting is currently disabled by the Electoral Commission. Please try again later.');
+        toast.error('❌ Voting is currently disabled by the Electoral Commission.');
         setIsLoading(false);
         return;
       }
       
-      // ========== STEP 4: PROCEED WITH OTP GENERATION ==========
-      // Check for existing valid OTP and invalidate it
+      // ========== STEP 4: CHECK FOR EXISTING VALID OTP ==========
       const { data: existingOtp, error: fetchOtpError } = await supabase
         .from('otp_codes')
         .select('*')
         .eq('voter_id', voter.id)
         .eq('used', false)
-        .gt('expires_at', new Date().toISOString())
+        .gt('expires_at', now.toISOString())
         .maybeSingle();
       
       let otpCode;
       let otpExpiry;
+      let isResending = false;
       
+      // If valid OTP exists, resend the SAME code
       if (existingOtp && !fetchOtpError) {
-        // Invalidate old OTP
+        otpCode = existingOtp.otp_code; // Use the existing plain text OTP
+        otpExpiry = new Date(existingOtp.expires_at);
+        isResending = true;
+        
+        // Update resend tracking
         await supabase
           .from('otp_codes')
-          .update({ used: true, invalidated_at: new Date().toISOString() })
+          .update({
+            last_resent_at: now.toISOString(),
+            resend_count: (existingOtp.resend_count || 0) + 1
+          })
           .eq('id', existingOtp.id);
         
-        otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-        otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
-        toast.info(`Previous OTP invalidated. Sending new OTP.`);
+        toast.info(`OTP already sent. Resending same code. Valid until ${otpExpiry.toLocaleTimeString()}`);
       } else {
+        // Generate brand new OTP
         otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-        otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+        otpExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+        isResending = false;
+        
+        // Delete any expired or used OTPs for this voter
+        await supabase
+          .from('otp_codes')
+          .delete()
+          .eq('voter_id', voter.id)
+          .lt('expires_at', now.toISOString());
+        
+        // Mark any existing valid OTPs as used (shouldn't exist, but just in case)
+        await supabase
+          .from('otp_codes')
+          .update({ used: true, used_at: now.toISOString() })
+          .eq('voter_id', voter.id)
+          .eq('used', false);
+        
+        // Hash the new OTP
+        const hashedOtp = await hashCode(otpCode);
+        
+        // Insert new OTP with both hash and plain text
+        const { error: otpError } = await supabase
+          .from('otp_codes')
+          .insert({
+            voter_id: voter.id,
+            email: cleanEmail,
+            school_id: cleanSchoolId,
+            code_hash: hashedOtp,
+            otp_code: otpCode, // Store plain text for resending
+            expires_at: otpExpiry.toISOString(),
+            used: false,
+            created_at: now.toISOString(),
+            resend_count: 0
+          });
+        
+        if (otpError) {
+          console.error('OTP insertion error:', otpError);
+          toast.error('Failed to generate OTP. Please try again.');
+          setIsLoading(false);
+          return;
+        }
       }
       
-      const hashedOtp = await hashCode(otpCode);
-      
-      // Delete expired OTPs
-      await supabase
-        .from('otp_codes')
-        .delete()
-        .eq('voter_id', voter.id)
-        .lt('expires_at', new Date().toISOString());
-      
-      // Insert new OTP
-      const { error: otpError } = await supabase
-        .from('otp_codes')
-        .insert({
-          voter_id: voter.id,
-          email: cleanEmail,
-          school_id: cleanSchoolId,
-          code_hash: hashedOtp,
-          expires_at: otpExpiry.toISOString(),
-          used: false,
-          created_at: new Date().toISOString()
-        });
-      
-      if (otpError) {
-        console.error('OTP insertion error:', otpError);
-        toast.error('Failed to generate OTP. Please try again.');
-        setIsLoading(false);
-        return;
-      }
-      
-      // Send email
+      // ========== STEP 5: SEND OTP VIA EMAIL ==========
       try {
         const response = await fetch('/api/send-otp', {
           method: 'POST',
@@ -665,27 +673,38 @@ function LoginContent() {
             email: cleanEmail,
             otp: otpCode,
             name: voter.name,
-            expiresIn: 10
+            expiresIn: 15
           }),
         });
         
         const result = await response.json();
         
         if (!result.success) {
-          toast.info(`🔑 Development OTP: ${otpCode}`);
+          toast.error('Failed to send OTP. Please try again.');
+          setIsLoading(false);
+          return;
         } else {
-          toast.success(`✅ OTP sent to ${email}`);
+          if (isResending) {
+            toast.success(`✅ OTP resent to ${email}. Valid for ${Math.ceil((otpExpiry - now) / 60000)} more minutes.`);
+          } else {
+            toast.success(`✅ OTP sent to ${email}. Valid for 15 minutes.`);
+          }
         }
       } catch (emailError) {
-        toast.info(`🔑 Development OTP: ${otpCode}`);
+        console.error('Email error:', emailError);
+        toast.error('Failed to send OTP. Please try again.');
+        setIsLoading(false);
+        return;
       }
       
+      // ========== STEP 6: STORE TEMPORARY DATA ==========
       localStorage.setItem('temp_voter_email', cleanEmail);
       localStorage.setItem('temp_voter_school_id', cleanSchoolId);
       localStorage.setItem('temp_voter_id', voter.id);
       localStorage.setItem('temp_voter_name', voter.name);
       localStorage.setItem('temp_voter_expiry', otpExpiry.getTime().toString());
       
+      // Log OTP generation
       await logOtpGeneration({
         voter_id: voter.id,
         email: email,
@@ -721,14 +740,12 @@ function LoginContent() {
     
     // For voters, check additional conditions before proceeding
     if (loginStatus === 'voter') {
-      // Check if already voted
       if (voterStatus === 'already_voted') {
         toast.error('❌ You have already voted. Cannot login again.');
         setTimeout(() => router.push('/election-result'), 2000);
         return;
       }
       
-      // Check voting period conditions
       if (votingStatus.hasEnded) {
         toast.error('❌ Voting period has ended. You cannot vote at this time.');
         setTimeout(() => router.push('/election-result'), 2000);
@@ -918,7 +935,7 @@ function LoginContent() {
               <p className={`text-sm ${currentTheme.textSecondary} mt-1`}>Secure access to cast your vote</p>
             </div>
 
-            {/* Voting Period Status Banner - Shows for all users */}
+            {/* Voting Period Status Banner */}
             {votingStatus && (
               <div className={`mb-4 p-3 rounded-xl ${
                 votingStatus.hasEnded 
@@ -1160,7 +1177,7 @@ function LoginContent() {
               <p>Students: OTP will be sent to your email</p>
               <p className="text-green-400/70 text-[10px]">Admins: Access granted regardless of voting period</p>
               
-              {/* Home Button - Under the info */}
+              {/* Home Button */}
               <div className="pt-2">
                 <Link 
                   href="/"
