@@ -546,7 +546,7 @@ export default function VotePage() {
                 onClick={() => setShowConfirmModal(false)}
                 className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-gray-700 transition"
               >
-                Cancel
+                Go Back
               </button>
               <button
                 onClick={handleSubmitVote}
