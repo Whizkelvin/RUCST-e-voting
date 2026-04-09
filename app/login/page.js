@@ -187,12 +187,26 @@ function LoginContent() {
   // Check voting period status (runs on mount and every minute)
   const checkVotingPeriod = useCallback(async () => {
     try {
+      // FIXED: Using correct table name 'voting_periods'
       const { data: settings, error } = await supabase
-        .from('voting_settings')
+        .from('voting_periods')
         .select('is_active, start_date, end_date')
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching voting settings:', error);
+        // Don't block login if we can't fetch settings - default to allowing voting
+        setVotingStatus({
+          isActive: true,
+          hasStarted: true,
+          hasEnded: false,
+          message: 'Voting system ready',
+          startDate: null,
+          endDate: null,
+          timeRemaining: ''
+        });
+        return;
+      }
       
       const now = new Date();
       const startDate = new Date(settings.start_date);
@@ -200,26 +214,32 @@ function LoginContent() {
       const hasStarted = now >= startDate;
       const hasEnded = now > endDate;
       
+      // Voting is active ONLY if ALL conditions are met:
+      // 1. is_active === true
+      // 2. Current time is AFTER or EQUAL to start_date
+      // 3. Current time is BEFORE end_date
+      const isActive = settings.is_active === true && hasStarted && !hasEnded;
+      
       let message = '';
       let timeRemaining = '';
       
-      if (hasEnded) {
-        message = 'Voting period has ended. Results are now available.';
+      if (!settings.is_active) {
+        message = '⚠️ Voting is currently disabled by the Electoral Commission. Please contact admin.';
       } else if (!hasStarted) {
-        const daysUntil = Math.ceil((startDate - now) / (1000 * 60 * 60 * 24));
-        message = `Voting has not started yet. Begins on ${startDate.toLocaleDateString()} (in ${daysUntil} days)`;
-      } else if (settings.is_active) {
+        const hoursUntil = Math.ceil((startDate - now) / (1000 * 60 * 60));
+        message = `⏰ Voting starts on ${startDate.toLocaleString()} (in ${hoursUntil} hours)`;
+      } else if (hasEnded) {
+        message = '📊 Voting period has ended. View results below.';
+      } else if (settings.is_active && hasStarted && !hasEnded) {
         const timeLeft = endDate - now;
         const hours = Math.floor(timeLeft / (1000 * 60 * 60));
         const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
         timeRemaining = `${hours}h ${minutes}m`;
-        message = `Voting is active! Ends in ${timeRemaining}`;
-      } else {
-        message = 'Voting is currently disabled by the Electoral Commission.';
+        message = `✅ Voting is active! Ends in ${timeRemaining}`;
       }
       
       setVotingStatus({
-        isActive: settings.is_active && hasStarted && !hasEnded,
+        isActive,
         hasStarted,
         hasEnded,
         message,
@@ -315,7 +335,7 @@ function LoginContent() {
   // Check voting period on mount and every minute
   useEffect(() => {
     checkVotingPeriod();
-    const interval = setInterval(checkVotingPeriod, 60000); // Check every minute
+    const interval = setInterval(checkVotingPeriod, 60000);
     return () => clearInterval(interval);
   }, [checkVotingPeriod]);
 
@@ -514,7 +534,6 @@ function LoginContent() {
       }
       
       // ========== STEP 2: CHECK IF ALREADY VOTED ==========
-      // Check has_voted flag first
       if (voter.has_voted === true) {
         toast.error('❌ You have already voted. Redirecting to results...');
         setTimeout(() => router.push('/election-result'), 3000);
@@ -530,7 +549,6 @@ function LoginContent() {
         .maybeSingle();
       
       if (existingVote) {
-        // Sync the has_voted flag if it's out of sync
         await supabase
           .from('voters')
           .update({ has_voted: true, voted_at: new Date().toISOString() })
@@ -543,8 +561,9 @@ function LoginContent() {
       }
       
       // ========== STEP 3: CHECK VOTING PERIOD ==========
+      // FIXED: Using correct table name 'voting_periods'
       const { data: votingSettings, error: settingsError } = await supabase
-        .from('voting_settings')
+        .from('voting_periods')
         .select('is_active, start_date, end_date')
         .single();
       
@@ -702,7 +721,7 @@ function LoginContent() {
     
     // For voters, check additional conditions before proceeding
     if (loginStatus === 'voter') {
-      // Check if already voted (this is shown in UI but double-check)
+      // Check if already voted
       if (voterStatus === 'already_voted') {
         toast.error('❌ You have already voted. Cannot login again.');
         setTimeout(() => router.push('/election-result'), 2000);
@@ -978,20 +997,19 @@ function LoginContent() {
                     Student Voter Detected
                   </p>
                 </div>
-                {voterStatus === 'can_vote' && (
+                {voterStatus === 'can_vote' && votingStatus.isActive && (
                   <p className={`text-xs mt-1 flex items-center gap-1 ${theme === 'dark' ? 'text-green-300' : 'text-green-600'}`}>
-                    <FaCheckCircle className="text-xs" /> You are eligible to vote.
+                    <FaCheckCircle className="text-xs" /> You are eligible to vote. Voting is active!
+                  </p>
+                )}
+                {voterStatus === 'can_vote' && !votingStatus.isActive && !votingStatus.hasEnded && !votingStatus.hasStarted && (
+                  <p className={`text-xs mt-1 flex items-center gap-1 ${theme === 'dark' ? 'text-yellow-300' : 'text-yellow-600'}`}>
+                    <FaExclamationTriangle className="text-xs" /> You are eligible but voting is currently disabled.
                   </p>
                 )}
                 {voterStatus === 'already_voted' && (
                   <p className={`text-xs mt-1 flex items-center gap-1 ${theme === 'dark' ? 'text-amber-300' : 'text-amber-600'}`}>
-                    <FaExclamationTriangle className="text-xs" /> You have already voted. Redirecting to results...
-                  </p>
-                )}
-                {/* Show warning if voting is not active */}
-                {voterStatus === 'can_vote' && !votingStatus.isActive && !votingStatus.hasEnded && !votingStatus.hasStarted && (
-                  <p className={`text-xs mt-1 flex items-center gap-1 ${theme === 'dark' ? 'text-yellow-300' : 'text-yellow-600'}`}>
-                    <FaExclamationTriangle className="text-xs" /> Voting is currently disabled.
+                    <FaExclamationTriangle className="text-xs" /> You have already voted.
                   </p>
                 )}
                 {voterStatus === 'can_vote' && votingStatus.hasEnded && (
@@ -1018,9 +1036,8 @@ function LoginContent() {
                 <p className={`text-xs mt-1 flex items-center gap-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
                   <FaShieldAlt className="text-xs" /> Please enter your password (School ID) to login.
                 </p>
-                {/* Admin info - always can login regardless of voting period */}
                 <p className={`text-xs mt-1 flex items-center gap-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                  <FaShieldAlt className="text-xs" /> Admin access is always available.
+                  <FaShieldAlt className="text-xs" /> Admin access is always available regardless of voting period.
                 </p>
               </div>
             )}
