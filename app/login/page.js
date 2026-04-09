@@ -498,8 +498,51 @@ function LoginContent() {
       const cleanEmail = email.toLowerCase().trim();
       const cleanSchoolId = schoolId.trim().padStart(8, '0');
       
-      // ========== CHECK VOTING PERIOD FIRST ==========
-      // Double-check voting period before proceeding
+      // ========== STEP 1: GET VOTER DATA FIRST ==========
+      const { data: voter, error: voterError } = await supabase
+        .from('voters')
+        .select('*')
+        .eq('email', cleanEmail)
+        .eq('school_id', cleanSchoolId)
+        .maybeSingle();
+      
+      if (voterError || !voter) {
+        setLoginAttempts(prev => prev + 1);
+        toast.error('Invalid credentials. Please try again.');
+        setIsLoading(false);
+        return;
+      }
+      
+      // ========== STEP 2: CHECK IF ALREADY VOTED ==========
+      // Check has_voted flag first
+      if (voter.has_voted === true) {
+        toast.error('❌ You have already voted. Redirecting to results...');
+        setTimeout(() => router.push('/election-result'), 3000);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Double-check by looking for actual votes
+      const { data: existingVote } = await supabase
+        .from('votes')
+        .select('id')
+        .eq('voter_id', voter.id)
+        .maybeSingle();
+      
+      if (existingVote) {
+        // Sync the has_voted flag if it's out of sync
+        await supabase
+          .from('voters')
+          .update({ has_voted: true, voted_at: new Date().toISOString() })
+          .eq('id', voter.id);
+        
+        toast.error('❌ You have already voted. Redirecting to results...');
+        setTimeout(() => router.push('/election-result'), 3000);
+        setIsLoading(false);
+        return;
+      }
+      
+      // ========== STEP 3: CHECK VOTING PERIOD ==========
       const { data: votingSettings, error: settingsError } = await supabase
         .from('voting_settings')
         .select('is_active, start_date, end_date')
@@ -515,18 +558,14 @@ function LoginContent() {
       const startDate = new Date(votingSettings.start_date);
       const endDate = new Date(votingSettings.end_date);
       
-      if (!votingSettings?.is_active) {
-        toast.error('❌ Voting is currently disabled. Please contact the electoral commission.');
-        setIsLoading(false);
-        return;
-      }
-      
+      // Check if voting hasn't started
       if (now < startDate) {
         toast.error(`❌ Voting has not started yet. Begins on ${startDate.toLocaleString()}`);
         setIsLoading(false);
         return;
       }
       
+      // Check if voting has ended
       if (now > endDate) {
         toast.error('❌ Voting period has ended. Redirecting to results...');
         setTimeout(() => router.push('/election-result'), 2000);
@@ -534,46 +573,14 @@ function LoginContent() {
         return;
       }
       
-      // Get voter data
-      const { data: voter, error: voterError } = await supabase
-        .from('voters')
-        .select('*')
-        .eq('email', cleanEmail)
-        .eq('school_id', cleanSchoolId)
-        .maybeSingle();
-      
-      if (voterError || !voter) {
-        setLoginAttempts(prev => prev + 1);
-        toast.error('Invalid credentials. Please try again.');
+      // Check if voting is active/enabled
+      if (!votingSettings?.is_active) {
+        toast.error('❌ Voting is currently disabled by the Electoral Commission. Please try again later.');
         setIsLoading(false);
         return;
       }
       
-      if (voter.has_voted === true) {
-        toast.error('❌ You have already voted. Redirecting to results...');
-        setTimeout(() => router.push('/election-result'), 3000);
-        setIsLoading(false);
-        return;
-      }
-      
-      const { data: existingVote } = await supabase
-        .from('votes')
-        .select('id')
-        .eq('voter_id', voter.id)
-        .maybeSingle();
-      
-      if (existingVote) {
-        await supabase
-          .from('voters')
-          .update({ has_voted: true, voted_at: new Date().toISOString() })
-          .eq('id', voter.id);
-        
-        toast.error('❌ You have already voted. Redirecting to results...');
-        setTimeout(() => router.push('/election-result'), 3000);
-        setIsLoading(false);
-        return;
-      }
-      
+      // ========== STEP 4: PROCEED WITH OTP GENERATION ==========
       // Check for existing valid OTP and invalidate it
       const { data: existingOtp, error: fetchOtpError } = await supabase
         .from('otp_codes')
@@ -693,17 +700,27 @@ function LoginContent() {
     
     const { email, schoolId } = formData;
     
-    // For voters, check voting period before attempting login
+    // For voters, check additional conditions before proceeding
     if (loginStatus === 'voter') {
+      // Check if already voted (this is shown in UI but double-check)
+      if (voterStatus === 'already_voted') {
+        toast.error('❌ You have already voted. Cannot login again.');
+        setTimeout(() => router.push('/election-result'), 2000);
+        return;
+      }
+      
+      // Check voting period conditions
       if (votingStatus.hasEnded) {
         toast.error('❌ Voting period has ended. You cannot vote at this time.');
         setTimeout(() => router.push('/election-result'), 2000);
         return;
       }
+      
       if (!votingStatus.hasStarted) {
         toast.error(`❌ Voting has not started yet. Begins on ${new Date(votingStatus.startDate).toLocaleString()}`);
         return;
       }
+      
       if (!votingStatus.isActive) {
         toast.error('❌ Voting is currently disabled. Please contact the electoral commission.');
         return;
@@ -724,7 +741,7 @@ function LoginContent() {
       console.error('Login error:', error);
       setLoginAttempts(prev => prev + 1);
     }
-  }, [loginStatus, handleVoterLogin, handleAdminLogin, checkRateLimit, setLoginAttempts, votingStatus, router]);
+  }, [loginStatus, voterStatus, votingStatus, handleVoterLogin, handleAdminLogin, checkRateLimit, setLoginAttempts, router]);
 
   // Debug mode
   useEffect(() => {
@@ -968,7 +985,7 @@ function LoginContent() {
                 )}
                 {voterStatus === 'already_voted' && (
                   <p className={`text-xs mt-1 flex items-center gap-1 ${theme === 'dark' ? 'text-amber-300' : 'text-amber-600'}`}>
-                    <FaExclamationTriangle className="text-xs" /> You have already voted.
+                    <FaExclamationTriangle className="text-xs" /> You have already voted. Redirecting to results...
                   </p>
                 )}
                 {/* Show warning if voting is not active */}
@@ -984,7 +1001,7 @@ function LoginContent() {
                 )}
                 {voterStatus === 'can_vote' && !votingStatus.hasStarted && votingStatus.startDate && (
                   <p className={`text-xs mt-1 flex items-center gap-1 ${theme === 'dark' ? 'text-yellow-300' : 'text-yellow-600'}`}>
-                    <FaClock className="text-xs" /> Voting starts on {new Date(votingStatus.startDate).toLocaleDateString()}
+                    <FaClock className="text-xs" /> Voting starts on {new Date(votingStatus.startDate).toLocaleString()}
                   </p>
                 )}
               </div>
