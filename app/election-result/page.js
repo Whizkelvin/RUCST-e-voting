@@ -350,23 +350,7 @@ export default function ElectionResults() {
               </button>
             )}
             
-            {/* Toggle Statistics Button */}
-            <button
-              onClick={toggleStatistics}
-              className={`flex items-center gap-2 px-4 py-2 ${currentTheme.toggleButton} rounded-lg ${currentTheme.textPrimary} transition-all duration-300 hover:scale-105 text-sm sm:text-base`}
-            >
-              {showStatistics ? (
-                <>
-                  <FaEyeSlash />
-                  Hide Statistics Summary
-                </>
-              ) : (
-                <>
-                  <FaEye />
-                  Show Statistics Summary
-                </>
-              )}
-            </button>
+           
           </div>
 
           {/* Position Filter */}
@@ -514,6 +498,24 @@ export default function ElectionResults() {
               </div>
             ))
           )}
+
+           {/* Toggle Statistics Button */}
+            <button
+              onClick={toggleStatistics}
+              className={`flex items-center gap-2 px-4 py-2 ${currentTheme.toggleButton} rounded-lg ${currentTheme.textPrimary} transition-all duration-300 hover:scale-105 text-sm sm:text-base`}
+            >
+              {showStatistics ? (
+                <>
+                  <FaEyeSlash />
+                  Hide Statistics Summary
+                </>
+              ) : (
+                <>
+                  <FaEye />
+                  Show Statistics Summary
+                </>
+              )}
+            </button>
 
           {/* ========== STATISTICS SUMMARY - OPTIONAL TOGGLE ========== */}
           {showStatistics && hasResults && (
