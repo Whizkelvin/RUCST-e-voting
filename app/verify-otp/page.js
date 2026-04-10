@@ -46,7 +46,6 @@ export default function VerifyOTP() {
     document.documentElement.setAttribute('data-theme', newTheme);
   };
 
-  // Theme styles
   const themeStyles = {
     dark: {
       background: 'from-[#02140f] via-[#063d2e] to-[#0b2545]',
@@ -78,7 +77,6 @@ export default function VerifyOTP() {
 
   const currentTheme = themeStyles[theme];
 
-  // Get client IP on mount
   useEffect(() => {
     const getIP = async () => {
       const ip = await getClientIP();
@@ -103,7 +101,6 @@ export default function VerifyOTP() {
           return;
         }
 
-        // Check if IP is locked
         const { data: ipLock } = await supabase
           .from('ip_locks')
           .select('*')
@@ -136,7 +133,6 @@ export default function VerifyOTP() {
           return;
         }
 
-        // Get failed attempts from database
         const { data: attemptRecord } = await supabase
           .from('otp_attempts')
           .select('*')
@@ -173,10 +169,10 @@ export default function VerifyOTP() {
           return;
         }
 
-        // Get OTP record for expiry timer
+        // Get the active OTP record (if any)
         const { data: otpRecord } = await supabase
           .from('otp_codes')
-          .select('expires_at')
+          .select('expires_at, otp_code')
           .eq('voter_id', voter.id)
           .eq('used', false)
           .maybeSingle();
@@ -223,10 +219,8 @@ export default function VerifyOTP() {
     return () => clearInterval(interval);
   }, [otpExpiry]);
 
-  // Handle OTP digit input
   const handleDigitChange = (index, value) => {
     if (isLocked || isVerifying) return;
-    
     if (value && !/^\d+$/.test(value)) return;
     
     const newDigits = [...otpDigits];
@@ -246,7 +240,6 @@ export default function VerifyOTP() {
 
   const handlePaste = (e) => {
     if (isLocked || isVerifying) return;
-    
     e.preventDefault();
     const pastedData = e.clipboardData.getData('text').slice(0, 6);
     if (/^\d+$/.test(pastedData)) {
@@ -265,7 +258,6 @@ export default function VerifyOTP() {
     }
   };
 
-  // Record failed attempt
   const recordFailedAttempt = async (voterId) => {
     const newFailedCount = failedAttempts + 1;
     setFailedAttempts(newFailedCount);
@@ -296,7 +288,6 @@ export default function VerifyOTP() {
       });
   };
 
-  // Reset failed attempts on success
   const resetFailedAttempts = async (voterId) => {
     setFailedAttempts(0);
     setIsLocked(false);
@@ -317,7 +308,6 @@ export default function VerifyOTP() {
       .eq('ip_address', clientIP);
   };
 
-  // Constant time comparison for hash
   const constantTimeCompare = (a, b) => {
     if (a.length !== b.length) return false;
     let result = 0;
@@ -335,7 +325,7 @@ export default function VerifyOTP() {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   };
 
-  // ========== FIXED RESEND OTP FUNCTION ==========
+  // ========== FIXED RESEND OTP ==========
   const handleResendOtp = async () => {
     if (resendCooldown > 0 || !voterInfo || isLocked) return;
     
@@ -369,66 +359,89 @@ export default function VerifyOTP() {
         return;
       }
       
-      // Check for existing OTP record
+      // First, clean up any expired OTPs for this voter
+      await supabase
+        .from('otp_codes')
+        .delete()
+        .eq('voter_id', id)
+        .lt('expires_at', new Date().toISOString());
+      
+      // Now find the active OTP (if any)
       const { data: existingOtp } = await supabase
         .from('otp_codes')
         .select('*')
         .eq('voter_id', id)
+        .eq('used', false)
+        .gt('expires_at', new Date().toISOString())
         .maybeSingle();
       
-      // Generate a new OTP code (always generate fresh to ensure otp_code is populated)
-      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const newExpiry = new Date(Date.now() + 15 * 60 * 1000);
-      const hashedOtp = await hashCode(otpCode);
+      let otpCode;
+      let newExpiry;
+      let isResendingSame = false;
       
-      let operationError;
-      
-      if (existingOtp) {
-        // Update existing record - this avoids unique constraint errors
-        const { error: updateError } = await supabase
+      // If a valid OTP exists AND it has a plain-text code, resend it
+      if (existingOtp && existingOtp.otp_code && existingOtp.otp_code !== null) {
+        otpCode = existingOtp.otp_code;
+        newExpiry = new Date(existingOtp.expires_at);
+        isResendingSame = true;
+        
+        // Update resend tracking
+        await supabase
           .from('otp_codes')
           .update({
-            code_hash: hashedOtp,
-            otp_code: otpCode,
-            expires_at: newExpiry.toISOString(),
-            used: false,
-            created_at: new Date().toISOString(),
-            resend_count: (existingOtp.resend_count || 0) + 1,
-            last_resent_at: new Date().toISOString()
+            last_resent_at: new Date().toISOString(),
+            resend_count: (existingOtp.resend_count || 0) + 1
           })
           .eq('id', existingOtp.id);
         
-        operationError = updateError;
+        toast.info(`Resending your existing OTP. Valid until ${newExpiry.toLocaleTimeString()}`);
       } else {
-        // Insert new record
-        const { error: insertError } = await supabase
-          .from('otp_codes')
-          .insert({
-            voter_id: id,
-            email: email.toLowerCase(),
-            school_id: schoolId,
-            code_hash: hashedOtp,
-            otp_code: otpCode,
-            expires_at: newExpiry.toISOString(),
-            used: false,
-            created_at: new Date().toISOString(),
-            resend_count: 0
-          });
+        // No valid OTP or missing plain text – generate a new one
+        otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        newExpiry = new Date(Date.now() + 15 * 60 * 1000);
+        const hashedOtp = await hashCode(otpCode);
         
-        operationError = insertError;
+        if (existingOtp) {
+          // Update existing record (preserve ID, avoid unique violation)
+          const { error: updateError } = await supabase
+            .from('otp_codes')
+            .update({
+              code_hash: hashedOtp,
+              otp_code: otpCode,
+              expires_at: newExpiry.toISOString(),
+              used: false,
+              created_at: new Date().toISOString(),
+              resend_count: (existingOtp.resend_count || 0) + 1,
+              last_resent_at: new Date().toISOString()
+            })
+            .eq('id', existingOtp.id);
+          
+          if (updateError) throw updateError;
+        } else {
+          // Insert new record
+          const { error: insertError } = await supabase
+            .from('otp_codes')
+            .insert({
+              voter_id: id,
+              email: email.toLowerCase(),
+              school_id: schoolId,
+              code_hash: hashedOtp,
+              otp_code: otpCode,
+              expires_at: newExpiry.toISOString(),
+              used: false,
+              created_at: new Date().toISOString(),
+              resend_count: 0
+            });
+          
+          if (insertError) throw insertError;
+        }
+        
+        // Update UI expiry timer
+        setOtpExpiry(newExpiry);
+        toast.info(`New OTP generated. Valid for 15 minutes.`);
       }
       
-      if (operationError) {
-        console.error('OTP operation error:', operationError);
-        toast.error('Failed to generate OTP. Please try again.');
-        setIsLoading(false);
-        return;
-      }
-      
-      // Update expiry in state
-      setOtpExpiry(newExpiry);
-      
-      // Send OTP via email
+      // Send the OTP via email
       const response = await fetch('/api/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -441,10 +454,7 @@ export default function VerifyOTP() {
       });
       
       if (!response.ok) {
-        console.error('Email sending failed');
-        toast.error('Failed to send OTP email. Please try again.');
-        setIsLoading(false);
-        return;
+        throw new Error('Email service failed');
       }
       
       await logOtpGeneration({
@@ -454,7 +464,7 @@ export default function VerifyOTP() {
         success: true
       });
       
-      toast.success(`New OTP sent to ${email}. Valid for 15 minutes.`);
+      toast.success(isResendingSame ? `OTP resent to ${email}` : `New OTP sent to ${email}`);
       setResendCooldown(60);
       setOtpDigits(['', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
@@ -466,9 +476,8 @@ export default function VerifyOTP() {
       setIsLoading(false);
     }
   };
-  // ========== END OF FIXED RESEND FUNCTION ==========
+  // ========== END RESEND ==========
 
-  // Resend cooldown timer
   useEffect(() => {
     if (resendCooldown > 0) {
       const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
@@ -477,7 +486,6 @@ export default function VerifyOTP() {
   }, [resendCooldown]);
 
   const handleVerify = async () => {
-    // Prevent race condition
     if (verificationLock.current || isVerifying) return;
     verificationLock.current = true;
     setIsVerifying(true);
@@ -500,7 +508,7 @@ export default function VerifyOTP() {
         return;
       }
 
-      const { email, schoolId, id: voterId, name: voterName } = voterInfo;
+      const { email, schoolId, id: voterId } = voterInfo;
 
       const { data: voter, error: voterError } = await supabase
         .from('voters')
@@ -523,27 +531,22 @@ export default function VerifyOTP() {
         throw new Error('You have already cast your vote.');
       }
 
-      // Get OTP record
+      // Get the active OTP record
       const { data: otpRecord, error: otpError } = await supabase
         .from('otp_codes')
         .select('*')
         .eq('voter_id', voter.id)
         .eq('used', false)
-        .single();
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
 
       if (otpError || !otpRecord) {
         await recordFailedAttempt(voter.id);
         throw new Error('No valid OTP found. Please request a new code.');
       }
 
-      if (new Date(otpRecord.expires_at) < new Date()) {
-        await recordFailedAttempt(voter.id);
-        throw new Error('OTP has expired. Please request a new code.');
-      }
-
       const hashedInputOtp = await hashCode(otpCode);
       
-      // Use constant time comparison
       if (!constantTimeCompare(otpRecord.code_hash, hashedInputOtp)) {
         await recordFailedAttempt(voter.id);
         const remainingAttempts = 4 - failedAttempts;
@@ -552,7 +555,7 @@ export default function VerifyOTP() {
 
       await resetFailedAttempts(voter.id);
 
-      // Update OTP as used
+      // Mark OTP as used
       const { error: updateError } = await supabase
         .from('otp_codes')
         .update({ used: true, used_at: new Date().toISOString() })
@@ -611,7 +614,6 @@ export default function VerifyOTP() {
     }
   };
 
-  // Format time remaining
   const formatTimeRemaining = () => {
     if (!timeRemaining || timeRemaining <= 0) return null;
     const minutes = Math.floor(timeRemaining / 60);
@@ -619,9 +621,7 @@ export default function VerifyOTP() {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  if (!mounted) {
-    return null;
-  }
+  if (!mounted) return null;
 
   if (sessionError) {
     return (
@@ -664,32 +664,16 @@ export default function VerifyOTP() {
 
   return (
     <>
-      <Toaster 
-        position="top-center" 
-        richColors 
-        closeButton
-        toastOptions={{
-          duration: 4000,
-          className: 'text-sm font-medium',
-        }}
-      />
+      <Toaster position="top-center" richColors closeButton toastOptions={{ duration: 4000 }} />
       
-      {/* Theme Toggle Button */}
       <button
         onClick={toggleTheme}
         className="fixed top-4 right-4 z-50 p-3 rounded-full bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-110 transition-all duration-300"
-        aria-label="Toggle theme"
       >
-        {theme === 'dark' ? (
-          <FaSun className="text-yellow-400 text-xl" />
-        ) : (
-          <FaMoon className="text-gray-700 text-xl" />
-        )}
+        {theme === 'dark' ? <FaSun className="text-yellow-400 text-xl" /> : <FaMoon className="text-gray-700 text-xl" />}
       </button>
 
       <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} flex items-center justify-center p-4 relative overflow-hidden transition-all duration-300`}>
-        
-        {/* Animated Background */}
         <div className="absolute inset-0 overflow-hidden">
           <div className={`absolute -top-40 -right-32 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse ${theme === 'dark' ? 'bg-[#2d6a4f]' : 'bg-teal-400'}`}></div>
           <div className={`absolute -bottom-40 -left-32 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse ${theme === 'dark' ? 'bg-[#f4a261]' : 'bg-amber-400'}`}></div>
@@ -698,48 +682,24 @@ export default function VerifyOTP() {
 
         <div className="relative w-full max-w-md">
           <div className={`${currentTheme.cardBg} border ${currentTheme.cardBorder} rounded-3xl shadow-2xl p-6 sm:p-8 transform transition-all duration-300`}>
-            
-            {/* Header with Logos */}
             <div className="text-center mb-6 sm:mb-8">
               <div className="flex items-center justify-center space-x-2 sm:space-x-3 mb-4">
-                <Image 
-                  src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1762440313/RUCST_logo-removebg-preview_hwdial.png" 
-                  alt="Regent University Logo" 
-                  width={60}
-                  height={60}
-                  className="h-12 w-12 sm:h-[70px] sm:w-[70px] object-contain"
-                  priority
-                />
-                <Image 
-                  src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1774528110/Gemini_Generated_Image_57c2xl57c2xl57c2_ykckzf.png" 
-                  alt="RGSP Logo" 
-                  width={60}
-                  height={60}
-                  className="h-12 w-12 sm:h-[70px] sm:w-[70px] object-contain"
-                  priority
-                />
+                <Image src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1762440313/RUCST_logo-removebg-preview_hwdial.png" alt="Regent University Logo" width={60} height={60} className="h-12 w-12 sm:h-[70px] sm:w-[70px] object-contain" priority />
+                <Image src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1774528110/Gemini_Generated_Image_57c2xl57c2xl57c2_ykckzf.png" alt="RGSP Logo" width={60} height={60} className="h-12 w-12 sm:h-[70px] sm:w-[70px] object-contain" priority />
               </div>
-              <h1 className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mb-2`}>
-                Verify Your Identity
-              </h1>
+              <h1 className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mb-2`}>Verify Your Identity</h1>
               <div className={`flex items-center justify-center gap-2 ${currentTheme.textSecondary} text-xs sm:text-sm`}>
                 <FaEnvelope className="w-3 h-3 sm:w-4 sm:h-4" />
                 <span className="truncate max-w-[200px] sm:max-w-none">{voterInfo.email}</span>
               </div>
-              
-              {/* OTP Expiry Timer */}
               {timeRemaining > 0 && (
                 <div className="flex items-center justify-center gap-2 mt-3">
                   <div className={`flex items-center gap-1 ${theme === 'dark' ? 'bg-yellow-500/20' : 'bg-yellow-100'} px-2 py-1 rounded-full`}>
                     <FaClock className={`w-3 h-3 ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600'}`} />
-                    <span className={`text-[10px] ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600'}`}>
-                      OTP expires in: {formatTimeRemaining()}
-                    </span>
+                    <span className={`text-[10px] ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600'}`}>OTP expires in: {formatTimeRemaining()}</span>
                   </div>
                 </div>
               )}
-              
-              {/* Security Badge */}
               <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">
                 <div className={`flex items-center gap-1 ${theme === 'dark' ? 'bg-[#f4a261]/20' : 'bg-teal-100'} px-2 py-1 rounded-full`}>
                   <FaLock className={`w-3 h-3 ${theme === 'dark' ? 'text-[#f4a261]' : 'text-teal-600'}`} />
@@ -760,11 +720,8 @@ export default function VerifyOTP() {
               </div>
             </div>
 
-            {/* OTP Boxes */}
             <div className="mb-6 sm:mb-8">
-              <label className={`${currentTheme.textSecondary} text-sm font-medium block text-center mb-3 sm:mb-4`}>
-                Enter 6-Digit Verification Code
-              </label>
+              <label className={`${currentTheme.textSecondary} text-sm font-medium block text-center mb-3 sm:mb-4`}>Enter 6-Digit Verification Code</label>
               <div className="flex justify-center gap-2 sm:gap-3 flex-wrap">
                 {otpDigits.map((digit, index) => (
                   <input
@@ -778,49 +735,26 @@ export default function VerifyOTP() {
                     onKeyDown={(e) => handleKeyDown(index, e)}
                     onPaste={index === 0 ? handlePaste : undefined}
                     disabled={isVerifying || isLocked}
-                    className={`
-                      w-10 h-12 sm:w-14 sm:h-16 
-                      text-center text-xl sm:text-2xl font-bold 
-                      ${currentTheme.inputBg} border-2 
-                      rounded-xl ${currentTheme.textPrimary}
-                      focus:outline-none focus:ring-2 
-                      transition-all duration-200
-                      ${digit 
-                        ? `border-${theme === 'dark' ? '[#f4a261]' : 'teal-500'} bg-white/20 ring-1 ring-${theme === 'dark' ? '[#f4a261]' : 'teal-500'}/50` 
-                        : currentTheme.inputBorder
-                      }
-                      ${currentTheme.inputFocus}
-                      ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}
-                    `}
+                    className={`w-10 h-12 sm:w-14 sm:h-16 text-center text-xl sm:text-2xl font-bold ${currentTheme.inputBg} border-2 rounded-xl ${currentTheme.textPrimary} focus:outline-none focus:ring-2 transition-all duration-200 ${digit ? `border-${theme === 'dark' ? '[#f4a261]' : 'teal-500'} bg-white/20 ring-1 ring-${theme === 'dark' ? '[#f4a261]' : 'teal-500'}/50` : currentTheme.inputBorder} ${currentTheme.inputFocus} ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
                     autoFocus={index === 0 && !isLocked}
                   />
                 ))}
               </div>
-              <p className={`text-center ${currentTheme.textSecondary} text-xs mt-3 opacity-50`}>
-                Enter the 6-digit code sent to your email
-              </p>
+              <p className={`text-center ${currentTheme.textSecondary} text-xs mt-3 opacity-50`}>Enter the 6-digit code sent to your email</p>
             </div>
 
-            {/* Verify Button */}
             <button
               onClick={handleVerify}
               disabled={isVerifying || otpDigits.join('').length !== 6 || isLocked}
               className={`w-full py-3 sm:py-4 px-6 bg-gradient-to-r ${currentTheme.buttonPrimary} disabled:from-gray-600 disabled:to-gray-600 text-white font-semibold rounded-xl shadow-lg transform transition-all duration-300 hover:scale-105 disabled:transform-none disabled:cursor-not-allowed mb-4`}
             >
               {isVerifying ? (
-                <div className="flex items-center justify-center space-x-2">
-                  <FaSpinner className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
-                  <span>Verifying...</span>
-                </div>
+                <div className="flex items-center justify-center space-x-2"><FaSpinner className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /><span>Verifying...</span></div>
               ) : (
-                <div className="flex items-center justify-center space-x-2">
-                  <FaCheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <span>Verify & Vote</span>
-                </div>
+                <div className="flex items-center justify-center space-x-2"><FaCheckCircle className="w-4 h-4 sm:w-5 sm:h-5" /><span>Verify & Vote</span></div>
               )}
             </button>
 
-            {/* Resend Section */}
             <div className="text-center mb-6">
               <button
                 onClick={handleResendOtp}
@@ -828,13 +762,10 @@ export default function VerifyOTP() {
                 className={`${theme === 'dark' ? 'text-[#f4a261] hover:text-[#e76f51]' : 'text-teal-600 hover:text-teal-700'} text-xs sm:text-sm disabled:opacity-50 transition-colors flex items-center justify-center gap-2 mx-auto`}
               >
                 <FaClock className="w-3 h-3" />
-                {resendCooldown > 0 
-                  ? `Resend code in ${resendCooldown}s` 
-                  : "Didn't receive code? Resend OTP"}
+                {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Didn't receive code? Resend OTP"}
               </button>
             </div>
 
-            {/* Info Cards */}
             <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-6">
               <div className={`${currentTheme.cardBg} rounded-xl p-2 sm:p-3 text-center border ${currentTheme.cardBorder}`}>
                 <div className={`${theme === 'dark' ? 'text-[#f4a261]' : 'text-teal-600'} text-base sm:text-lg font-bold mb-1`}>15 min</div>
@@ -846,7 +777,6 @@ export default function VerifyOTP() {
               </div>
             </div>
 
-            {/* Back to Login */}
             <button
               onClick={() => {
                 localStorage.removeItem('temp_voter_email');
@@ -857,42 +787,22 @@ export default function VerifyOTP() {
               }}
               className={`w-full py-2.5 sm:py-3 px-6 ${currentTheme.buttonSecondary} ${currentTheme.textPrimary} font-medium rounded-xl transition-all duration-300 flex items-center justify-center space-x-2 border text-sm sm:text-base`}
             >
-              <FaArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span>Back to Login</span>
+              <FaArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" /><span>Back to Login</span>
             </button>
 
-            {/* Home Button */}
             <div className="mt-4 text-center">
-              <Link 
-                href="/"
-                className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 hover:scale-105 ${
-                  theme === 'dark' 
-                    ? 'bg-white/5 hover:bg-white/10 text-white/80' 
-                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                }`}
-              >
-                <FaHome className="text-sm" />
-                <span>Go to Home</span>
+              <Link href="/" className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 hover:scale-105 ${theme === 'dark' ? 'bg-white/5 hover:bg-white/10 text-white/80' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
+                <FaHome className="text-sm" /><span>Go to Home</span>
               </Link>
             </div>
 
-            {/* Footer */}
             <div className="mt-6 text-center">
               <div className={`flex items-center justify-center space-x-3 sm:space-x-4 text-[10px] sm:text-xs ${currentTheme.textSecondary} opacity-60`}>
-                <span className="flex items-center space-x-1">
-                  <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 ${theme === 'dark' ? 'bg-[#f4a261]' : 'bg-teal-600'} rounded-full animate-pulse`}></div>
-                  <span>Secure</span>
-                </span>
+                <span className="flex items-center space-x-1"><div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 ${theme === 'dark' ? 'bg-[#f4a261]' : 'bg-teal-600'} rounded-full animate-pulse`}></div><span>Secure</span></span>
                 <span>•</span>
-                <span className="flex items-center space-x-1">
-                  <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 ${theme === 'dark' ? 'bg-[#2d6a4f]' : 'bg-teal-400'} rounded-full animate-pulse`}></div>
-                  <span>Encrypted</span>
-                </span>
+                <span className="flex items-center space-x-1"><div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 ${theme === 'dark' ? 'bg-[#2d6a4f]' : 'bg-teal-400'} rounded-full animate-pulse`}></div><span>Encrypted</span></span>
                 <span>•</span>
-                <span className="flex items-center space-x-1">
-                  <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 ${theme === 'dark' ? 'bg-[#f4a261]' : 'bg-amber-500'} rounded-full animate-pulse`}></div>
-                  <span>Audited</span>
-                </span>
+                <span className="flex items-center space-x-1"><div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 ${theme === 'dark' ? 'bg-[#f4a261]' : 'bg-amber-500'} rounded-full animate-pulse`}></div><span>Audited</span></span>
               </div>
             </div>
           </div>
