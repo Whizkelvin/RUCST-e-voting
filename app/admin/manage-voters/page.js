@@ -26,7 +26,8 @@ import {
   FaVoteYea,
   FaClock,
   FaUserGraduate,
-  FaChartLine
+  FaChartLine,
+  FaFileExcel
 } from 'react-icons/fa';
 import * as XLSX from 'xlsx';
 
@@ -326,6 +327,55 @@ export default function ManageVoters() {
     setShowEditModal(true);
   };
 
+  // ========== DOWNLOAD TEMPLATE FUNCTION ==========
+  const downloadTemplate = () => {
+    // Define template headers
+    const template = [
+      {
+        'Name': 'John Doe',
+        'Email': 'john.doe@regent.edu.gh',
+        'School ID': '12345678',
+        'Department': 'Computer Science',
+        'Year of Study': 100
+      },
+      {
+        'Name': 'Jane Smith',
+        'Email': 'jane.smith@regent.edu.gh',
+        'School ID': '87654321',
+        'Department': 'Business Administration',
+        'Year of Study': 200
+      }
+    ];
+    
+    // Create worksheet
+    const ws = XLSX.utils.json_to_sheet(template);
+    
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 25 }, // Name
+      { wch: 30 }, // Email
+      { wch: 15 }, // School ID
+      { wch: 25 }, // Department
+      { wch: 15 }  // Year of Study
+    ];
+    
+    // Add instructions in a comment
+    ws['A1'].c = [{ t: 'Enter the full name of the student' }];
+    ws['B1'].c = [{ t: 'Must be a valid @regent.edu.gh email' }];
+    ws['C1'].c = [{ t: '8-digit school ID (e.g., 12345678)' }];
+    ws['D1'].c = [{ t: 'Department name (e.g., Computer Science)' }];
+    ws['E1'].c = [{ t: '100, 200, 300, or 400' }];
+    
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Voters_Template');
+    
+    // Download file
+    XLSX.writeFile(wb, `voter_upload_template_${new Date().toISOString().split('T')[0]}.xlsx`);
+    
+    toast.success('Template downloaded! Add your voter data and upload using Bulk Upload.');
+  };
+
   const handleBulkUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -341,16 +391,38 @@ export default function ManageVoters() {
         
         let successCount = 0;
         let errorCount = 0;
+        const errors = [];
         
         for (const row of jsonData) {
           try {
-            const email = row.email || row.Email;
-            const name = row.name || row.Name;
-            const school_id = row.school_id || row.SchoolID;
-            const department = row.department || row.Department;
-            const year_of_study = row.year_of_study || row.Year;
+            // Support multiple column name variations
+            const name = row.Name || row.name || row.NAME;
+            const email = row.Email || row.email || row.EMAIL;
+            const school_id = row['School ID'] || row.school_id || row.SchoolID || row.SCHOOL_ID;
+            const department = row.Department || row.department || row.DEPT;
+            const year_of_study = row['Year of Study'] || row.year_of_study || row.Year || row.YEAR;
             
-            if (!email || !name || !school_id) continue;
+            // Validate required fields
+            if (!name || !email || !school_id) {
+              errorCount++;
+              errors.push(`Missing required fields in row: ${JSON.stringify(row)}`);
+              continue;
+            }
+            
+            // Validate email domain
+            if (!email.toLowerCase().endsWith('@regent.edu.gh')) {
+              errorCount++;
+              errors.push(`Invalid email domain: ${email}`);
+              continue;
+            }
+            
+            // Validate school ID format
+            const schoolIdStr = school_id.toString().padStart(8, '0');
+            if (!/^[0-9]{8}$/.test(schoolIdStr)) {
+              errorCount++;
+              errors.push(`Invalid school ID format: ${school_id}`);
+              continue;
+            }
             
             // Check if exists
             const { data: existing } = await supabase
@@ -361,18 +433,34 @@ export default function ManageVoters() {
             
             if (existing) {
               errorCount++;
+              errors.push(`Email already exists: ${email}`);
               continue;
             }
             
+            // Check if school ID exists
+            const { data: existingSchoolId } = await supabase
+              .from('voters')
+              .select('id')
+              .eq('school_id', schoolIdStr)
+              .maybeSingle();
+            
+            if (existingSchoolId) {
+              errorCount++;
+              errors.push(`School ID already exists: ${schoolIdStr}`);
+              continue;
+            }
+            
+            // Insert new voter
             const { error } = await supabase
               .from('voters')
               .insert({
                 email: email.toLowerCase(),
                 name: name,
-                school_id: school_id.toString().padStart(8, '0'),
+                school_id: schoolIdStr,
                 department: department || '',
                 year_of_study: parseInt(year_of_study) || 100,
-                has_voted: false
+                has_voted: false,
+                created_at: new Date().toISOString()
               });
             
             if (error) throw error;
@@ -380,16 +468,21 @@ export default function ManageVoters() {
             
           } catch (err) {
             errorCount++;
+            errors.push(`Error adding row: ${err.message}`);
             console.error('Error adding row:', err);
           }
         }
         
-        toast.success(`Added ${successCount} voters. Failed: ${errorCount}`);
+        if (errors.length > 0 && errors.length <= 5) {
+          console.error('Upload errors:', errors);
+        }
+        
+        toast.success(`✅ Added ${successCount} voters. ❌ Failed: ${errorCount}`);
         fetchVoters();
         
       } catch (error) {
         console.error('Error processing file:', error);
-        toast.error('Failed to process file');
+        toast.error('Failed to process file. Please use the template format.');
       }
     };
     
@@ -584,6 +677,14 @@ export default function ManageVoters() {
                 <FaUserPlus /> Add Voter
               </button>
               
+              {/* Download Template Button */}
+              <button
+                onClick={downloadTemplate}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white transition"
+              >
+                <FaFileExcel /> Download Template
+              </button>
+              
               <label className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition cursor-pointer">
                 <FaUpload /> Bulk Upload
                 <input
@@ -600,6 +701,30 @@ export default function ManageVoters() {
               >
                 <FaDownload /> Export
               </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Template Instructions */}
+        <div className={`mb-6 p-4 rounded-lg border ${
+          theme === 'light'
+            ? 'bg-blue-50 border-blue-200'
+            : 'bg-blue-500/10 border-blue-500/20'
+        }`}>
+          <div className="flex items-start gap-3">
+            <FaFileExcel className="text-green-600 dark:text-green-400 text-xl mt-0.5" />
+            <div>
+              <p className={`font-medium ${theme === 'light' ? 'text-blue-800' : 'text-blue-300'}`}>
+                📋 Bulk Upload Instructions:
+              </p>
+              <p className={`text-sm mt-1 ${theme === 'light' ? 'text-blue-700' : 'text-blue-400'}`}>
+                1. Click <strong>"Download Template"</strong> to get the Excel template<br />
+                2. Fill in voter details (Name, Email, School ID, Department, Year of Study)<br />
+                3. Email must end with <strong>@regent.edu.gh</strong><br />
+                4. School ID must be <strong>8 digits</strong><br />
+                5. Year of Study: <strong>100, 200, 300, or 400</strong><br />
+                6. Click <strong>"Bulk Upload"</strong> to import your data
+              </p>
             </div>
           </div>
         </div>
