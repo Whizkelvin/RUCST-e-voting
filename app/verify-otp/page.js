@@ -169,7 +169,7 @@ export default function VerifyOTP() {
         if (existingVote) {
           setSessionError(true);
           toast.error('You have already cast your vote.');
-          setTimeout(() => router.push('/results'), 2000);
+          setTimeout(() => router.push('/election-result'), 2000);
           return;
         }
 
@@ -335,7 +335,7 @@ export default function VerifyOTP() {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   };
 
-  // Resend OTP - UPDATE existing record instead of insert
+  // ========== FIXED RESEND OTP FUNCTION ==========
   const handleResendOtp = async () => {
     if (resendCooldown > 0 || !voterInfo || isLocked) return;
     
@@ -344,7 +344,7 @@ export default function VerifyOTP() {
     try {
       const { email, schoolId, name, id } = voterInfo;
       
-      // Check voting period using correct table name
+      // Check voting period
       const { data: votingSettings } = await supabase
         .from('voting_periods')
         .select('is_active, end_date')
@@ -369,47 +369,39 @@ export default function VerifyOTP() {
         return;
       }
       
-      // Check for existing valid OTP
+      // Check for existing OTP record
       const { data: existingOtp } = await supabase
         .from('otp_codes')
         .select('*')
         .eq('voter_id', id)
-        .eq('used', false)
-        .gt('expires_at', new Date().toISOString())
         .maybeSingle();
       
-      let otpCode;
-      let newExpiry;
+      // Generate a new OTP code (always generate fresh to ensure otp_code is populated)
+      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const newExpiry = new Date(Date.now() + 15 * 60 * 1000);
+      const hashedOtp = await hashCode(otpCode);
       
-      if (existingOtp && existingOtp.otp_code) {
-        // Valid OTP exists - resend the same code
-        otpCode = existingOtp.otp_code;
-        newExpiry = new Date(existingOtp.expires_at);
-        
-        // Update resend tracking
-        await supabase
+      let operationError;
+      
+      if (existingOtp) {
+        // Update existing record - this avoids unique constraint errors
+        const { error: updateError } = await supabase
           .from('otp_codes')
           .update({
-            last_resent_at: new Date().toISOString(),
-            resend_count: (existingOtp.resend_count || 0) + 1
+            code_hash: hashedOtp,
+            otp_code: otpCode,
+            expires_at: newExpiry.toISOString(),
+            used: false,
+            created_at: new Date().toISOString(),
+            resend_count: (existingOtp.resend_count || 0) + 1,
+            last_resent_at: new Date().toISOString()
           })
           .eq('id', existingOtp.id);
         
-        toast.info(`Resending existing OTP. Valid until ${newExpiry.toLocaleTimeString()}`);
+        operationError = updateError;
       } else {
-        // No valid OTP - generate new one
-        otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-        newExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-        const hashedOtp = await hashCode(otpCode);
-        
-        // Delete old OTPs
-        await supabase
-          .from('otp_codes')
-          .delete()
-          .eq('voter_id', id);
-        
-        // Insert new OTP
-        const { error: otpError } = await supabase
+        // Insert new record
+        const { error: insertError } = await supabase
           .from('otp_codes')
           .insert({
             voter_id: id,
@@ -422,14 +414,20 @@ export default function VerifyOTP() {
             created_at: new Date().toISOString(),
             resend_count: 0
           });
-
-        if (otpError) throw otpError;
         
-        // Update expiry in state
-        setOtpExpiry(newExpiry);
-        toast.info(`New OTP generated. Valid for 15 minutes.`);
+        operationError = insertError;
       }
-
+      
+      if (operationError) {
+        console.error('OTP operation error:', operationError);
+        toast.error('Failed to generate OTP. Please try again.');
+        setIsLoading(false);
+        return;
+      }
+      
+      // Update expiry in state
+      setOtpExpiry(newExpiry);
+      
       // Send OTP via email
       const response = await fetch('/api/send-otp', {
         method: 'POST',
@@ -441,22 +439,22 @@ export default function VerifyOTP() {
           expiresIn: 15
         }),
       });
-
+      
       if (!response.ok) {
         console.error('Email sending failed');
         toast.error('Failed to send OTP email. Please try again.');
         setIsLoading(false);
         return;
       }
-
+      
       await logOtpGeneration({
         voter_id: id,
         email: email,
         ip_address: clientIP,
         success: true
       });
-
-      toast.success(`OTP sent to ${email}`);
+      
+      toast.success(`New OTP sent to ${email}. Valid for 15 minutes.`);
       setResendCooldown(60);
       setOtpDigits(['', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
@@ -468,6 +466,7 @@ export default function VerifyOTP() {
       setIsLoading(false);
     }
   };
+  // ========== END OF FIXED RESEND FUNCTION ==========
 
   // Resend cooldown timer
   useEffect(() => {
