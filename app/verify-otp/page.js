@@ -327,7 +327,15 @@ export default function VerifyOTP() {
     return result === 0;
   };
 
-  // Resend OTP with invalidation of old OTP
+  const hashCode = async (code) => {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(code);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  };
+
+  // Resend OTP - UPDATE existing record instead of insert
   const handleResendOtp = async () => {
     if (resendCooldown > 0 || !voterInfo || isLocked) return;
     
@@ -336,15 +344,15 @@ export default function VerifyOTP() {
     try {
       const { email, schoolId, name, id } = voterInfo;
       
-      // Check voting period first
+      // Check voting period using correct table name
       const { data: votingSettings } = await supabase
-        .from('voting_settings')
+        .from('voting_periods')
         .select('is_active, end_date')
         .single();
       
       if (!votingSettings?.is_active || new Date() > new Date(votingSettings.end_date)) {
         toast.error('Voting period has ended');
-        router.push('/results');
+        router.push('/election-result');
         return;
       }
       
@@ -357,43 +365,72 @@ export default function VerifyOTP() {
       
       if (voter?.has_voted) {
         toast.error('You have already voted');
-        router.push('/results');
+        router.push('/election-result');
         return;
       }
       
-      // Invalidate all unused OTPs for this voter
-      await supabase
+      // Check for existing valid OTP
+      const { data: existingOtp } = await supabase
         .from('otp_codes')
-        .update({ 
-          used: true, 
-          invalidated_at: new Date().toISOString(),
-          invalidated_reason: 'resend_request'
-        })
+        .select('*')
         .eq('voter_id', id)
-        .eq('used', false);
+        .eq('used', false)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
       
-      // Generate new OTP
-      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const hashedOtp = await hashCode(otpCode);
-      const newExpiry = new Date(Date.now() + 10 * 60 * 1000);
+      let otpCode;
+      let newExpiry;
       
-      const { error: otpError } = await supabase
-        .from('otp_codes')
-        .insert({
-          voter_id: id,
-          email: email.toLowerCase(),
-          school_id: schoolId,
-          code_hash: hashedOtp,
-          expires_at: newExpiry.toISOString(),
-          used: false,
-          created_at: new Date().toISOString()
-        });
+      if (existingOtp && existingOtp.otp_code) {
+        // Valid OTP exists - resend the same code
+        otpCode = existingOtp.otp_code;
+        newExpiry = new Date(existingOtp.expires_at);
+        
+        // Update resend tracking
+        await supabase
+          .from('otp_codes')
+          .update({
+            last_resent_at: new Date().toISOString(),
+            resend_count: (existingOtp.resend_count || 0) + 1
+          })
+          .eq('id', existingOtp.id);
+        
+        toast.info(`Resending existing OTP. Valid until ${newExpiry.toLocaleTimeString()}`);
+      } else {
+        // No valid OTP - generate new one
+        otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        newExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+        const hashedOtp = await hashCode(otpCode);
+        
+        // Delete old OTPs
+        await supabase
+          .from('otp_codes')
+          .delete()
+          .eq('voter_id', id);
+        
+        // Insert new OTP
+        const { error: otpError } = await supabase
+          .from('otp_codes')
+          .insert({
+            voter_id: id,
+            email: email.toLowerCase(),
+            school_id: schoolId,
+            code_hash: hashedOtp,
+            otp_code: otpCode,
+            expires_at: newExpiry.toISOString(),
+            used: false,
+            created_at: new Date().toISOString(),
+            resend_count: 0
+          });
 
-      if (otpError) throw otpError;
+        if (otpError) throw otpError;
+        
+        // Update expiry in state
+        setOtpExpiry(newExpiry);
+        toast.info(`New OTP generated. Valid for 15 minutes.`);
+      }
 
-      // Update expiry in state
-      setOtpExpiry(newExpiry);
-
+      // Send OTP via email
       const response = await fetch('/api/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -401,12 +438,15 @@ export default function VerifyOTP() {
           email: email.toLowerCase(),
           otp: otpCode,
           name: name,
-          expiresIn: 10
+          expiresIn: 15
         }),
       });
 
       if (!response.ok) {
         console.error('Email sending failed');
+        toast.error('Failed to send OTP email. Please try again.');
+        setIsLoading(false);
+        return;
       }
 
       await logOtpGeneration({
@@ -416,10 +456,11 @@ export default function VerifyOTP() {
         success: true
       });
 
-      toast.success(`New OTP sent to ${email}`);
+      toast.success(`OTP sent to ${email}`);
       setResendCooldown(60);
       setOtpDigits(['', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
+      
     } catch (error) {
       console.error('Resend OTP error:', error);
       toast.error('Failed to resend OTP. Please try again.');
@@ -428,13 +469,13 @@ export default function VerifyOTP() {
     }
   };
 
-  const hashCode = async (code) => {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(code);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  };
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCooldown]);
 
   const handleVerify = async () => {
     // Prevent race condition
@@ -483,7 +524,7 @@ export default function VerifyOTP() {
         throw new Error('You have already cast your vote.');
       }
 
-      // Get OTP record with row-level locking consideration
+      // Get OTP record
       const { data: otpRecord, error: otpError } = await supabase
         .from('otp_codes')
         .select('*')
@@ -512,12 +553,12 @@ export default function VerifyOTP() {
 
       await resetFailedAttempts(voter.id);
 
-      // Update OTP as used with condition to prevent race condition
+      // Update OTP as used
       const { error: updateError } = await supabase
         .from('otp_codes')
         .update({ used: true, used_at: new Date().toISOString() })
         .eq('id', otpRecord.id)
-        .eq('used', false); // Only update if still unused
+        .eq('used', false);
 
       if (updateError) {
         throw new Error('OTP already used. Please request a new one.');
@@ -571,13 +612,13 @@ export default function VerifyOTP() {
     }
   };
 
-  // Resend cooldown timer
-  useEffect(() => {
-    if (resendCooldown > 0) {
-      const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [resendCooldown]);
+  // Format time remaining
+  const formatTimeRemaining = () => {
+    if (!timeRemaining || timeRemaining <= 0) return null;
+    const minutes = Math.floor(timeRemaining / 60);
+    const seconds = timeRemaining % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
 
   if (!mounted) {
     return null;
@@ -621,14 +662,6 @@ export default function VerifyOTP() {
       </div>
     );
   }
-
-  // Format time remaining
-  const formatTimeRemaining = () => {
-    if (!timeRemaining || timeRemaining <= 0) return null;
-    const minutes = Math.floor(timeRemaining / 60);
-    const seconds = timeRemaining % 60;
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
 
   return (
     <>
@@ -805,7 +838,7 @@ export default function VerifyOTP() {
             {/* Info Cards */}
             <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-6">
               <div className={`${currentTheme.cardBg} rounded-xl p-2 sm:p-3 text-center border ${currentTheme.cardBorder}`}>
-                <div className={`${theme === 'dark' ? 'text-[#f4a261]' : 'text-teal-600'} text-base sm:text-lg font-bold mb-1`}>10 min</div>
+                <div className={`${theme === 'dark' ? 'text-[#f4a261]' : 'text-teal-600'} text-base sm:text-lg font-bold mb-1`}>15 min</div>
                 <div className={`${currentTheme.textSecondary} text-[10px] sm:text-xs opacity-70`}>Code Valid For</div>
               </div>
               <div className={`${currentTheme.cardBg} rounded-xl p-2 sm:p-3 text-center border ${currentTheme.cardBorder}`}>
