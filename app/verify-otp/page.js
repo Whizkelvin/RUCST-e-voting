@@ -784,7 +784,7 @@ export default function VerifyOTP() {
               ) : (
                 <div className="flex items-center justify-center space-x-2">
                   <FaCheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <span>Verify & Vote</span>
+                  <span>Verify OTP</span>
                 </div>
               )}
             </button>
@@ -818,10 +818,7 @@ export default function VerifyOTP() {
                 <div className={`${theme === 'dark' ? 'text-[#f4a261]' : 'text-teal-600'} text-base sm:text-lg font-bold mb-1`}>1 Time</div>
                 <div className={`${currentTheme.textSecondary} text-[10px] sm:text-xs opacity-70`}>Single Use</div>
               </div>
-              <div className={`${currentTheme.cardBg} rounded-xl p-2 sm:p-3 text-center border ${currentTheme.cardBorder}`}>
-                <div className={`${theme === 'dark' ? 'text-[#f4a261]' : 'text-teal-600'} text-base sm:text-lg font-bold mb-1`}>15 min</div>
-                <div className={`${currentTheme.textSecondary} text-[10px] sm:text-xs opacity-70`}>Auto Cooldown</div>
-              </div>
+              
             </div>
             
             {/* Back to Login */}
