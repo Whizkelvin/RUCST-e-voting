@@ -697,17 +697,7 @@ export default function VerifyOTP() {
                 <span className="truncate max-w-[200px] sm:max-w-none">{voterInfo.email}</span>
               </div>
               
-              {/* Cooldown Warning Banner */}
-              {resendCooldown > 0 && (
-                <div className="mt-3 p-2 rounded-lg bg-amber-500/20 border border-amber-500/30">
-                  <div className="flex items-center justify-center gap-2">
-                    <FaClock className="w-4 h-4 text-amber-400" />
-                    <span className={`text-xs font-medium ${theme === 'dark' ? 'text-amber-300' : 'text-amber-700'}`}>
-                      Resend available in: {formatResendCooldown()}
-                    </span>
-                  </div>
-                </div>
-              )}
+             
               
               {/* Timer */}
               {timeRemaining > 0 && (
@@ -719,27 +709,7 @@ export default function VerifyOTP() {
                 </div>
               )}
               
-              {/* Status Badges */}
-              <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">
-                <div className={`flex items-center gap-1 ${theme === 'dark' ? 'bg-[#f4a261]/20' : 'bg-teal-100'} px-2 py-1 rounded-full`}>
-                  <FaLock className={`w-3 h-3 ${theme === 'dark' ? 'text-[#f4a261]' : 'text-teal-600'}`} />
-                  <span className={`text-[10px] ${theme === 'dark' ? 'text-[#f4a261]' : 'text-teal-600'}`}>Secure OTP</span>
-                </div>
-                
-                {failedAttempts > 0 && !isLocked && (
-                  <div className="flex items-center gap-1 bg-red-500/20 px-2 py-1 rounded-full">
-                    <FaShieldAlt className="w-3 h-3 text-red-400" />
-                    <span className="text-[10px] text-red-400">{4 - failedAttempts} attempts left</span>
-                  </div>
-                )}
-                
-                {isLocked && (
-                  <div className="flex items-center gap-1 bg-red-500/20 px-2 py-1 rounded-full">
-                    <FaShieldAlt className="w-3 h-3 text-red-400" />
-                    <span className="text-[10px] text-red-400">Temporarily Locked</span>
-                  </div>
-                )}
-              </div>
+             
             </div>
             
             {/* OTP Input */}
@@ -798,28 +768,16 @@ export default function VerifyOTP() {
               >
                 <FaClock className="w-3 h-3" />
                 {resendCooldown > 0 
-                  ? `Resend code available in ${formatResendCooldown()} (15 min cooldown)` 
+                  ? `Resend code available in ${formatResendCooldown()} ` 
                   : "Didn't receive code? Resend OTP"}
               </button>
               {resendCooldown > 0 && (
                 <p className={`text-[10px] mt-1 ${currentTheme.textSecondary} opacity-60`}>
-                  Cooldown started automatically when page loaded
+                  
                 </p>
               )}
             </div>
-            
-            {/* Info Cards */}
-            <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-6">
-              <div className={`${currentTheme.cardBg} rounded-xl p-2 sm:p-3 text-center border ${currentTheme.cardBorder}`}>
-                <div className={`${theme === 'dark' ? 'text-[#f4a261]' : 'text-teal-600'} text-base sm:text-lg font-bold mb-1`}>15 min</div>
-                <div className={`${currentTheme.textSecondary} text-[10px] sm:text-xs opacity-70`}>Code Valid</div>
-              </div>
-              <div className={`${currentTheme.cardBg} rounded-xl p-2 sm:p-3 text-center border ${currentTheme.cardBorder}`}>
-                <div className={`${theme === 'dark' ? 'text-[#f4a261]' : 'text-teal-600'} text-base sm:text-lg font-bold mb-1`}>1 Time</div>
-                <div className={`${currentTheme.textSecondary} text-[10px] sm:text-xs opacity-70`}>Single Use</div>
-              </div>
-              
-            </div>
+         
             
             {/* Back to Login */}
             <button
@@ -846,25 +804,7 @@ export default function VerifyOTP() {
               </Link>
             </div>
             
-            {/* Footer */}
-            <div className="mt-6 text-center">
-              <div className={`flex items-center justify-center space-x-3 sm:space-x-4 text-[10px] sm:text-xs ${currentTheme.textSecondary} opacity-60`}>
-                <span className="flex items-center space-x-1">
-                  <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 ${theme === 'dark' ? 'bg-[#f4a261]' : 'bg-teal-600'} rounded-full animate-pulse`}></div>
-                  <span>Secure</span>
-                </span>
-                <span>•</span>
-                <span className="flex items-center space-x-1">
-                  <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 ${theme === 'dark' ? 'bg-[#2d6a4f]' : 'bg-teal-400'} rounded-full animate-pulse`}></div>
-                  <span>Encrypted</span>
-                </span>
-                <span>•</span>
-                <span className="flex items-center space-x-1">
-                  <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 ${theme === 'dark' ? 'bg-[#f4a261]' : 'bg-amber-500'} rounded-full animate-pulse`}></div>
-                  <span>Auto 15min Cooldown</span>
-                </span>
-              </div>
-            </div>
+         
             
           </div>
         </div>

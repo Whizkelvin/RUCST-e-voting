@@ -1065,7 +1065,7 @@ const handleVoterLogin = useCallback(async (email, schoolId) => {
             {loginStatus === 'voter' && !isDetectingRole && (
               <div className={`mb-4 p-3 rounded-xl ${currentTheme.statusCard.voter}`}>
                 <div className="flex items-center gap-2">
-                  <FaUserGraduate className={theme === 'dark' ? 'text-blue-300' : 'text-blue-600'} />
+                  <FaUserGraduate className={theme === 'dark' ? 'text-black' : 'text-blue-600'} />
                   <p className={`text-sm font-medium ${theme === 'dark' ? 'text-blue-200' : 'text-blue-700'}`}>
                     Student Voter Detected
                   </p>
@@ -1230,7 +1230,7 @@ const handleVoterLogin = useCallback(async (email, schoolId) => {
             {/* Info Footer with Home Button */}
             <div className={`mt-6 text-xs ${currentTheme.textSecondary} text-center space-y-3`}>
               <p>Enter your email and school ID to login</p>
-              <p>Students: OTP will be sent to your email</p>
+              <p>OTP will be sent to your email valid for 15 minutes</p>
              
               
               {/* Home Button */}
@@ -1249,13 +1249,7 @@ const handleVoterLogin = useCallback(async (email, schoolId) => {
               </div>
             </div>
 
-            <div className={`mt-4 flex justify-center gap-3 text-xs ${theme === 'dark' ? 'text-white/40' : 'text-gray-400'}`}>
-              <span>Secure</span>
-              <span>•</span>
-              <span>Encrypted</span>
-              <span>•</span>
-              <span>Audited</span>
-            </div>
+            
           </div>
         </div>
       </div>
@@ -1270,7 +1264,7 @@ export default function LoginPage() {
       <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
-          <p className="text-white">Loading secure portal...</p>
+          <p className="text-white">Loading portal...</p>
         </div>
       </div>
     }>
