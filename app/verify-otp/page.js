@@ -25,6 +25,7 @@ export default function VerifyOTP() {
   const [timeRemaining, setTimeRemaining] = useState(null);
   const [otpExpiry, setOtpExpiry] = useState(null);
   const [otpRecordId, setOtpRecordId] = useState(null);
+  const [initialCooldownSet, setInitialCooldownSet] = useState(false);
   const inputRefs = useRef([]);
   const router = useRouter();
   const verificationLock = useRef(false);
@@ -206,6 +207,26 @@ export default function VerifyOTP() {
           name: tempVoterName || voter.name 
         });
         
+        // START 15-MINUTE RESEND COOLDOWN AUTOMATICALLY WHEN PAGE LOADS
+        if (!initialCooldownSet && tempVoterId) {
+          // Check if cooldown was already set in localStorage
+          const cooldownEndTime = localStorage.getItem('resend_cooldown_until');
+          const now = new Date().getTime();
+          
+          if (cooldownEndTime && parseInt(cooldownEndTime) > now) {
+            // Resume existing cooldown
+            const remainingSeconds = Math.floor((parseInt(cooldownEndTime) - now) / 1000);
+            setResendCooldown(remainingSeconds);
+          } else {
+            // Start new 15-minute cooldown (900 seconds)
+            const cooldownUntil = now + (15 * 60 * 1000);
+            localStorage.setItem('resend_cooldown_until', cooldownUntil.toString());
+            setResendCooldown(900);
+            toast.info('Resend cooldown active for 15 minutes', { duration: 3000 });
+          }
+          setInitialCooldownSet(true);
+        }
+        
       } catch (error) { 
         console.error('Session validation error:', error); 
         setSessionError(true); 
@@ -215,7 +236,7 @@ export default function VerifyOTP() {
     };
     
     if (clientIP !== 'unknown') validateSession();
-  }, [router, clientIP]);
+  }, [router, clientIP, initialCooldownSet]);
 
   // OTP expiry countdown
   useEffect(() => {
@@ -227,7 +248,7 @@ export default function VerifyOTP() {
         clearInterval(interval); 
         setTimeRemaining(0); 
         setOtpDigits(['', '', '', '', '', '']); 
-        toast.warning('Your OTP has expired. Tap "Resend OTP" to get a new one.'); 
+        toast.warning('Your OTP has expired. You can request a new one when cooldown ends.'); 
       } else { 
         setTimeRemaining(Math.floor(remaining / 1000)); 
       }
@@ -239,7 +260,16 @@ export default function VerifyOTP() {
   // Resend cooldown timer - 15 minutes (900 seconds)
   useEffect(() => { 
     if (resendCooldown > 0) { 
-      const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000); 
+      const timer = setTimeout(() => {
+        setResendCooldown(resendCooldown - 1);
+        // Update localStorage with remaining cooldown
+        if (resendCooldown - 1 <= 0) {
+          localStorage.removeItem('resend_cooldown_until');
+        } else {
+          const newCooldownUntil = new Date().getTime() + ((resendCooldown - 1) * 1000);
+          localStorage.setItem('resend_cooldown_until', newCooldownUntil.toString());
+        }
+      }, 1000); 
       return () => clearTimeout(timer); 
     } 
   }, [resendCooldown]);
@@ -383,7 +413,7 @@ export default function VerifyOTP() {
     return response;
   };
 
-  // Resend OTP - 15 minute cooldown before user can request again
+  // Resend OTP - Only allowed after 15 minute cooldown
   const handleResendOtp = async () => {
     // Check if cooldown is active (15 minutes = 900 seconds)
     if (resendCooldown > 0 || !voterInfo || isLoading || isLocked) {
@@ -425,7 +455,7 @@ export default function VerifyOTP() {
       }
       
       // Generate and store new OTP
-      console.log('Generating new OTP (15 minute cooldown applied)');
+      console.log('Generating new OTP after cooldown period');
       
       const { otpCode, newExpiry, otpId } = await generateAndStoreNewOtp(id, email, schoolId);
       
@@ -440,15 +470,18 @@ export default function VerifyOTP() {
         email: email,
         ip_address: clientIP,
         success: true,
-        action: 'resend_new_generation'
+        action: 'resend_after_cooldown'
       });
       
-      // Set cooldown to 15 minutes (900 seconds)
+      // Reset cooldown to another 15 minutes (900 seconds)
+      const cooldownUntil = new Date().getTime() + (15 * 60 * 1000);
+      localStorage.setItem('resend_cooldown_until', cooldownUntil.toString());
       setResendCooldown(900);
       
-      toast.success(`New OTP sent to ${email}. Valid for 15 minutes. Next request available in 15 minutes.`);
+      toast.success(`New OTP sent to ${email}. Valid for 15 minutes. Next resend available in 15 minutes.`);
       
       // Clear OTP inputs and focus on first field
+      setOtpDigits(['', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
       
     } catch (error) {
@@ -514,13 +547,13 @@ export default function VerifyOTP() {
       
       if (otpError || !otpRecord) { 
         await recordFailedAttempt(voter.id); 
-        throw new Error('No valid OTP found. Please request a new code.'); 
+        throw new Error('No valid OTP found. Please wait for cooldown to end.'); 
       }
       
       // Check if expired
       if (new Date(otpRecord.expires_at) < new Date()) { 
         await recordFailedAttempt(voter.id); 
-        throw new Error('OTP has expired. Please request a new code.'); 
+        throw new Error('OTP has expired. Please wait for cooldown to end.'); 
       }
       
       // Verify OTP
@@ -537,6 +570,9 @@ export default function VerifyOTP() {
         .from('otp_codes')
         .update({ used: true, used_at: new Date().toISOString() })
         .eq('id', otpRecord.id);
+      
+      // Clear cooldown on successful verification
+      localStorage.removeItem('resend_cooldown_until');
       
       // Create session
       const sessionData = { 
@@ -661,6 +697,18 @@ export default function VerifyOTP() {
                 <span className="truncate max-w-[200px] sm:max-w-none">{voterInfo.email}</span>
               </div>
               
+              {/* Cooldown Warning Banner */}
+              {resendCooldown > 0 && (
+                <div className="mt-3 p-2 rounded-lg bg-amber-500/20 border border-amber-500/30">
+                  <div className="flex items-center justify-center gap-2">
+                    <FaClock className="w-4 h-4 text-amber-400" />
+                    <span className={`text-xs font-medium ${theme === 'dark' ? 'text-amber-300' : 'text-amber-700'}`}>
+                      Resend available in: {formatResendCooldown()}
+                    </span>
+                  </div>
+                </div>
+              )}
+              
               {/* Timer */}
               {timeRemaining > 0 && (
                 <div className="flex items-center justify-center gap-2 mt-3">
@@ -741,7 +789,7 @@ export default function VerifyOTP() {
               )}
             </button>
             
-            {/* Resend Button - 15 minute cooldown */}
+            {/* Resend Button - 15 minute automatic cooldown */}
             <div className="text-center mb-6">
               <button
                 onClick={handleResendOtp}
@@ -753,6 +801,11 @@ export default function VerifyOTP() {
                   ? `Resend code available in ${formatResendCooldown()} (15 min cooldown)` 
                   : "Didn't receive code? Resend OTP"}
               </button>
+              {resendCooldown > 0 && (
+                <p className={`text-[10px] mt-1 ${currentTheme.textSecondary} opacity-60`}>
+                  Cooldown started automatically when page loaded
+                </p>
+              )}
             </div>
             
             {/* Info Cards */}
@@ -767,7 +820,7 @@ export default function VerifyOTP() {
               </div>
               <div className={`${currentTheme.cardBg} rounded-xl p-2 sm:p-3 text-center border ${currentTheme.cardBorder}`}>
                 <div className={`${theme === 'dark' ? 'text-[#f4a261]' : 'text-teal-600'} text-base sm:text-lg font-bold mb-1`}>15 min</div>
-                <div className={`${currentTheme.textSecondary} text-[10px] sm:text-xs opacity-70`}>Resend Cooldown</div>
+                <div className={`${currentTheme.textSecondary} text-[10px] sm:text-xs opacity-70`}>Auto Cooldown</div>
               </div>
             </div>
             
@@ -779,6 +832,7 @@ export default function VerifyOTP() {
                 localStorage.removeItem('temp_voter_id');
                 localStorage.removeItem('temp_voter_name');
                 localStorage.removeItem('temp_voter_expiry');
+                localStorage.removeItem('resend_cooldown_until');
                 router.push('/login');
               }}
               className={`w-full py-2.5 sm:py-3 px-6 ${currentTheme.buttonSecondary} ${currentTheme.textPrimary} font-medium rounded-xl transition-all duration-300 flex items-center justify-center space-x-2 border text-sm sm:text-base`}
@@ -810,7 +864,7 @@ export default function VerifyOTP() {
                 <span>•</span>
                 <span className="flex items-center space-x-1">
                   <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 ${theme === 'dark' ? 'bg-[#f4a261]' : 'bg-amber-500'} rounded-full animate-pulse`}></div>
-                  <span>15 Min Cooldown</span>
+                  <span>Auto 15min Cooldown</span>
                 </span>
               </div>
             </div>
