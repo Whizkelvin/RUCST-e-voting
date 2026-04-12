@@ -111,37 +111,49 @@ function LoginContent() {
   }, []);
 
   // Role configuration
-  const getRoleConfig = useCallback((role) => {
-    const roleMap = {
-      dean: {
-        name: 'Dean of Students',
-        
-        redirectPath: '/admin/dean-dashboard',
-        color: 'purple'
-      },
-      electoral_commission: {
-        name: 'Electoral Commission',
-       
-        redirectPath: '/admin/electoral-commission-dashboard',
-        color: 'emerald'
-      },
-      ec: {
-        name: 'Electoral Commission',
-       
-        redirectPath: '/admin/electoral-commission-dashboard',
-        color: 'emerald'
-      },
-      admin: {
-        name: 'Admin',
-       
-        redirectPath: '/admin/manage-voters',
-        color: 'cyan'
-      },
-     
-    };
-    
-    return roleMap[role] || null;
-  }, []);
+  // Role configuration - ADD THE ICON PROPERTY
+const getRoleConfig = useCallback((role) => {
+  const roleMap = {
+    dean: {
+      name: 'Dean of Students',
+      icon: FaUserCog, // Add this
+      redirectPath: '/admin/dean-dashboard',
+      color: 'purple'
+    },
+    electoral_commission: {
+      name: 'Electoral Commission',
+      icon: FaUniversity, // Add this
+      redirectPath: '/admin/electoral-commission-dashboard',
+      color: 'emerald'
+    },
+    ec: {
+      name: 'Electoral Commission',
+      icon: FaUniversity, // Add this
+      redirectPath: '/admin/electoral-commission-dashboard',
+      color: 'emerald'
+    },
+    admin: {
+      name: 'Admin',
+      icon: FaUserShield, // Add this
+      redirectPath: '/admin/manage-voters',
+      color: 'cyan'
+    },
+    it_admin: {
+      name: 'IT Administrator',
+      icon: FaUserCog, // Add this
+      redirectPath: '/admin/manage-voters',
+      color: 'cyan'
+    },
+    hod: {
+      name: 'Head of Department',
+      icon: FaChalkboardTeacher, // Add this
+      redirectPath: '/admin/hod-dashboard',
+      color: 'green'
+    }
+  };
+  
+  return roleMap[role] || null;
+}, []);
 
   const getRedirectPath = useCallback((role) => {
     const roleConfig = getRoleConfig(role);
@@ -440,7 +452,7 @@ const checkVotingPeriod = useCallback(async () => {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }, []);
 
- const handleAdminLogin = useCallback(async (email, schoolId) => {
+const handleAdminLogin = useCallback(async (email, schoolId) => {
   // Check if account is locked
   if (lockoutUntil && new Date() < lockoutUntil) {
     const minutesLeft = Math.ceil((lockoutUntil - new Date()) / 60000);
@@ -487,11 +499,10 @@ const checkVotingPeriod = useCallback(async () => {
       return;
     }
     
-    // Authenticate with Supabase Auth (using proper password, not school_id)
-    // IMPORTANT: You should create proper passwords for admins, not use school_id
+    // Authenticate with Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: cleanEmail,
-      password: cleanSchoolId // ⚠️ This should be changed to a proper password field
+      password: cleanSchoolId
     });
     
     if (authError) {
@@ -510,21 +521,21 @@ const checkVotingPeriod = useCallback(async () => {
       return;
     }
     
-    // Generate secure OTP (hashed, not plain text)
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate admin OTP code
+    const adminOtpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
-    const hashedOtp = await hashOtpCode(otpCode); // Implement SHA-256 hashing
+    const hashedOtp = await hashOtpCode(adminOtpCode);
     
-    // Store OTP hash, not plain text
+    // Store OTP hash in database
     const { error: updateError } = await supabase
       .from('admins')
       .update({
-        otp_hash: hashedOtp, // Use proper column name
+        otp_hash: hashedOtp,
         otp_expires_at: otpExpiry.toISOString(),
         otp_verified: false,
         last_otp_sent_at: new Date().toISOString(),
         otp_attempts: 0,
-        failed_login_attempts: 0, // Reset on successful login
+        failed_login_attempts: 0,
         lockout_until: null,
         last_login_at: new Date().toISOString(),
         last_ip: clientIP
@@ -538,7 +549,7 @@ const checkVotingPeriod = useCallback(async () => {
       return;
     }
     
-    // Store minimal temp data (no sensitive info)
+    // Store admin temp data
     localStorage.setItem('temp_admin_id', adminData.id);
     localStorage.setItem('temp_admin_email', cleanEmail);
     localStorage.setItem('temp_admin_name', adminData.name || 'Admin User');
@@ -546,20 +557,34 @@ const checkVotingPeriod = useCallback(async () => {
     localStorage.setItem('temp_admin_auth_id', authData.user.id);
     localStorage.setItem('temp_admin_expiry', otpExpiry.getTime().toString());
     
-    // Send OTP email with rate limiting
-    const otpSent = await sendAdminOtpWithRateLimit(cleanEmail, otpCode, adminData.name, clientIP);
-    
-    if (otpSent) {
-      toast.success(`✅ Admin OTP sent to ${maskEmail(cleanEmail)}. Valid for 5 minutes.`);
+    // Send admin OTP via email
+    try {
+      const response = await fetch('/api/send-admin-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          otp: adminOtpCode,
+          name: adminData.name || 'Admin User',
+          role: adminData.role || 'admin',
+          expiresIn: 5
+        }),
+      });
       
-      // Clear any existing OTP cooldown
-      localStorage.removeItem('admin_otp_cooldown');
+      const result = await response.json();
       
-      setTimeout(() => {
-        router.push('/admin-verify-otp');
-      }, 1500);
-    } else {
-      toast.error('Failed to send OTP. Please try again in 60 seconds.');
+      if (result.success) {
+        toast.success(`✅ Admin OTP sent to ${maskEmail(cleanEmail)}. Valid for 5 minutes.`);
+        
+        setTimeout(() => {
+          router.push('/admin-verify-otp');
+        }, 1500);
+      } else {
+        toast.error('Failed to send OTP. Please try again.');
+      }
+    } catch (emailError) {
+      console.error('Email sending error:', emailError);
+      toast.error('Failed to send OTP email. Please try again.');
     }
     
   } catch (error) {
