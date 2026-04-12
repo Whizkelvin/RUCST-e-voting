@@ -555,15 +555,7 @@ export default function ElectionResults() {
                   </div>
                 </div>
 
-                <div data-aos="fade-up" data-aos-delay="450" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder} transition-all duration-300 hover:scale-105`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Voters Who Voted</p>
-                      <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVotersWhoVoted.toLocaleString()}</p>
-                    </div>
-                    <FaUserCheck className="text-3xl sm:text-4xl text-purple-400" />
-                  </div>
-                </div>
+               
 
                 <div data-aos="fade-up" data-aos-delay="500" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder} transition-all duration-300 hover:scale-105`}>
                   <div className="flex items-center justify-between">

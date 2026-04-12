@@ -159,7 +159,7 @@ const NavigationBar = ({ isVotingActive, isMobileMenuOpen, setIsMobileMenuOpen, 
             <button
               data-aos="fade-left"
               onClick={handleAction}
-              className="bg-gradient-to-r from-green-950 to-emerald-800 hover:from-green-800 hover:to-emerald-700 text-white px-3 sm:px-6 py-1.5 sm:py-3 rounded-lg sm:rounded-xl font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl flex items-center space-x-1 sm:space-x-2 group text-xs sm:text-sm"
+              className="bg-gradient-to-r from-green-950 to-green-950 hover:from-green-800 hover:to-emerald-700 text-white px-3 sm:px-6 py-1.5 sm:py-3 rounded-lg sm:rounded-xl font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl flex items-center space-x-1 sm:space-x-2 group text-xs sm:text-sm"
             >
               <span>{isVotingActive ? 'Vote Now' : 'View Results'}</span>
               <FaChevronRight className="w-3 h-3 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform" />

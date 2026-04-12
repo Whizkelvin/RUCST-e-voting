@@ -52,7 +52,7 @@ const ElectionCard = ({ election, index, isVotingActive, votingPeriod, loading }
         <div className="flex items-center justify-between mb-2">
           <div>
             {election.voting_period_title && (
-              <p className="text-xs text-[#0f766e] font-semibold mb-1">
+              <p className="text-xs text-black font-semibold mb-1">
                 {election.voting_period_title}
               </p>
             )}
@@ -83,13 +83,13 @@ const ElectionCard = ({ election, index, isVotingActive, votingPeriod, loading }
           >
             {showResults ? (
               <>
-                <FaEyeSlash className="text-gray-600" />
-                <span className="text-gray-700">Hide Results</span>
+                <FaEyeSlash className="text-black" />
+                <span className="text-black">Hide Results</span>
               </>
             ) : (
               <>
-                <FaEye className="text-[#0f766e]" />
-                <span className="text-[#0f766e] font-medium">Show Results</span>
+                <FaEye className="text-black" />
+                <span className="text-black font-medium">Show Results</span>
               </>
             )}
           </button>
@@ -99,7 +99,7 @@ const ElectionCard = ({ election, index, isVotingActive, votingPeriod, loading }
       {/* Candidates List */}
       <div className="mb-4">
         <h4 className="text-lg font-semibold text-gray-700 mb-3 flex items-center">
-          <FaUserGraduate className="mr-2 text-[#0f766e]" />
+          <FaUserGraduate className="mr-2 text-black" />
           Candidates ({election.candidatesCount})
         </h4>
         

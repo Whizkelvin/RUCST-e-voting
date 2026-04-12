@@ -115,34 +115,29 @@ function LoginContent() {
     const roleMap = {
       dean: {
         name: 'Dean of Students',
-        icon: FaUniversity,
+        
         redirectPath: '/admin/dean-dashboard',
         color: 'purple'
       },
       electoral_commission: {
         name: 'Electoral Commission',
-        icon: FaUserShield,
+       
         redirectPath: '/admin/electoral-commission-dashboard',
         color: 'emerald'
       },
       ec: {
         name: 'Electoral Commission',
-        icon: FaUserShield,
+       
         redirectPath: '/admin/electoral-commission-dashboard',
         color: 'emerald'
       },
       admin: {
         name: 'Admin',
-        icon: FaUserCog,
+       
         redirectPath: '/admin/manage-voters',
         color: 'cyan'
       },
-      hod: {
-        name: 'Head of Department',
-        icon: FaChalkboardTeacher,
-        redirectPath: '/admin/hod-dashboard',
-        color: 'green'
-      }
+     
     };
     
     return roleMap[role] || null;
@@ -445,106 +440,242 @@ const checkVotingPeriod = useCallback(async () => {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }, []);
 
-  const handleAdminLogin = useCallback(async (email, schoolId) => {
-    setIsLoading(true);
-    try {
-      const cleanEmail = email.toLowerCase().trim();
-      const cleanSchoolId = schoolId.trim().padStart(8, '0');
+ const handleAdminLogin = useCallback(async (email, schoolId) => {
+  // Check if account is locked
+  if (lockoutUntil && new Date() < lockoutUntil) {
+    const minutesLeft = Math.ceil((lockoutUntil - new Date()) / 60000);
+    toast.error(`Too many failed attempts. Try again in ${minutesLeft} minutes.`);
+    return;
+  }
+  
+  setIsLoading(true);
+  try {
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanSchoolId = schoolId.trim().padStart(8, '0');
+    
+    // Check if admin exists
+    const { data: adminData, error: adminCheckError } = await supabase
+      .from('admins')
+      .select('id, email, name, role, failed_login_attempts, lockout_until, last_login_at')
+      .eq('email', cleanEmail)
+      .eq('school_id', cleanSchoolId)
+      .maybeSingle();
+    
+    if (!adminData || adminCheckError) {
+      // Record failed attempt without revealing if email exists
+      await recordFailedLoginAttempt(cleanEmail, clientIP);
+      const newAttempts = await incrementFailedAttempts(cleanEmail);
       
-      // Check if admin exists
-      const { data: adminData, error: adminCheckError } = await supabase
-        .from('admins')
-        .select('*')
-        .eq('email', cleanEmail)
-        .eq('school_id', cleanSchoolId)
-        .maybeSingle();
-      
-      if (!adminData || adminCheckError) {
-        setLoginAttempts(prev => prev + 1);
-        toast.error('Invalid credentials. Please try again.');
-        setIsLoading(false);
-        return;
+      if (newAttempts >= 5) {
+        const lockoutTime = new Date();
+        lockoutTime.setMinutes(lockoutTime.getMinutes() + 15);
+        setLockoutUntil(lockoutTime);
+        toast.error('Too many failed attempts. Account locked for 15 minutes.');
+      } else {
+        toast.error(`Invalid credentials. ${5 - newAttempts} attempts remaining.`);
       }
+      setIsLoading(false);
+      return;
+    }
+    
+    // Check if admin account is locked
+    if (adminData.lockout_until && new Date(adminData.lockout_until) > new Date()) {
+      const lockoutTime = new Date(adminData.lockout_until);
+      const minutesLeft = Math.ceil((lockoutTime - new Date()) / 60000);
+      toast.error(`Account locked. Try again in ${minutesLeft} minutes.`);
+      setIsLoading(false);
+      return;
+    }
+    
+    // Authenticate with Supabase Auth (using proper password, not school_id)
+    // IMPORTANT: You should create proper passwords for admins, not use school_id
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password: cleanSchoolId // ⚠️ This should be changed to a proper password field
+    });
+    
+    if (authError) {
+      await recordFailedLoginAttempt(cleanEmail, clientIP);
+      const newAttempts = await incrementFailedAttempts(cleanEmail);
       
-      // Authenticate with Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: cleanSchoolId
-      });
-      
-      if (authError) {
-        setLoginAttempts(prev => prev + 1);
-        toast.error('Invalid credentials. Please try again.');
-        setIsLoading(false);
-        return;
+      if (newAttempts >= 5) {
+        const lockoutTime = new Date();
+        lockoutTime.setMinutes(lockoutTime.getMinutes() + 15);
+        await updateAdminLockout(adminData.id, lockoutTime);
+        toast.error('Too many failed attempts. Account locked for 15 minutes.');
+      } else {
+        toast.error(`Invalid credentials. ${5 - newAttempts} attempts remaining.`);
       }
+      setIsLoading(false);
+      return;
+    }
+    
+    // Generate secure OTP (hashed, not plain text)
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+    const hashedOtp = await hashOtpCode(otpCode); // Implement SHA-256 hashing
+    
+    // Store OTP hash, not plain text
+    const { error: updateError } = await supabase
+      .from('admins')
+      .update({
+        otp_hash: hashedOtp, // Use proper column name
+        otp_expires_at: otpExpiry.toISOString(),
+        otp_verified: false,
+        last_otp_sent_at: new Date().toISOString(),
+        otp_attempts: 0,
+        failed_login_attempts: 0, // Reset on successful login
+        lockout_until: null,
+        last_login_at: new Date().toISOString(),
+        last_ip: clientIP
+      })
+      .eq('id', adminData.id);
+    
+    if (updateError) {
+      console.error('OTP storage error:', updateError);
+      toast.error('Failed to generate OTP. Please try again.');
+      setIsLoading(false);
+      return;
+    }
+    
+    // Store minimal temp data (no sensitive info)
+    localStorage.setItem('temp_admin_id', adminData.id);
+    localStorage.setItem('temp_admin_email', cleanEmail);
+    localStorage.setItem('temp_admin_name', adminData.name || 'Admin User');
+    localStorage.setItem('temp_admin_role', adminData.role || 'admin');
+    localStorage.setItem('temp_admin_auth_id', authData.user.id);
+    localStorage.setItem('temp_admin_expiry', otpExpiry.getTime().toString());
+    
+    // Send OTP email with rate limiting
+    const otpSent = await sendAdminOtpWithRateLimit(cleanEmail, otpCode, adminData.name, clientIP);
+    
+    if (otpSent) {
+      toast.success(`✅ Admin OTP sent to ${maskEmail(cleanEmail)}. Valid for 5 minutes.`);
       
-      // Generate Admin OTP
-      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
-      
-      const { error: updateError } = await supabase
-        .from('admins')
-        .update({
-          hash_code: otpCode,
-          otp_expires_at: otpExpiry.toISOString(),
-          otp_verified: false,
-          last_otp_sent_at: new Date().toISOString(),
-          otp_attempts: 0
-        })
-        .eq('id', adminData.id);
-      
-      if (updateError) {
-        toast.error('Failed to generate OTP. Please try again.');
-        setIsLoading(false);
-        return;
-      }
-      
-      localStorage.setItem('temp_admin_id', adminData.id);
-      localStorage.setItem('temp_admin_email', cleanEmail);
-      localStorage.setItem('temp_admin_name', adminData.name || 'Admin User');
-      localStorage.setItem('temp_admin_role', adminData.role || 'admin');
-      localStorage.setItem('temp_admin_auth_id', authData.user.id);
-      
-      // Send OTP email
-      try {
-        const response = await fetch('/api/send-admin-otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: cleanEmail,
-            otp: otpCode,
-            name: adminData.name || 'Admin User',
-            role: adminData.role || 'admin'
-          }),
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-          toast.success(`✅ Admin OTP sent to ${cleanEmail}.`);
-        } else {
-          toast.error('Failed to send OTP. Please try again.');
-        }
-      } catch (emailError) {
-        toast.error('Failed to send OTP. Please try again.');
-      }
-      
-      setLoginAttempts(0);
-      setLockoutUntil(null);
-      setAuthCookies(false, adminData.role || 'admin', cleanEmail, adminData.id);
+      // Clear any existing OTP cooldown
+      localStorage.removeItem('admin_otp_cooldown');
       
       setTimeout(() => {
         router.push('/admin-verify-otp');
       }, 1500);
-      
-    } catch (error) {
-      console.error('Admin login error:', error);
-      toast.error('System error. Please try again later.');
-    } finally {
-      setIsLoading(false);
+    } else {
+      toast.error('Failed to send OTP. Please try again in 60 seconds.');
     }
-  }, [router, setLoginAttempts, setAuthCookies]);
+    
+  } catch (error) {
+    console.error('Admin login error:', error);
+    toast.error('System error. Please try again later.');
+    await logSecurityEvent('admin_login_error', { email, error: error.message, ip: clientIP });
+  } finally {
+    setIsLoading(false);
+  }
+}, [router, lockoutUntil, clientIP]);
+
+// Helper Functions
+const hashOtpCode = async (code) => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(code);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
+const recordFailedLoginAttempt = async (email, ip) => {
+  await supabase
+    .from('admin_login_attempts')
+    .insert({
+      email: email,
+      ip_address: ip,
+      attempted_at: new Date().toISOString(),
+      success: false
+    });
+};
+
+const incrementFailedAttempts = async (email) => {
+  const { data } = await supabase
+    .from('admins')
+    .select('failed_login_attempts')
+    .eq('email', email)
+    .single();
+  
+  const newAttempts = (data?.failed_login_attempts || 0) + 1;
+  
+  await supabase
+    .from('admins')
+    .update({ failed_login_attempts: newAttempts })
+    .eq('email', email);
+  
+  return newAttempts;
+};
+
+const updateAdminLockout = async (adminId, lockoutUntil) => {
+  await supabase
+    .from('admins')
+    .update({
+      lockout_until: lockoutUntil.toISOString(),
+      failed_login_attempts: 5
+    })
+    .eq('id', adminId);
+};
+
+const sendAdminOtpWithRateLimit = async (email, otp, name, ip) => {
+  // Check rate limiting in database
+  const { data: recentAttempt } = await supabase
+    .from('admin_otp_logs')
+    .select('sent_at')
+    .eq('email', email)
+    .gte('sent_at', new Date(Date.now() - 60 * 1000).toISOString())
+    .order('sent_at', { ascending: false })
+    .limit(1);
+  
+  if (recentAttempt && recentAttempt.length > 0) {
+    console.log(`Rate limit hit for admin OTP to ${email}`);
+    return false;
+  }
+  
+  const response = await fetch('/api/send-admin-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: email,
+      otp: otp,
+      name: name,
+      role: 'admin',
+      expiresIn: 5
+    }),
+  });
+  
+  const result = await response.json();
+  
+  // Log the attempt
+  await supabase
+    .from('admin_otp_logs')
+    .insert({
+      email: email,
+      sent_at: new Date().toISOString(),
+      success: result.success,
+      ip_address: ip
+    });
+  
+  return result.success;
+};
+
+const maskEmail = (email) => {
+  const [localPart, domain] = email.split('@');
+  if (localPart.length <= 3) return email;
+  const masked = localPart.slice(0, 2) + '***' + localPart.slice(-2);
+  return `${masked}@${domain}`;
+};
+
+const logSecurityEvent = async (eventType, details) => {
+  await supabase
+    .from('security_logs')
+    .insert({
+      event_type: eventType,
+      details: details,
+      timestamp: new Date().toISOString()
+    });
+};
 
 const handleVoterLogin = useCallback(async (email, schoolId) => {
   setIsLoading(true);

@@ -170,8 +170,8 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
      (localTimeLeft.status && localTimeLeft.status.includes('starts in')));
 
   return (
-    <div className="pt-24">
-      <div className="bg-gradient-to-r from-[#0f766e] via-[#064e3b] to-[#0f766e] text-white py-6">
+    <div className="pt-20">
+      <div className="bg-gradient-to-r from-green-950 via-green-950 to-green-950 text-white py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between">
             <div className="flex items-center space-x-4 mb-4 md:mb-0">
