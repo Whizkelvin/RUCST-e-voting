@@ -17,12 +17,13 @@ import {
   FaChartBar,
   FaUserTag,
   FaUniversity,
-  FaFileAlt,
   FaClock,
   FaChartLine,
   FaUserGraduate,
   FaSun,
   FaMoon,
+  FaVoteYea,
+  FaEye,
 } from "react-icons/fa";
 import Link from "next/link";
 
@@ -83,16 +84,43 @@ export default function AdminLayout({ children }) {
     };
   }, [mobileMenuOpen]);
 
-  const navigation = [
+  // Check user role
+  const userRole = admin?.role || "admin";
+  const isEC = userRole === "electoral_commission" || userRole === "ec";
+
+  // Navigation based on role
+// In app/admin/layout.js, update the getNavigation function:
+
+const getNavigation = () => {
+  // Dashboard for both
+  const dashboard = { name: "Dashboard", href: "/admin/ec", icon: FaHome };
+  
+  // Common navigation for both Admin and EC
+  const commonNav = [
     { name: "Manage Voters", href: "/admin/manage-voters", icon: FaUsers },
+    { name: "Manage Candidates", href: "/admin/manage-candidates", icon: FaUserGraduate },
+    { name: "Manage Elections", href: "/admin/manage-elections", icon: FaUniversity },
+    { name: "Voting Period", href: "/admin/voting-period", icon: FaClock },
+    { name: "Election Results", href: "/admin/election-results", icon: FaChartBar },
+  ];
+
+  // Admin-only navigation
+  const adminOnlyNav = [
     { name: "Nomination Codes", href: "/admin/generate-nomination-codes", icon: FaKey },
     { name: "Manage Roles", href: "/admin/manage-roles", icon: FaUserTag },
-    { name: "Election Results", href: "/admin/election-results", icon: FaChartBar },
-    { name: "Candidates", href: "/admin/manage-candidates", icon: FaUserGraduate },
-    { name: "Voting Period", href: "/admin/voting-period", icon: FaClock },
-    { name: "Manage Elections", href: "/admin/manage-elections", icon: FaUniversity },
     { name: "Audit Report", href: "/admin/audit-report", icon: FaChartLine },
   ];
+
+  if (isEC) {
+    return [dashboard, ...commonNav];  // EC gets Dashboard + common items
+  }
+  
+  return [dashboard, ...commonNav, ...adminOnlyNav];  // Admin gets Dashboard + ALL items
+};
+
+  const navigation = getNavigation();
+  const portalTitle = isEC ? "EC Portal" : "Admin Portal";
+  const portalColor = isEC ? "emerald" : "teal";
 
   const isActiveLink = (href) => pathname === href;
 
@@ -104,7 +132,7 @@ export default function AdminLayout({ children }) {
         <div className="text-center px-4">
           <FaSpinner className="animate-spin text-3xl sm:text-4xl text-teal-500 mx-auto mb-4" />
           <p className={theme === "light" ? "text-gray-600" : "text-white"}>
-            Verifying admin access...
+            Verifying access...
           </p>
         </div>
       </div>
@@ -123,7 +151,7 @@ export default function AdminLayout({ children }) {
     }`}>
       <Toaster position="top-center" richColors closeButton />
 
-      {/* Theme Toggle Button */}
+      {/* Theme Toggle Button - Mobile only */}
       <button
         onClick={toggleTheme}
         className="fixed bottom-6 right-6 z-50 p-3 rounded-full shadow-lg transition-all duration-300 hover:scale-110 lg:hidden"
@@ -135,7 +163,7 @@ export default function AdminLayout({ children }) {
         {theme === "light" ? <FaMoon size={20} /> : <FaSun size={20} />}
       </button>
 
-      {/* Mobile Header - Only visible on mobile */}
+      {/* Mobile Header */}
       <div className={`lg:hidden fixed top-0 left-0 right-0 z-50 ${
         theme === "light"
           ? "bg-white/90 backdrop-blur-lg border-b border-gray-200"
@@ -143,11 +171,11 @@ export default function AdminLayout({ children }) {
       }`}>
         <div className="flex justify-between items-center h-14 px-4">
           <div className="flex items-center gap-2">
-            <FaUserShield className="text-xl text-teal-500" />
+            <FaUserShield className={`text-xl text-${portalColor}-500`} />
             <div>
               <h1 className={`font-semibold text-sm ${
                 theme === "light" ? "text-gray-900" : "text-white"
-              }`}>Admin Panel</h1>
+              }`}>{portalTitle}</h1>
               <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate max-w-[100px]">
                 {admin?.name?.split(" ")[0] || admin?.name}
               </p>
@@ -202,7 +230,7 @@ export default function AdminLayout({ children }) {
               : "bg-gray-900/95 backdrop-blur-lg border-b border-white/10"
           }`}>
             <div className="py-4 px-4">
-              {/* Admin Info */}
+              {/* User Info */}
               <div className={`px-3 py-3 border-b mb-3 ${
                 theme === "light" ? "border-gray-200" : "border-white/10"
               }`}>
@@ -212,6 +240,9 @@ export default function AdminLayout({ children }) {
                 <p className={`text-xs truncate mt-1 ${
                   theme === "light" ? "text-gray-500" : "text-gray-400"
                 }`}>{admin?.email}</p>
+                <span className={`inline-block mt-1 text-xs text-${portalColor}-600 dark:text-${portalColor}-400`}>
+                  {isEC ? "Electoral Commission" : "Administrator"}
+                </span>
               </div>
 
               {/* Navigation Links */}
@@ -227,14 +258,14 @@ export default function AdminLayout({ children }) {
                       className={`flex items-center gap-3 px-3 py-3 rounded-lg transition ${
                         isActive
                           ? theme === "light"
-                            ? "bg-teal-50 text-teal-700 font-medium"
+                            ? `bg-${portalColor}-50 text-${portalColor}-700 font-medium`
                             : "bg-white/10 text-white font-medium"
                           : theme === "light"
-                            ? "text-gray-600 hover:text-teal-600 hover:bg-gray-50"
+                            ? "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                             : "text-gray-300 hover:text-white hover:bg-white/5"
                       }`}
                     >
-                      <Icon className={`text-lg text-teal-500`} />
+                      <Icon className={`text-lg text-${portalColor}-500`} />
                       <span className="text-sm">{item.name}</span>
                     </Link>
                   );
@@ -278,11 +309,11 @@ export default function AdminLayout({ children }) {
           }`}>
             {sidebarOpen ? (
               <div className="flex items-center gap-2">
-                <FaUserShield className="text-2xl text-teal-500" />
+                <FaUserShield className={`text-2xl text-${portalColor}-500`} />
                 <div>
                   <h1 className={`font-semibold ${
                     theme === "light" ? "text-gray-900" : "text-white"
-                  }`}>Admin Panel</h1>
+                  }`}>{portalTitle}</h1>
                   <p className={`text-[10px] truncate max-w-[120px] ${
                     theme === "light" ? "text-gray-500" : "text-gray-400"
                   }`}>
@@ -291,7 +322,7 @@ export default function AdminLayout({ children }) {
                 </div>
               </div>
             ) : (
-              <FaUserShield className="text-2xl text-teal-500 mx-auto" />
+              <FaUserShield className={`text-2xl text-${portalColor}-500 mx-auto`} />
             )}
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -338,18 +369,18 @@ export default function AdminLayout({ children }) {
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition group ${
                       isActive
                         ? theme === "light"
-                          ? "bg-teal-50 text-teal-700"
+                          ? `bg-${portalColor}-50 text-${portalColor}-700`
                           : "bg-white/10 text-white"
                         : theme === "light"
-                          ? "text-gray-600 hover:text-teal-600 hover:bg-gray-50"
+                          ? "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                           : "text-gray-300 hover:text-white hover:bg-white/5"
                     }`}
                   >
                     <Icon className={`text-lg transition ${
                       isActive
-                        ? "text-teal-500"
+                        ? `text-${portalColor}-500`
                         : theme === "light"
-                          ? "text-gray-400 group-hover:text-teal-500"
+                          ? "text-gray-400 group-hover:text-gray-600"
                           : "text-gray-400 group-hover:text-white"
                     }`} />
                     {sidebarOpen && (
@@ -422,7 +453,7 @@ export default function AdminLayout({ children }) {
                   ? "bg-gray-100"
                   : "bg-white/5"
               }`}>
-                <FaUserShield className="text-teal-500 text-sm" />
+                <FaUserShield className={`text-${portalColor}-500 text-sm`} />
                 <span className={`text-sm font-medium ${
                   theme === "light" ? "text-gray-700" : "text-white"
                 }`}>

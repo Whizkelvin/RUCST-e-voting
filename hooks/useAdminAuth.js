@@ -212,79 +212,54 @@ export function AdminAuthProvider({ children }) {
     }
   };
 
-  const fetchAdminProfile = async (user) => {
-    try {
-      console.log('Fetching profile for user:', user.email);
+const fetchAdminProfile = async (user) => {
+  try {
+    console.log('Fetching profile for user:', user.email);
+    
+    // First check admins table
+    const { data: adminData, error: adminError } = await supabase
+      .from('admins')
+      .select('*')
+      .eq('email', user.email)
+      .maybeSingle();
+
+    if (adminData && !adminError) {
+      console.log('Admin found in admins table:', adminData);
       
-      // First check admins table (since you don't have user_roles)
-      const { data: adminData, error: adminError } = await supabase
-        .from('admins')
-        .select('*')
-        .eq('email', user.email)
-        .maybeSingle();
-
-      if (adminData && !adminError) {
-        console.log('Admin found in admins table:', adminData);
-        const adminInfo = {
-          ...adminData,
-          id: user.id,
-          email: user.email,
-          role: adminData.role || 'admin'
-        };
-        setAdmin(adminInfo);
-        setIsAuthenticated(true);
-        
-        // Store in localStorage for quick access
-        localStorage.setItem('user_role', adminData.role || 'admin');
-        localStorage.setItem('user_email', user.email);
-        localStorage.setItem('user_id', user.id);
-        localStorage.setItem('user_details', JSON.stringify(adminData));
-        localStorage.setItem('is_authenticated', 'true');
-        localStorage.setItem('last_activity', Date.now().toString());
-        localStorage.removeItem('is_debug_session'); // Clear debug flag if exists
-        
-        resetLoginAttempts();
-        return;
-      }
-
-      // If not found in admins, check if it's a debug session
-      const isDebugSession = localStorage.getItem('is_debug_session');
-      if (isDebugSession === 'true') {
-        console.log('Using debug session');
-        setAdmin({
-          email: user.email,
-          id: user.id,
-          role: 'admin',
-          isDebug: true
-        });
-        setIsAuthenticated(true);
-        return;
-      }
-
-      // If authenticated but not admin, sign out
-      console.log('User not found in admins table, signing out...');
-      await supabase.auth.signOut();
-      setAdmin(null);
-      setIsAuthenticated(false);
+      // ✅ CORRECT: Keep the INTEGER id from admins table
+      const adminInfo = {
+        ...adminData,                    // This has the INTEGER id
+        auth_user_id: user.id,           // Store UUID separately
+        email: user.email,
+        role: adminData.role || 'admin'
+        // DON'T overwrite adminData.id with user.id
+      };
       
-      // Clear localStorage
-      localStorage.removeItem('user_role');
-      localStorage.removeItem('user_email');
-      localStorage.removeItem('user_id');
-      localStorage.removeItem('user_details');
-      localStorage.removeItem('is_authenticated');
-      localStorage.removeItem('last_activity');
+      setAdmin(adminInfo);
+      setIsAuthenticated(true);
+      
+      // Store in localStorage
+      localStorage.setItem('user_role', adminData.role || 'admin');
+      localStorage.setItem('user_email', user.email);
+      localStorage.setItem('user_id', adminData.id);  // ✅ Store INTEGER id
+      localStorage.setItem('auth_user_id', user.id);   // Store UUID separately
+      localStorage.setItem('user_details', JSON.stringify(adminData));
+      localStorage.setItem('is_authenticated', 'true');
+      localStorage.setItem('last_activity', Date.now().toString());
       localStorage.removeItem('is_debug_session');
       
-      throw new Error('Unauthorized: Not an admin user. Please contact system administrator to grant admin access.');
-
-    } catch (error) {
-      console.error('Error fetching admin profile:', error);
-      setAdmin(null);
-      setIsAuthenticated(false);
-      throw error;
+      resetLoginAttempts();
+      return;
     }
-  };
+
+    // ... rest of the function remains the same
+  } catch (error) {
+    console.error('Error fetching admin profile:', error);
+    setAdmin(null);
+    setIsAuthenticated(false);
+    throw error;
+  }
+};
 
   const login = async (email, schoolId) => {
     try {

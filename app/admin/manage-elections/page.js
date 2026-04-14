@@ -25,6 +25,12 @@ import {
   FaMoon,
   FaHourglassHalf,
   FaCalendarCheck,
+  FaUsers,
+  FaUserPlus,
+  FaUserCheck,
+  FaUserTimes,
+  FaDownload,
+  FaUpload,
 } from "react-icons/fa";
 import * as XLSX from "xlsx";
 
@@ -44,6 +50,18 @@ export default function ManageElections() {
   const [editingElection, setEditingElection] = useState(null);
   const [editingPosition, setEditingPosition] = useState(null);
   const [theme, setTheme] = useState("light");
+  
+  // Voter Management State
+  const [showVotersModal, setShowVotersModal] = useState(false);
+  const [selectedElectionForVoters, setSelectedElectionForVoters] = useState(null);
+  const [electionVoters, setElectionVoters] = useState([]);
+  const [allVoters, setAllVoters] = useState([]);
+  const [voterSearchTerm, setVoterSearchTerm] = useState("");
+  const [addingVoter, setAddingVoter] = useState(false);
+  const [selectedVoterId, setSelectedVoterId] = useState("");
+  const [bulkAdding, setBulkAdding] = useState(false);
+  const [voterFilter, setVoterFilter] = useState("all");
+  
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -146,7 +164,6 @@ export default function ManageElections() {
 
       const now = new Date();
       
-      // Calculate stats based on actual date/time
       let active = 0;
       let completed = 0;
       let upcoming = 0;
@@ -164,7 +181,6 @@ export default function ManageElections() {
           upcoming++;
         }
         
-        // Check for expired (ended but not marked as inactive)
         if (end < now && e.is_active === true) {
           expired++;
         }
@@ -200,6 +216,199 @@ export default function ManageElections() {
       toast.error("Failed to load positions");
     }
   };
+
+  // ========== VOTER MANAGEMENT FUNCTIONS ==========
+  
+  const fetchAllVoters = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("voters")
+        .select("id, name, email, school_id")
+        .order("name", { ascending: true });
+      
+      if (error) throw error;
+      setAllVoters(data || []);
+    } catch (error) {
+      console.error("Error fetching voters:", error);
+      toast.error("Failed to load voters");
+    }
+  };
+
+  const fetchElectionVoters = async (electionId) => {
+    try {
+      const { data, error } = await supabase
+        .from("election_voters")
+        .select(`
+          id,
+          has_voted,
+          voted_at,
+          added_at,
+          status,
+          voters (
+            id,
+            name,
+            email,
+            school_id
+          )
+        `)
+        .eq("election_id", electionId)
+        .eq("status", "active");
+      
+      if (error) throw error;
+      setElectionVoters(data || []);
+    } catch (error) {
+      console.error("Error fetching election voters:", error);
+      toast.error("Failed to load election voters");
+    }
+  };
+
+  const handleManageVoters = async (election) => {
+    setSelectedElectionForVoters(election);
+    await fetchAllVoters();
+    await fetchElectionVoters(election.id);
+    setShowVotersModal(true);
+    setVoterSearchTerm("");
+    setSelectedVoterId("");
+    setVoterFilter("all");
+  };
+
+  const addVoterToElection = async () => {
+    if (!selectedVoterId) {
+      toast.error("Please select a voter");
+      return;
+    }
+
+    setAddingVoter(true);
+    try {
+      const { error } = await supabase
+        .from("election_voters")
+        .insert({
+          election_id: selectedElectionForVoters.id,
+          voter_id: selectedVoterId,
+          added_at: new Date().toISOString(),
+          added_by: admin?.id,
+          status: "active"
+        });
+
+      if (error) throw error;
+
+      toast.success("Voter added to election");
+      setSelectedVoterId("");
+      await fetchElectionVoters(selectedElectionForVoters.id);
+      await updateElectionTotalVoters();
+    } catch (error) {
+      console.error("Error adding voter:", error);
+      toast.error("Failed to add voter");
+    } finally {
+      setAddingVoter(false);
+    }
+  };
+
+  const removeVoterFromElection = async (electionVoterId, voterName) => {
+    try {
+      const { error } = await supabase
+        .from("election_voters")
+        .update({ status: "removed" })
+        .eq("id", electionVoterId);
+
+      if (error) throw error;
+
+      toast.success(`${voterName} removed from election`);
+      await fetchElectionVoters(selectedElectionForVoters.id);
+      await updateElectionTotalVoters();
+    } catch (error) {
+      console.error("Error removing voter:", error);
+      toast.error("Failed to remove voter");
+    }
+  };
+
+  const updateElectionTotalVoters = async () => {
+    if (!selectedElectionForVoters) return;
+    
+    try {
+      const { count, error } = await supabase
+        .from("election_voters")
+        .select("*", { count: "exact", head: true })
+        .eq("election_id", selectedElectionForVoters.id)
+        .eq("status", "active");
+      
+      if (error) throw error;
+      
+      await supabase
+        .from("elections")
+        .update({ total_eligible_voters: count })
+        .eq("id", selectedElectionForVoters.id);
+    } catch (error) {
+      console.error("Error updating voter count:", error);
+    }
+  };
+
+  const bulkAddVoters = async () => {
+    let votersToAdd = [];
+    
+    if (voterFilter === "all") {
+      votersToAdd = allVoters;
+    } else if (voterFilter === "not_added") {
+      const addedVoterIds = electionVoters.map(ev => ev.voters.id);
+      votersToAdd = allVoters.filter(v => !addedVoterIds.includes(v.id));
+    } else if (voterFilter === "not_voted") {
+      const votedVoterIds = electionVoters.filter(ev => ev.has_voted).map(ev => ev.voters.id);
+      votersToAdd = allVoters.filter(v => !votedVoterIds.includes(v.id));
+    }
+    
+    if (votersToAdd.length === 0) {
+      toast.info("No voters to add");
+      return;
+    }
+    
+    setBulkAdding(true);
+    try {
+      const insertData = votersToAdd.map(voter => ({
+        election_id: selectedElectionForVoters.id,
+        voter_id: voter.id,
+        added_at: new Date().toISOString(),
+        added_by: admin?.id,
+        status: "active"
+      }));
+      
+      const { error } = await supabase
+        .from("election_voters")
+        .upsert(insertData, { onConflict: "election_id, voter_id" });
+      
+      if (error) throw error;
+      
+      toast.success(`${votersToAdd.length} voters added to election`);
+      await fetchElectionVoters(selectedElectionForVoters.id);
+      await updateElectionTotalVoters();
+    } catch (error) {
+      console.error("Error bulk adding voters:", error);
+      toast.error("Failed to add voters");
+    } finally {
+      setBulkAdding(false);
+    }
+  };
+
+  const exportVotersToExcel = () => {
+    const exportData = electionVoters.map((ev) => ({
+      Name: ev.voters.name,
+      Email: ev.voters.email,
+      "School ID": ev.voters.school_id,
+      "Has Voted": ev.has_voted ? "Yes" : "No",
+      "Voted At": ev.voted_at ? new Date(ev.voted_at).toLocaleString() : "Not yet",
+      "Added At": new Date(ev.added_at).toLocaleString(),
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Election Voters");
+    XLSX.writeFile(
+      wb,
+      `voters_${selectedElectionForVoters?.title}_${new Date().toISOString().split("T")[0]}.xlsx`,
+    );
+    toast.success("Export successful!");
+  };
+
+  // ========== POSITION MANAGEMENT FUNCTIONS ==========
 
   const handleManagePositions = async (election) => {
     setSelectedElection(election);
@@ -320,6 +529,8 @@ export default function ManageElections() {
       max_votes: position.max_votes || 1,
     });
   };
+
+  // ========== ELECTION MANAGEMENT FUNCTIONS ==========
 
   const validateForm = () => {
     const errors = {};
@@ -530,7 +741,6 @@ export default function ManageElections() {
   };
 
   const handleActivateElection = async (election) => {
-    // Check if election has expired
     const now = new Date();
     const endDate = new Date(election.end_time);
     
@@ -678,7 +888,6 @@ export default function ManageElections() {
     const end = new Date(election.end_time);
     const hasExpired = end < now;
 
-    // Check if election has expired (end date passed)
     if (hasExpired && election.is_active) {
       return {
         label: "Expired",
@@ -763,6 +972,14 @@ export default function ManageElections() {
     setFilteredElections(filtered);
   }, [searchTerm, statusFilter, elections]);
 
+  // Filter available voters (not already added to this election)
+  const availableVoters = allVoters.filter(voter => 
+    !electionVoters.some(ev => ev.voters.id === voter.id) &&
+    (voter.name.toLowerCase().includes(voterSearchTerm.toLowerCase()) ||
+     voter.email.toLowerCase().includes(voterSearchTerm.toLowerCase()) ||
+     voter.school_id.includes(voterSearchTerm))
+  );
+
   if (authLoading || loading) {
     return (
       <div className={`min-h-screen flex items-center justify-center ${
@@ -810,7 +1027,7 @@ export default function ManageElections() {
           <p className={`mt-2 ${
             theme === "light" ? "text-gray-600" : "text-gray-300"
           }`}>
-            Create elections, manage positions, and oversee voting periods
+            Create elections, manage positions, assign voters, and oversee voting periods
           </p>
           <p className="text-teal-600 dark:text-teal-400 text-sm mt-1">
             Logged in as: {admin?.email}
@@ -980,7 +1197,7 @@ export default function ManageElections() {
             : "bg-white/10 backdrop-blur-lg border-white/20"
         }`}>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1000px]">
+            <table className="w-full min-w-[1100px]">
               <thead className={`border-b ${
                 theme === "light" ? "bg-gray-50 border-gray-200" : "bg-white/5 border-white/10"
               }`}>
@@ -998,6 +1215,9 @@ export default function ManageElections() {
                     Positions
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                    Voters
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                     Date Range
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
@@ -1013,7 +1233,7 @@ export default function ManageElections() {
               }`}>
                 {filteredElections.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center text-gray-400">
+                    <td colSpan="8" className="px-6 py-12 text-center text-gray-400">
                       No elections found
                     </td>
                   </tr>
@@ -1073,6 +1293,14 @@ export default function ManageElections() {
                           </button>
                         </td>
                         <td className="px-6 py-4">
+                          <button
+                            onClick={() => handleManageVoters(election)}
+                            className="flex items-center gap-2 text-green-600 dark:text-green-400 hover:text-green-500 transition text-sm"
+                          >
+                            <FaUsers /> Manage Voters
+                          </button>
+                        </td>
+                        <td className="px-6 py-4">
                           <div className={`text-xs ${
                             theme === "light" ? "text-gray-600" : "text-gray-400"
                           }`}>
@@ -1098,6 +1326,13 @@ export default function ManageElections() {
                               title="Manage Positions"
                             >
                               <FaLayerGroup />
+                            </button>
+                            <button
+                              onClick={() => handleManageVoters(election)}
+                              className="text-green-600 dark:text-green-400 hover:text-green-500 transition"
+                              title="Manage Voters"
+                            >
+                              <FaUsers />
                             </button>
                             {!election.is_active && !expired && (
                               <button
@@ -1599,6 +1834,269 @@ export default function ManageElections() {
                 <button
                   onClick={() => {
                     setShowPositionsModal(false);
+                    fetchElections();
+                  }}
+                  className="w-full px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manage Voters Modal */}
+      {showVotersModal && selectedElectionForVoters && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className={`rounded-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto ${
+            theme === "light" ? "bg-white" : "bg-gray-800"
+          }`}>
+            <div className={`flex justify-between items-center p-6 border-b ${
+              theme === "light" ? "border-gray-200" : "border-white/10"
+            }`}>
+              <div>
+                <h2 className={`text-2xl font-bold ${
+                  theme === "light" ? "text-gray-900" : "text-white"
+                }`}>
+                  Manage Voters
+                </h2>
+                <p className={`text-sm mt-1 ${
+                  theme === "light" ? "text-gray-500" : "text-gray-400"
+                }`}>
+                  {selectedElectionForVoters.title} - Eligible Voters
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowVotersModal(false);
+                  setSelectedElectionForVoters(null);
+                  setElectionVoters([]);
+                }}
+                className={`transition ${
+                  theme === "light" ? "text-gray-400 hover:text-gray-600" : "text-gray-400 hover:text-white"
+                }`}
+              >
+                <FaTimes />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              {/* Stats Summary */}
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className={`rounded-lg p-3 text-center ${
+                  theme === "light" ? "bg-gray-50" : "bg-white/5"
+                }`}>
+                  <p className={`text-2xl font-bold ${
+                    theme === "light" ? "text-gray-900" : "text-white"
+                  }`}>{electionVoters.length}</p>
+                  <p className={`text-xs ${
+                    theme === "light" ? "text-gray-500" : "text-gray-400"
+                  }`}>Eligible Voters</p>
+                </div>
+                <div className={`rounded-lg p-3 text-center ${
+                  theme === "light" ? "bg-gray-50" : "bg-white/5"
+                }`}>
+                  <p className={`text-2xl font-bold text-green-600`}>
+                    {electionVoters.filter(v => v.has_voted).length}
+                  </p>
+                  <p className={`text-xs ${
+                    theme === "light" ? "text-gray-500" : "text-gray-400"
+                  }`}>Voted</p>
+                </div>
+                <div className={`rounded-lg p-3 text-center ${
+                  theme === "light" ? "bg-gray-50" : "bg-white/5"
+                }`}>
+                  <p className={`text-2xl font-bold text-yellow-600`}>
+                    {electionVoters.filter(v => !v.has_voted).length}
+                  </p>
+                  <p className={`text-xs ${
+                    theme === "light" ? "text-gray-500" : "text-gray-400"
+                  }`}>Not Voted Yet</p>
+                </div>
+              </div>
+
+              {/* Add Voter Section */}
+              <div className={`rounded-lg p-4 mb-6 ${
+                theme === "light" ? "bg-gray-50" : "bg-white/5"
+              }`}>
+                <h3 className={`text-lg font-semibold mb-4 ${
+                  theme === "light" ? "text-gray-900" : "text-white"
+                }`}>
+                  Add Voters to This Election
+                </h3>
+                
+                {/* Bulk Add Options */}
+                <div className="flex gap-3 mb-4 flex-wrap">
+                  <select
+                    value={voterFilter}
+                    onChange={(e) => setVoterFilter(e.target.value)}
+                    className={`px-3 py-2 border rounded-lg text-sm ${
+                      theme === "light"
+                        ? "bg-white border-gray-300 text-gray-900"
+                        : "bg-gray-700 border-gray-600 text-white"
+                    }`}
+                  >
+                    <option value="all">All Voters</option>
+                    <option value="not_added">Not Added Yet</option>
+                    <option value="not_voted">Not Voted Yet</option>
+                  </select>
+                  <button
+                    onClick={bulkAddVoters}
+                    disabled={bulkAdding}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition disabled:opacity-50"
+                  >
+                    {bulkAdding ? <FaSpinner className="animate-spin" /> : <FaUserPlus />}
+                    Bulk Add
+                  </button>
+                  <button
+                    onClick={exportVotersToExcel}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white transition"
+                  >
+                    <FaFileExcel /> Export List
+                  </button>
+                </div>
+
+                {/* Single Add */}
+                <div className="flex gap-3">
+                  <div className="flex-1 relative">
+                    <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 ${
+                      theme === "light" ? "text-gray-400" : "text-gray-500"
+                    }`} />
+                    <input
+                      type="text"
+                      placeholder="Search voters by name, email, or school ID..."
+                      value={voterSearchTerm}
+                      onChange={(e) => setVoterSearchTerm(e.target.value)}
+                      className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                        theme === "light"
+                          ? "bg-white border-gray-300 text-gray-900"
+                          : "bg-gray-700 border-gray-600 text-white"
+                      }`}
+                    />
+                  </div>
+                  <select
+                    value={selectedVoterId}
+                    onChange={(e) => setSelectedVoterId(e.target.value)}
+                    className={`flex-1 px-3 py-2 border rounded-lg ${
+                      theme === "light"
+                        ? "bg-white border-gray-300 text-gray-900"
+                        : "bg-gray-700 border-gray-600 text-white"
+                    }`}
+                  >
+                    <option value="">Select a voter...</option>
+                    {availableVoters.map((voter) => (
+                      <option key={voter.id} value={voter.id}>
+                        {voter.name} - {voter.email} ({voter.school_id})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={addVoterToElection}
+                    disabled={addingVoter || !selectedVoterId}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white transition disabled:opacity-50"
+                  >
+                    {addingVoter ? <FaSpinner className="animate-spin" /> : <FaPlus />} Add
+                  </button>
+                </div>
+              </div>
+
+              {/* Voters List Table */}
+              <div>
+                <h3 className={`text-lg font-semibold mb-4 ${
+                  theme === "light" ? "text-gray-900" : "text-white"
+                }`}>
+                  Eligible Voters for This Election
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className={`border-b ${
+                      theme === "light" ? "bg-gray-50 border-gray-200" : "bg-white/5 border-white/10"
+                    }`}>
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Name</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Email</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">School ID</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Status</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Voted</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${
+                      theme === "light" ? "divide-gray-100" : "divide-white/10"
+                    }`}>
+                      {electionVoters.length === 0 ? (
+                        <tr>
+                          <td colSpan="6" className="px-4 py-8 text-center text-gray-400">
+                            No voters added to this election yet
+                          </td>
+                        </tr>
+                      ) : (
+                        electionVoters.map((ev) => (
+                          <tr key={ev.id} className={`transition ${
+                            theme === "light" ? "hover:bg-gray-50" : "hover:bg-white/5"
+                          }`}>
+                            <td className="px-4 py-3">
+                              <div className={`font-medium ${
+                                theme === "light" ? "text-gray-900" : "text-white"
+                              }`}>
+                                {ev.voters.name}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className={`text-sm ${
+                                theme === "light" ? "text-gray-600" : "text-gray-300"
+                              }`}>
+                                {ev.voters.email}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className={`text-sm ${
+                                theme === "light" ? "text-gray-600" : "text-gray-300"
+                              }`}>
+                                {ev.voters.school_id}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
+                                ev.has_voted
+                                  ? "bg-green-500/20 text-green-400"
+                                  : "bg-yellow-500/20 text-yellow-400"
+                              }`}>
+                                {ev.has_voted ? <FaCheckCircle className="text-xs" /> : <FaClock className="text-xs" />}
+                                {ev.has_voted ? "Voted" : "Pending"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {ev.has_voted ? (
+                                <span className="text-xs text-gray-500">
+                                  {new Date(ev.voted_at).toLocaleDateString()}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                onClick={() => removeVoterFromElection(ev.id, ev.voters.name)}
+                                className="text-red-600 dark:text-red-400 hover:text-red-500 transition"
+                                title="Remove from election"
+                              >
+                                <FaUserTimes />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-gray-200 dark:border-white/10">
+                <button
+                  onClick={() => {
+                    setShowVotersModal(false);
                     fetchElections();
                   }}
                   className="w-full px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition"

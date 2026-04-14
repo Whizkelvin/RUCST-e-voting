@@ -129,7 +129,7 @@ const getRoleConfig = useCallback((role) => {
     ec: {
       name: 'Electoral Commission',
       icon: FaUniversity, // Add this
-      redirectPath: '/admin/electoral-commission-dashboard',
+      redirectPath: '/admin/ec',
       color: 'emerald'
     },
     admin: {
