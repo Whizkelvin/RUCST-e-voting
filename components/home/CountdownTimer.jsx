@@ -1,6 +1,6 @@
 'use client';
 
-import { FaPlayCircle, FaClock, FaFlagCheckered, FaCalendarAlt } from 'react-icons/fa';
+import { FaPlayCircle, FaClock, FaCalendarAlt } from 'react-icons/fa';
 import { useEffect, useState, useCallback } from 'react';
 
 const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn, totalStats, loading }) => {
@@ -170,7 +170,7 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
      (localTimeLeft.status && localTimeLeft.status.includes('starts in')));
 
   return (
-    <div className="pt-20">
+    <div className="md:pt-20 pt-5">
       <div className="bg-gradient-to-r from-green-950 via-green-950 to-green-950 text-white py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between">
@@ -180,7 +180,7 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
               ) : votingStartsIn ? (
                 <FaClock className="w-8 h-8 text-[#f59e0b] animate-pulse" />
               ) : (
-                <FaFlagCheckered className="w-8 h-8 text-gray-400" />
+                <div></div>
               )}
               <div>
                 <h3 className="text-2xl font-bold font-display">Election Countdown</h3>
@@ -245,7 +245,7 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
             {(localTimeLeft?.status === 'Voting has ended' || (!isVotingActive && !votingStartsIn && hasValidTimeData && !shouldShowCountdown)) && (
               <div className="text-center mt-4 md:mt-0">
                 <div className="text-2xl sm:text-3xl font-bold bg-red-500/20 backdrop-blur-sm rounded-lg px-6 py-4 font-display">
-                  <FaFlagCheckered className="inline w-6 h-6 mr-2" />
+                  
                   Voting Period Ended
                 </div>
                 <p className="text-green-200 text-sm mt-2">Results are being finalized</p>

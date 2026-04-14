@@ -248,6 +248,8 @@ export default function Home() {
                   placeholder="Search by name, email or school ID…"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
+
+                  
                   className={`w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 ${
                     theme === 'light'
                       ? 'bg-white border-gray-300'
@@ -256,6 +258,8 @@ export default function Home() {
                 />
               </div>
             </div>
+
+            
 
             {/* Voters Table */}
             <div className="overflow-y-auto max-h-[60vh]">
@@ -380,6 +384,71 @@ export default function Home() {
           toggleTheme={toggleTheme}
         />
 
+{/* ── HOW TO VOTE VIDEO SECTION ── */}
+<div data-aos="fade-up" className="md:hidden pt-14">
+  <div
+    className={`rounded-xl overflow-hidden border transition-all duration-300 ${
+      theme === 'light'
+        ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
+        : 'bg-gradient-to-r from-gray-800 to-gray-700 border-gray-600'
+    }`}
+  >
+    <div className="p-4 sm:p-5">
+      <div className="flex items-start gap-3 mb-4">
+        <div
+          className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+            theme === 'light' ? 'bg-blue-600/10 text-blue-600' : 'bg-blue-500/20 text-blue-400'
+          }`}
+        >
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        </div>
+        <div>
+          <h3 className={`font-semibold text-lg ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+            How to Vote
+          </h3>
+          <p className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+            Watch this quick guide to understand the voting process
+          </p>
+        </div>
+      </div>
+      
+      {/* YouTube Video Container */}
+      <div className="relative w-full aspect-video rounded-lg overflow-hidden shadow-lg">
+        <iframe
+          className="absolute top-0 left-0 w-full h-full"
+          src="https://www.youtube.com/embed/YOUR_VIDEO_ID"
+          title="How to Vote Guide"
+          frameBorder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          loading="lazy"
+        ></iframe>
+      </div>
+      
+      <div className="mt-4 flex items-center gap-2 text-sm">
+        <span
+          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
+            theme === 'light' ? 'bg-blue-100 text-blue-700' : 'bg-blue-900/50 text-blue-300'
+          }`}
+        >
+          <FaClock size={10} />
+          2 minutes
+        </span>
+        <span
+          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
+            theme === 'light' ? 'bg-green-100 text-green-700' : 'bg-green-900/50 text-green-300'
+          }`}
+        >
+          <FaVoteYea size={10} />
+          Step-by-step guide
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+
         <div data-aos="fade-down">
           <CountdownTimer
             timeLeft={timeLeft}
@@ -392,7 +461,7 @@ export default function Home() {
           />
         </div>
 
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 relative z-10">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-6 relative z-10">
 
           {/* ── STATS SECTION ── */}
           <section className="mb-8 sm:mb-10" aria-labelledby="stats-heading">
