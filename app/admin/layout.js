@@ -22,8 +22,6 @@ import {
   FaUserGraduate,
   FaSun,
   FaMoon,
-  FaVoteYea,
-  FaEye,
 } from "react-icons/fa";
 import Link from "next/link";
 
@@ -84,43 +82,82 @@ export default function AdminLayout({ children }) {
     };
   }, [mobileMenuOpen]);
 
-  // Check user role
+  // ========== ROLE-BASED NAVIGATION ==========
   const userRole = admin?.role || "admin";
+  const isDean = userRole === "dean";
   const isEC = userRole === "electoral_commission" || userRole === "ec";
+  const isSuperAdmin = userRole === "admin";
+
+  // Dashboard link based on role
+  const getDashboardLink = () => {
+    if (isDean) return "/admin/dean";
+    if (isEC) return "/admin/ec";
+    return "/admin";
+  };
 
   // Navigation based on role
-// In app/admin/layout.js, update the getNavigation function:
-
-const getNavigation = () => {
-  // Dashboard for both
-  const dashboard = { name: "Dashboard", href: "/admin/ec", icon: FaHome };
-  
-  // Common navigation for both Admin and EC
-  const commonNav = [
-    { name: "Manage Voters", href: "/admin/manage-voters", icon: FaUsers },
-    { name: "Manage Candidates", href: "/admin/manage-candidates", icon: FaUserGraduate },
-    { name: "Manage Elections", href: "/admin/manage-elections", icon: FaUniversity },
-    { name: "Voting Period", href: "/admin/voting-period", icon: FaClock },
-    { name: "Election Results", href: "/admin/election-results", icon: FaChartBar },
-  ];
-
-  // Admin-only navigation
-  const adminOnlyNav = [
-    { name: "Nomination Codes", href: "/admin/generate-nomination-codes", icon: FaKey },
-    { name: "Manage Roles", href: "/admin/manage-roles", icon: FaUserTag },
-    { name: "Audit Report", href: "/admin/audit-report", icon: FaChartLine },
-  ];
-
-  if (isEC) {
-    return [dashboard, ...commonNav];  // EC gets Dashboard + common items
-  }
-  
-  return [dashboard, ...commonNav, ...adminOnlyNav];  // Admin gets Dashboard + ALL items
-};
+  const getNavigation = () => {
+    // Dashboard for everyone
+    const dashboard = { name: "Dashboard", href: getDashboardLink(), icon: FaHome };
+    
+    // DEAN NAVIGATION (Only 3 items)
+    const deanNav = [
+      { name: "Manage Candidates", href: "/admin/manage-candidates", icon: FaUserGraduate },
+      { name: "Election Results", href: "/admin/election-results", icon: FaChartBar },
+      { name: "Nomination Codes", href: "/admin/generate-nomination-codes", icon: FaKey },
+    ];
+    
+    // EC NAVIGATION (5 items)
+    const ecNav = [
+      { name: "Manage Voters", href: "/admin/manage-voters", icon: FaUsers },
+      { name: "Manage Candidates", href: "/admin/manage-candidates", icon: FaUserGraduate },
+      { name: "Manage Elections", href: "/admin/manage-elections", icon: FaUniversity },
+      { name: "Voting Period", href: "/admin/voting-period", icon: FaClock },
+      { name: "Election Results", href: "/admin/election-results", icon: FaChartBar },
+    ];
+    
+    // SUPER ADMIN NAVIGATION (Full access - 8 items)
+    const adminNav = [
+      { name: "Manage Voters", href: "/admin/manage-voters", icon: FaUsers },
+      { name: "Manage Candidates", href: "/admin/manage-candidates", icon: FaUserGraduate },
+      { name: "Manage Elections", href: "/admin/manage-elections", icon: FaUniversity },
+      { name: "Voting Period", href: "/admin/voting-period", icon: FaClock },
+      { name: "Election Results", href: "/admin/election-results", icon: FaChartBar },
+      { name: "Nomination Codes", href: "/admin/generate-nomination-codes", icon: FaKey },
+      { name: "Manage Roles", href: "/admin/manage-roles", icon: FaUserTag },
+      { name: "Audit Report", href: "/admin/audit-report", icon: FaChartLine },
+    ];
+    
+    // Return based on role
+    if (isDean) {
+      return [dashboard, ...deanNav];
+    }
+    
+    if (isEC) {
+      return [dashboard, ...ecNav];
+    }
+    
+    // Super Admin gets everything
+    return [dashboard, ...adminNav];
+  };
 
   const navigation = getNavigation();
-  const portalTitle = isEC ? "EC Portal" : "Admin Portal";
-  const portalColor = isEC ? "emerald" : "teal";
+  
+  // Portal title and color based on role
+  const getPortalTitle = () => {
+    if (isDean) return "Dean's Portal";
+    if (isEC) return "EC Portal";
+    return "Admin Portal";
+  };
+  
+  const getPortalColor = () => {
+    if (isDean) return "blue";
+    if (isEC) return "emerald";
+    return "teal";
+  };
+  
+  const portalTitle = getPortalTitle();
+  const portalColor = getPortalColor();
 
   const isActiveLink = (href) => pathname === href;
 
@@ -132,7 +169,7 @@ const getNavigation = () => {
         <div className="text-center px-4">
           <FaSpinner className="animate-spin text-3xl sm:text-4xl text-teal-500 mx-auto mb-4" />
           <p className={theme === "light" ? "text-gray-600" : "text-white"}>
-            Verifying access...
+            Loading...
           </p>
         </div>
       </div>
@@ -241,7 +278,7 @@ const getNavigation = () => {
                   theme === "light" ? "text-gray-500" : "text-gray-400"
                 }`}>{admin?.email}</p>
                 <span className={`inline-block mt-1 text-xs text-${portalColor}-600 dark:text-${portalColor}-400`}>
-                  {isEC ? "Electoral Commission" : "Administrator"}
+                  {isDean ? "Dean" : isEC ? "Electoral Commission" : "Administrator"}
                 </span>
               </div>
 

@@ -117,13 +117,13 @@ const getRoleConfig = useCallback((role) => {
     dean: {
       name: 'Dean of Students',
       icon: FaUserCog, // Add this
-      redirectPath: '/admin/dean-dashboard',
+      redirectPath: '/admin/dean',
       color: 'purple'
     },
     electoral_commission: {
       name: 'Electoral Commission',
       icon: FaUniversity, // Add this
-      redirectPath: '/admin/electoral-commission-dashboard',
+      redirectPath: '/admin/ec',
       color: 'emerald'
     },
     ec: {
@@ -135,21 +135,10 @@ const getRoleConfig = useCallback((role) => {
     admin: {
       name: 'Admin',
       icon: FaUserShield, // Add this
-      redirectPath: '/admin/manage-voters',
+      redirectPath: '/admin/',
       color: 'cyan'
     },
-    it_admin: {
-      name: 'IT Administrator',
-      icon: FaUserCog, // Add this
-      redirectPath: '/admin/manage-voters',
-      color: 'cyan'
-    },
-    hod: {
-      name: 'Head of Department',
-      icon: FaChalkboardTeacher, // Add this
-      redirectPath: '/admin/hod-dashboard',
-      color: 'green'
-    }
+  
   };
   
   return roleMap[role] || null;
@@ -192,9 +181,10 @@ const getRoleConfig = useCallback((role) => {
   }, [loginAttempts, lockoutUntil]);
 
   // Check voting period status (runs on mount and every minute)
+// Replace the checkVotingPeriod function with this:
+
 const checkVotingPeriod = useCallback(async () => {
   try {
-    // Check if supabase is initialized
     if (!supabase) {
       console.error('Supabase client not initialized');
       setVotingStatus({
@@ -209,14 +199,16 @@ const checkVotingPeriod = useCallback(async () => {
       return;
     }
 
+    // Get the most recent or active voting period (not .single())
     const { data: settings, error } = await supabase
       .from('voting_periods')
       .select('is_active, start_date, end_date')
-      .single();
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();  // Use maybeSingle() instead of single()
     
     if (error) {
       console.error('Error fetching voting settings:', error);
-      // Set default status instead of failing
       setVotingStatus({
         isActive: true,
         hasStarted: true,
@@ -280,7 +272,6 @@ const checkVotingPeriod = useCallback(async () => {
     });
   } catch (error) {
     console.error('Error checking voting period:', error);
-    // Set default status on error
     setVotingStatus({
       isActive: true,
       hasStarted: true,
