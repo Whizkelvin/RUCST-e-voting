@@ -656,18 +656,18 @@ export default function Home() {
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4 mb-5 sm:mb-9">
               <div data-aos="fade-right">
                 <p className={`text-[11px] sm:text-xs font-semibold uppercase tracking-widest mb-1 ${
-                  theme === 'light' ? 'text-white' : 'text-green-400'
+                  theme === 'light' ? 'text-[#f59e0b]' : 'text-green-400'
                 }`}>
                   Participate Now
                 </p>
                 <h2
                   id="elections-heading"
-                  className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight leading-tight text-white"
+                  className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight leading-tight text-[#f59e0b]"
                 >
                   Current Elections
                 </h2>
                 <p className={`mt-1 sm:mt-2 text-xs sm:text-sm ${
-                  theme === 'light' ? 'text-white/80' : 'text-gray-400'
+                  theme === 'light' ? 'text-[#f59e0b]' : 'text-gray-400'
                 }`}>
                   Cast your vote for the leaders who will shape our future
                 </p>

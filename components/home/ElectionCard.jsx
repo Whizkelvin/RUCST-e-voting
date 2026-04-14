@@ -124,7 +124,7 @@ const ElectionCard = ({ election, index, isVotingActive, votingPeriod, loading }
                     />
                   </div>
                 ) : (
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-[#0f766e] to-[#064e3b] flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-full bg-green-950 flex items-center justify-center">
                     <FaRegUserCircle className="text-white text-2xl" />
                   </div>
                 )}
@@ -159,7 +159,7 @@ const ElectionCard = ({ election, index, isVotingActive, votingPeriod, loading }
                 {candidate.manifesto && (
                   <div className="mt-2">
                     <button 
-                      className="text-xs text-[#0f766e] hover:text-[#064e3b] flex items-center"
+                      className="text-xs text-green-600 hover:text-[#064e3b] flex items-center"
                       onClick={() => {
                         alert(`Manifesto for ${candidate.name}:\n\n${candidate.manifesto}`);
                       }}
@@ -187,7 +187,7 @@ const ElectionCard = ({ election, index, isVotingActive, votingPeriod, loading }
               {votingEnded && !showResults && (
                 <div className="text-right">
                   <div className="bg-gray-100 rounded-lg px-3 py-1">
-                    <p className="text-sm text-gray-500">🔒 Results hidden</p>
+                    <p className="text-sm text-gray-500">Results hidden</p>
                   </div>
                 </div>
               )}
@@ -215,7 +215,7 @@ const ElectionCard = ({ election, index, isVotingActive, votingPeriod, loading }
       {/* Vote Button - Only show if voting is active */}
       {isVotingActive && election.status === 'active' && election.candidatesCount > 0 && !votingEnded && (
         <Link href={`/vote/${election.id}`}>
-          <button className="w-full mt-4 py-3 px-4 bg-gradient-to-r from-[#0f766e] to-[#064e3b] text-white rounded-lg hover:shadow-lg hover:scale-[1.02] transition-all duration-300 font-semibold flex items-center justify-center space-x-2">
+          <button className="w-full mt-4 py-3 px-4 bg-gradient-to-r from-green-950 to-green-950 text-white rounded-lg hover:shadow-lg hover:scale-[1.02] transition-all duration-300 font-semibold flex items-center justify-center space-x-2">
             <FaVoteYea className="text-lg" />
             <span>Vote Now</span>
           </button>
