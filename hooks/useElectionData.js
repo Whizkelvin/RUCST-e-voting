@@ -345,7 +345,7 @@ export const useElectionData = () => {
   
   useEffect(() => {
     fetchElectionData();
-    const interval = setInterval(fetchElectionData, 30000);
+    const interval = setInterval(fetchElectionData, 360000);
     return () => clearInterval(interval);
   }, [fetchElectionData]);
   
