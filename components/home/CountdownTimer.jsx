@@ -3,7 +3,7 @@
 import { FaPlayCircle, FaClock, FaCalendarAlt } from 'react-icons/fa';
 import { useEffect, useState, useCallback } from 'react';
 
-const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn, totalStats, loading }) => {
+const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn, totalStats, loading, theme }) => {
   const [localTimeLeft, setLocalTimeLeft] = useState(timeLeft);
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -169,26 +169,39 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
     (localTimeLeft.status === 'Voting Active' || 
      (localTimeLeft.status && localTimeLeft.status.includes('starts in')));
 
+  // Dynamic gradient based on voting status (Black & White)
+  const getBackgroundGradient = () => {
+    if (isVotingActive) {
+      return "bg-gradient-to-r from-green-800 via-green-700 to-green-800";
+    } else if (votingStartsIn) {
+      return "bg-gradient-to-r from-green-900 via-green-800 to-green-900";
+    } else {
+      return "bg-gradient-to-r from-green-950 via-green-900 to-green-950";
+    }
+  };
+
   return (
     <div className="md:pt-20 pt-5">
-      <div className="bg-gradient-to-r from-green-950 via-green-950 to-green-950 text-white py-6">
+      <div className={`${getBackgroundGradient()} text-white py-6 transition-all duration-500`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between">
             <div className="flex items-center space-x-4 mb-4 md:mb-0">
               {isVotingActive ? (
-                <FaPlayCircle className="w-8 h-8 text-[#f59e0b] animate-pulse" />
+                <FaPlayCircle className="w-8 h-8 text-gray-300 animate-pulse" />
               ) : votingStartsIn ? (
-                <FaClock className="w-8 h-8 text-[#f59e0b] animate-pulse" />
+                <FaClock className="w-8 h-8 text-gray-400 animate-pulse" />
               ) : (
                 <div></div>
               )}
               <div>
-                <h3 className="text-2xl font-bold font-display">Election Countdown</h3>
-                <p className="text-[#f59e0b] font-medium">
+                <h3 className="text-2xl font-bold font-display">
+                  {isVotingActive ? "Live Voting" : votingStartsIn ? "⏳ Upcoming Election" : " Election Results"}
+                </h3>
+                <p className={`font-medium text-gray-300`}>
                   {hasValidTimeData ? localTimeLeft.status : votingStatus}
                 </p>
                 {votingPeriod && (votingPeriod.start_time || votingPeriod.end_time) && (
-                  <p className="text-green-100 text-sm mt-1">
+                  <p className="text-gray-400 text-sm mt-1">
                     <FaCalendarAlt className="inline w-3 h-3 mr-1" />
                     {votingPeriod.start_time && formatDate(votingPeriod.start_time)} 
                     {votingPeriod.start_time && votingPeriod.end_time && " → "}
@@ -202,31 +215,31 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
             {shouldShowCountdown && (
               <div className="flex items-center justify-center space-x-2 sm:space-x-4 mt-4 md:mt-0">
                 <div className="flex flex-col items-center">
-                  <div className="text-2xl sm:text-4xl font-bold bg-white/10 backdrop-blur-sm rounded-lg px-3 sm:px-4 py-2 min-w-[60px] sm:min-w-[80px] text-center font-display">
+                  <div className="text-2xl sm:text-4xl font-bold bg-white/10 backdrop-blur-sm rounded-lg px-3 sm:px-4 py-2 min-w-[60px] sm:min-w-[80px] text-center font-display text-gray-200">
                     {getTimeValue(localTimeLeft.days, '0')}
                   </div>
-                  <div className="text-xs sm:text-sm text-green-200 mt-1 sm:mt-2">Days</div>
+                  <div className="text-xs sm:text-sm text-gray-400 mt-1 sm:mt-2">Days</div>
                 </div>
-                <div className="text-xl sm:text-2xl text-white font-bold">:</div>
+                <div className="text-xl sm:text-2xl text-gray-400 font-bold">:</div>
                 <div className="flex flex-col items-center">
-                  <div className="text-2xl sm:text-4xl font-bold bg-white/10 backdrop-blur-sm rounded-lg px-3 sm:px-4 py-2 min-w-[60px] sm:min-w-[80px] text-center font-display">
+                  <div className="text-2xl sm:text-4xl font-bold bg-white/10 backdrop-blur-sm rounded-lg px-3 sm:px-4 py-2 min-w-[60px] sm:min-w-[80px] text-center font-display text-gray-200">
                     {getTimeValue(localTimeLeft.hours, '0').toString().padStart(2, '0')}
                   </div>
-                  <div className="text-xs sm:text-sm text-green-200 mt-1 sm:mt-2">Hours</div>
+                  <div className="text-xs sm:text-sm text-gray-400 mt-1 sm:mt-2">Hours</div>
                 </div>
-                <div className="text-xl sm:text-2xl text-white font-bold">:</div>
+                <div className="text-xl sm:text-2xl text-gray-400 font-bold">:</div>
                 <div className="flex flex-col items-center">
-                  <div className="text-2xl sm:text-4xl font-bold bg-white/10 backdrop-blur-sm rounded-lg px-3 sm:px-4 py-2 min-w-[60px] sm:min-w-[80px] text-center font-display">
+                  <div className="text-2xl sm:text-4xl font-bold bg-white/10 backdrop-blur-sm rounded-lg px-3 sm:px-4 py-2 min-w-[60px] sm:min-w-[80px] text-center font-display text-gray-200">
                     {getTimeValue(localTimeLeft.minutes, '0').toString().padStart(2, '0')}
                   </div>
-                  <div className="text-xs sm:text-sm text-green-200 mt-1 sm:mt-2">Minutes</div>
+                  <div className="text-xs sm:text-sm text-gray-400 mt-1 sm:mt-2">Minutes</div>
                 </div>
-                <div className="text-xl sm:text-2xl text-white font-bold">:</div>
+                <div className="text-xl sm:text-2xl text-gray-400 font-bold">:</div>
                 <div className="flex flex-col items-center">
-                  <div className="text-2xl sm:text-4xl font-bold bg-white/10 backdrop-blur-sm rounded-lg px-3 sm:px-4 py-2 min-w-[60px] sm:min-w-[80px] text-center font-display">
+                  <div className="text-2xl sm:text-4xl font-bold bg-white/10 backdrop-blur-sm rounded-lg px-3 sm:px-4 py-2 min-w-[60px] sm:min-w-[80px] text-center font-display text-gray-200">
                     {getTimeValue(localTimeLeft.seconds, '0').toString().padStart(2, '0')}
                   </div>
-                  <div className="text-xs sm:text-sm text-green-200 mt-1 sm:mt-2">Seconds</div>
+                  <div className="text-xs sm:text-sm text-gray-400 mt-1 sm:mt-2">Seconds</div>
                 </div>
               </div>
             )}
@@ -234,7 +247,7 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
             {/* Display when no valid time data is available */}
             {!hasValidTimeData && !shouldShowCountdown && (
               <div className="text-center mt-4 md:mt-0">
-                <div className="text-xl sm:text-2xl font-bold bg-white/10 backdrop-blur-sm rounded-lg px-6 py-4 font-display">
+                <div className="text-xl sm:text-2xl font-bold bg-white/10 backdrop-blur-sm rounded-lg px-6 py-4 font-display text-gray-200">
                   <FaClock className="inline w-6 h-6 mr-2" />
                   Loading election schedule...
                 </div>
@@ -244,33 +257,29 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
             {/* Display when voting has ended */}
             {(localTimeLeft?.status === 'Voting has ended' || (!isVotingActive && !votingStartsIn && hasValidTimeData && !shouldShowCountdown)) && (
               <div className="text-center mt-4 md:mt-0">
-                <div className="text-2xl sm:text-3xl font-bold bg-red-500/20 backdrop-blur-sm rounded-lg px-6 py-4 font-display">
-                  
-                  Voting Period Ended
+                <div className="text-2xl sm:text-3xl font-bold bg-white/5 backdrop-blur-sm rounded-lg px-6 py-4 font-display text-gray-300">
+                   Voting Period Ended
                 </div>
-                <p className="text-green-200 text-sm mt-2">Results are being finalized</p>
+                <p className="text-gray-400 text-sm mt-2">Results are being finalized</p>
               </div>
             )}
           </div>
           
           {/* Voting Progress Section */}
           <div className="mt-6">
-            <div className="flex justify-between text-sm text-green-200 mb-2">
-              
+            <div className="flex justify-between text-sm text-gray-300 mb-2">
+              <span>Voting Progress</span>
+              <span className="font-bold text-gray-200">{loading ? '...' : `${(totalStats?.participationRate || 0).toFixed(1)}%`}</span>
             </div>
-            <div className="w-full bg-white/20 rounded-full h-3">
+            <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden">
               <div 
-                className="bg-gradient-to-r from-[#f59e0b] to-[#f59e0b]/80 h-3 rounded-full transition-all duration-1000 shadow-inner"
+                className="h-3 rounded-full transition-all duration-1000 shadow-inner bg-gradient-to-r from-gray-400 to-gray-500"
                 style={{ width: loading ? '0%' : `${Math.min(100, totalStats?.participationRate || 0)}%` }}
               ></div>
             </div>
-            <div className="flex justify-between text-xs text-green-300 mt-2">
-              <span>{loading ? '...' : `${(totalStats?.totalVotersWhoVoted || 0).toLocaleString()} voters have completed voting`}</span>
-              <span>{loading ? '...' : `${(totalStats?.remainingVoters || 0).toLocaleString()} voters yet to vote`}</span>
-            </div>
-            <div className="flex justify-between text-xs text-green-300 mt-1">
-              
-              
+            <div className="flex justify-between text-xs text-gray-400 mt-2">
+              <span> {loading ? '...' : `${(totalStats?.totalVotersWhoVoted || 0).toLocaleString()} voters have completed voting`}</span>
+              <span> {loading ? '...' : `${(totalStats?.remainingVoters || 0).toLocaleString()} voters yet to vote`}</span>
             </div>
           </div>
         </div>

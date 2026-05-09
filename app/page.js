@@ -170,6 +170,11 @@ export default function Home() {
     toast.info('Retrying…', { duration: 2000 });
   }, [fetchElectionData]);
 
+  // Get icon color based on theme
+  const getIconColor = () => {
+    return theme === 'light' ? 'text-black' : 'text-white';
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div
@@ -224,7 +229,7 @@ export default function Home() {
                   theme === 'light' ? 'hover:bg-gray-100 text-gray-500' : 'hover:bg-gray-700 text-gray-400'
                 }`}
               >
-                <FaTimes aria-hidden="true" />
+                <FaTimes aria-hidden="true" className={getIconColor()} />
               </button>
             </div>
 
@@ -239,36 +244,32 @@ export default function Home() {
               </label>
               <div className="relative">
                 <FaSearch
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-green-950 text-sm"
+                  className={`absolute left-3 top-1/2 -translate-y-1/2 text-sm ${getIconColor()}`}
                   aria-hidden="true"
                 />
                 <input
                   id="voter-search"
                   type="text"
-                  placeholder="Search by name, email or school ID…"
+                  placeholder="Search by name, email or school ID..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-
-                  
-                  className={`w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                  className={`w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-500 ${
                     theme === 'light'
-                      ? 'bg-white border-gray-300'
+                      ? 'bg-white border-gray-300 text-gray-900'
                       : 'bg-gray-700 border-gray-600 text-white'
                   }`}
                 />
               </div>
             </div>
 
-            
-
             {/* Voters Table */}
             <div className="overflow-y-auto max-h-[60vh]">
               {voterLoading ? (
                 <div className="flex justify-center py-12">
-                  <FaSync className="animate-spin text-3xl text-green-950" aria-label="Loading" />
+                  <FaSync className={`animate-spin text-3xl ${getIconColor()}`} aria-label="Loading" />
                 </div>
               ) : filteredVoters.length === 0 ? (
-                <p className="text-center py-12 text-gray-500">No voters found</p>
+                <p className={`text-center py-12 ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>No voters found</p>
               ) : (
                 <table className="w-full">
                   <thead
@@ -307,7 +308,7 @@ export default function Home() {
                       >
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            <FaUserGraduate className="text-green-950" aria-hidden="true" />
+                            <FaUserGraduate className={getIconColor()} aria-hidden="true" />
                             <span className={`text-sm font-medium ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
                               {voter.name}
                             </span>
@@ -315,7 +316,7 @@ export default function Home() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            <FaIdCard className="text-green-950 text-xs" aria-hidden="true" />
+                            <FaIdCard className={`text-xs ${getIconColor()}`} aria-hidden="true" />
                             <span className={`text-sm ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>
                               {voter.school_id}
                             </span>
@@ -342,32 +343,32 @@ export default function Home() {
         </div>
       )}
 
-      {/* Page top accent bar */}
+      {/* Page top accent bar - Black/White */}
       <div
-        className={`fixed top-0 left-0 right-0 h-0.5 z-50 bg-gradient-to-r from-green-950 via-green-400 to-green-950`}
+        className={`fixed top-0 left-0 right-0 h-0.5 z-50 bg-gradient-to-r from-gray-900 via-gray-600 to-gray-900`}
         aria-hidden="true"
       />
 
-      {/* Ambient background blobs */}
+      {/* Ambient background blobs - Subtle grayscale */}
       <div
         className={`fixed -top-32 -right-20 w-96 h-96 rounded-full blur-3xl pointer-events-none z-0 hidden sm:block ${
-          theme === 'light' ? 'bg-teal-400/10' : 'bg-teal-500/5'
+          theme === 'light' ? 'bg-gray-400/10' : 'bg-gray-500/5'
         }`}
         aria-hidden="true"
       />
       <div
         className={`fixed bottom-10 -left-24 w-80 h-80 rounded-full blur-3xl pointer-events-none z-0 hidden sm:block ${
-          theme === 'light' ? 'bg-teal-400/8' : 'bg-teal-500/5'
+          theme === 'light' ? 'bg-gray-400/8' : 'bg-gray-500/5'
         }`}
         aria-hidden="true"
       />
 
-      {/* Mobile theme toggle (desktop toggle lives in NavigationBar) */}
+      {/* Mobile theme toggle */}
       <button
         onClick={toggleTheme}
         className="fixed bottom-6 right-6 z-50 p-3 rounded-full shadow-lg transition-all duration-300 hover:scale-110 md:hidden"
         style={{
-          backgroundColor: theme === 'light' ? '#006400' : '#fbbf24',
+          backgroundColor: theme === 'light' ? '#1f2937' : '#fbbf24',
           color: theme === 'light' ? '#ffffff' : '#1f2937',
         }}
         aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
@@ -384,70 +385,70 @@ export default function Home() {
           toggleTheme={toggleTheme}
         />
 
-{/* ── HOW TO VOTE VIDEO SECTION ── */}
-<div data-aos="fade-up" className="md:hidden pt-14">
-  <div
-    className={`rounded-xl overflow-hidden border transition-all duration-300 ${
-      theme === 'light'
-        ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
-        : 'bg-gradient-to-r from-gray-800 to-gray-700 border-gray-600'
-    }`}
-  >
-    <div className="p-4 sm:p-5">
-      <div className="flex items-start gap-3 mb-4">
-        <div
-          className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-            theme === 'light' ? 'bg-blue-600/10 text-blue-600' : 'bg-blue-500/20 text-blue-400'
-          }`}
-        >
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M8 5v14l11-7z"/>
-          </svg>
+        {/* ── HOW TO VOTE VIDEO SECTION ── */}
+        <div data-aos="fade-up" className="md:hidden pt-14">
+          <div
+            className={`rounded-xl overflow-hidden border transition-all duration-300 ${
+              theme === 'light'
+                ? 'bg-gradient-to-r from-gray-50 to-gray-100 border-gray-200'
+                : 'bg-gradient-to-r from-gray-800 to-gray-700 border-gray-600'
+            }`}
+          >
+            <div className="p-4 sm:p-5">
+              <div className="flex items-start gap-3 mb-4">
+                <div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    theme === 'light' ? 'bg-gray-600/10 text-gray-600' : 'bg-gray-500/20 text-gray-400'
+                  }`}
+                >
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3 className={`font-semibold text-lg ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+                    How to Vote
+                  </h3>
+                  <p className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+                    Watch this quick guide to understand the voting process
+                  </p>
+                </div>
+              </div>
+              
+              {/* YouTube Video Container */}
+              <div className="relative w-full aspect-video rounded-lg overflow-hidden shadow-lg">
+                <iframe
+                  className="absolute top-0 left-0 w-full h-full"
+                  src="https://www.youtube.com/embed/YOUR_VIDEO_ID"
+                  title="How to Vote Guide"
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  loading="lazy"
+                ></iframe>
+              </div>
+              
+              <div className="mt-4 flex items-center gap-2 text-sm">
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
+                    theme === 'light' ? 'bg-gray-100 text-gray-700' : 'bg-gray-700 text-gray-300'
+                  }`}
+                >
+                  <FaClock size={10} />
+                  2 minutes
+                </span>
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
+                    theme === 'light' ? 'bg-gray-100 text-gray-700' : 'bg-gray-700 text-gray-300'
+                  }`}
+                >
+                  <FaVoteYea size={10} />
+                  Step-by-step guide
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
-        <div>
-          <h3 className={`font-semibold text-lg ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
-            How to Vote
-          </h3>
-          <p className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
-            Watch this quick guide to understand the voting process
-          </p>
-        </div>
-      </div>
-      
-      {/* YouTube Video Container */}
-      <div className="relative w-full aspect-video rounded-lg overflow-hidden shadow-lg">
-        <iframe
-          className="absolute top-0 left-0 w-full h-full"
-          src="https://www.youtube.com/embed/YOUR_VIDEO_ID"
-          title="How to Vote Guide"
-          frameBorder="0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          loading="lazy"
-        ></iframe>
-      </div>
-      
-      <div className="mt-4 flex items-center gap-2 text-sm">
-        <span
-          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
-            theme === 'light' ? 'bg-blue-100 text-blue-700' : 'bg-blue-900/50 text-blue-300'
-          }`}
-        >
-          <FaClock size={10} />
-          2 minutes
-        </span>
-        <span
-          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
-            theme === 'light' ? 'bg-green-100 text-green-700' : 'bg-green-900/50 text-green-300'
-          }`}
-        >
-          <FaVoteYea size={10} />
-          Step-by-step guide
-        </span>
-      </div>
-    </div>
-  </div>
-</div>
 
         <div data-aos="fade-down">
           <CountdownTimer
@@ -467,7 +468,7 @@ export default function Home() {
           <section className="mb-8 sm:mb-10" aria-labelledby="stats-heading">
             <div data-aos="fade-up" className="mb-4 sm:mb-6 lg:mb-8">
               <p className={`text-xs sm:text-sm font-semibold uppercase tracking-widest mb-1 ${
-                theme === 'light' ? 'text-green-950' : 'text-green-400'
+                theme === 'light' ? 'text-gray-600' : 'text-gray-400'
               }`}>
                 Live Overview
               </p>
@@ -480,7 +481,7 @@ export default function Home() {
                 Election Dashboard
               </h2>
               <p className={`mt-1 sm:mt-2 text-xs sm:text-sm max-w-md ${
-                theme === 'light' ? 'text-green-700/90' : 'text-gray-400'
+                theme === 'light' ? 'text-gray-600' : 'text-gray-400'
               }`}>
                 Real-time voting statistics and participation metrics
               </p>
@@ -496,13 +497,13 @@ export default function Home() {
                     data-aos-delay={index * 80}
                     className={`relative rounded-xl sm:rounded-2xl border p-4 sm:p-5 overflow-hidden shadow-sm hover:-translate-y-1 hover:shadow-lg transition-all duration-300 group ${
                       theme === 'light'
-                        ? 'bg-green-500/10 border-teal-600/10'
+                        ? 'bg-gray-50 border-gray-200'
                         : 'bg-gray-800 border-gray-700'
                     }`}
                   >
                     <div
                       className={`absolute top-0 right-0 w-16 sm:w-20 h-16 sm:h-20 rounded-bl-full opacity-5 ${
-                        theme === 'light' ? 'bg-teal-600' : 'bg-teal-400'
+                        theme === 'light' ? 'bg-gray-600' : 'bg-gray-400'
                       }`}
                       aria-hidden="true"
                     />
@@ -510,25 +511,25 @@ export default function Home() {
                       <div
                         className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center ${
                           theme === 'light'
-                            ? 'bg-teal-600/10 text-black'
-                            : 'bg-teal-500/20 text-green-400'
+                            ? 'bg-gray-200 text-black'
+                            : 'bg-gray-700 text-gray-300'
                         }`}
                       >
-                        <Icon size={14} aria-hidden="true" />
+                        <Icon size={14} aria-hidden="true" className={getIconColor()} />
                       </div>
                       <span
-                        className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-teal-400 animate-pulse"
+                        className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-gray-500 animate-pulse"
                         aria-hidden="true"
                       />
                     </div>
                     <div>
                       <p className={`text-xl sm:text-2xl font-bold tracking-tight leading-none ${
-                        theme === 'light' ? 'text-green-950' : 'text-white'
+                        theme === 'light' ? 'text-gray-900' : 'text-white'
                       }`}>
                         {stat.value}
                       </p>
                       <p className={`text-[10px] sm:text-[11px] font-medium uppercase tracking-widest mt-1 ${
-                        theme === 'light' ? 'text-green-600/70' : 'text-gray-400'
+                        theme === 'light' ? 'text-gray-500' : 'text-gray-400'
                       }`}>
                         {stat.label}
                       </p>
@@ -545,17 +546,17 @@ export default function Home() {
               onClick={handleOpenVoterList}
               className={`flex items-center gap-3 px-6 py-4 rounded-xl w-full justify-between transition-all duration-300 group ${
                 theme === 'light'
-                  ? 'bg-gradient-to-r from-green-50 to-green-100 border border-teal-200 hover:shadow-md'
+                  ? 'bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 hover:shadow-md'
                   : 'bg-gradient-to-r from-gray-800 to-gray-700 border border-gray-600 hover:shadow-lg'
               }`}
             >
               <div className="flex items-center gap-3">
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    theme === 'light' ? 'bg-teal-600/10 text-green-950' : 'bg-teal-500/20 text-green-400'
+                    theme === 'light' ? 'bg-gray-200 text-gray-800' : 'bg-gray-700 text-gray-300'
                   }`}
                 >
-                  <FaUsers size={16} aria-hidden="true" />
+                  <FaUsers size={16} aria-hidden="true" className={getIconColor()} />
                 </div>
                 <div className="text-left">
                   <h3 className={`font-semibold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
@@ -567,7 +568,7 @@ export default function Home() {
                 </div>
               </div>
               <FaEye
-                className="text-green-950 group-hover:translate-x-1 transition-transform"
+                className={`group-hover:translate-x-1 transition-transform ${getIconColor()}`}
                 aria-hidden="true"
               />
             </button>
@@ -581,18 +582,18 @@ export default function Home() {
             {lastUpdated && (
               <p
                 className={`flex items-center gap-1.5 text-[10px] sm:text-xs ${
-                  theme === 'light' ? 'text-slate-400' : 'text-gray-500'
+                  theme === 'light' ? 'text-gray-400' : 'text-gray-500'
                 }`}
                 aria-live="polite"
               >
-                <FaClock size={10} className="text-green-950" aria-hidden="true" />
+                <FaClock size={10} className={getIconColor()} aria-hidden="true" />
                 Last updated: {lastUpdated.toLocaleTimeString()}
               </p>
             )}
             <button
               onClick={handleRefresh}
               disabled={loading}
-              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-1.5 sm:py-2.5 bg-gradient-to-br from-green-600 to-green-800 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-md shadow-teal-600/25 hover:-translate-y-0.5 hover:shadow-teal-600/35 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transition-all duration-200"
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-1.5 sm:py-2.5 bg-gradient-to-br from-gray-700 to-gray-900 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-md shadow-gray-800/25 hover:-translate-y-0.5 hover:shadow-gray-800/35 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transition-all duration-200"
             >
               <FaSync
                 size={11}
@@ -637,7 +638,7 @@ export default function Home() {
 
           {/* Divider */}
           <div
-            className={`h-px bg-gradient-to-r from-transparent via-green-600/9 to-transparent my-6 sm:my-10 ${
+            className={`h-px bg-gradient-to-r from-transparent via-gray-500/20 to-transparent my-6 sm:my-10 ${
               theme === 'dark' ? 'opacity-30' : ''
             }`}
             aria-hidden="true"
@@ -649,25 +650,27 @@ export default function Home() {
             aria-labelledby="elections-heading"
             className={`mb-8 p-4 sm:p-6 rounded-2xl sm:rounded-3xl border ${
               theme === 'light'
-                ? 'bg-green-950 border-teal-600/20'
-                : 'bg-green-900/20 border-teal-700'
+                ? 'bg-gray-50 border-gray-200'
+                : 'bg-gray-800/20 border-gray-700'
             }`}
           >
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4 mb-5 sm:mb-9">
               <div data-aos="fade-right">
                 <p className={`text-[11px] sm:text-xs font-semibold uppercase tracking-widest mb-1 ${
-                  theme === 'light' ? 'text-[#f59e0b]' : 'text-green-400'
+                  theme === 'light' ? 'text-gray-600' : 'text-gray-400'
                 }`}>
                   Participate Now
                 </p>
                 <h2
                   id="elections-heading"
-                  className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight leading-tight text-[#f59e0b]"
+                  className={`text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight leading-tight ${
+                    theme === 'light' ? 'text-gray-900' : 'text-white'
+                  }`}
                 >
                   Current Elections
                 </h2>
                 <p className={`mt-1 sm:mt-2 text-xs sm:text-sm ${
-                  theme === 'light' ? 'text-[#f59e0b]' : 'text-gray-400'
+                  theme === 'light' ? 'text-gray-600' : 'text-gray-400'
                 }`}>
                   Cast your vote for the leaders who will shape our future
                 </p>
@@ -677,13 +680,13 @@ export default function Home() {
                 <div
                   className={`flex items-center gap-2 border rounded-full px-3 sm:px-4 py-1.5 sm:py-2 shadow-sm text-xs sm:text-sm font-semibold whitespace-nowrap ${
                     theme === 'light'
-                      ? 'bg-white border-teal-600/12 text-green-950'
+                      ? 'bg-white border-gray-200 text-gray-800'
                       : 'bg-gray-800 border-gray-700 text-white'
                   }`}
                 >
                   <span
                     className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${
-                      isVotingActive ? 'bg-teal-400 animate-pulse' : 'bg-gray-400'
+                      isVotingActive ? 'bg-gray-500 animate-pulse' : 'bg-gray-600'
                     }`}
                     aria-hidden="true"
                   />
@@ -701,12 +704,12 @@ export default function Home() {
                     data-aos-delay={index * 80}
                     className={`rounded-2xl sm:rounded-3xl border overflow-hidden shadow-sm hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300 group ${
                       theme === 'light'
-                        ? 'bg-white border-teal-600/10 hover:border-teal-600/25'
-                        : 'bg-gray-800 border-gray-700 hover:border-teal-600/50'
+                        ? 'bg-white border-gray-200 hover:border-gray-300'
+                        : 'bg-gray-800 border-gray-700 hover:border-gray-600'
                     }`}
                   >
                     <div
-                      className="h-0.5 sm:h-1 bg-gradient-to-r from-green-600 via-teal-400 to-green-800 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-500"
+                      className="h-0.5 sm:h-1 bg-gradient-to-r from-gray-700 via-gray-500 to-gray-800 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-500"
                       aria-hidden="true"
                     />
                     <ElectionCard
@@ -725,28 +728,28 @@ export default function Home() {
                 data-aos="fade-up"
                 className={`text-center py-12 sm:py-16 px-4 sm:px-8 rounded-2xl sm:rounded-3xl border border-dashed ${
                   theme === 'light'
-                    ? 'bg-white border-teal-600/20'
+                    ? 'bg-white border-gray-200'
                     : 'bg-gray-800 border-gray-700'
                 }`}
               >
                 <div
                   className={`w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl flex items-center justify-center mx-auto mb-3 sm:mb-4 ${
-                    theme === 'light' ? 'bg-teal-600/6' : 'bg-teal-500/10'
+                    theme === 'light' ? 'bg-gray-100' : 'bg-gray-700'
                   }`}
                 >
                   <FaVoteYea
                     size={20}
-                    className={`${theme === 'light' ? 'text-green-950 opacity-40' : 'text-green-400 opacity-60'}`}
+                    className={`${theme === 'light' ? 'text-gray-600 opacity-60' : 'text-gray-400 opacity-60'}`}
                     aria-hidden="true"
                   />
                 </div>
                 <h3 className={`text-base sm:text-lg font-bold mb-1 ${
-                  theme === 'light' ? 'text-green-950' : 'text-white'
+                  theme === 'light' ? 'text-gray-800' : 'text-white'
                 }`}>
                   No Active Elections
                 </h3>
                 <p className={`text-xs sm:text-sm ${
-                  theme === 'light' ? 'text-green-800/70' : 'text-gray-400'
+                  theme === 'light' ? 'text-gray-500' : 'text-gray-400'
                 }`}>
                   Check back later for upcoming elections
                 </p>
@@ -760,7 +763,7 @@ export default function Home() {
 
           {/* Divider */}
           <div
-            className={`h-px bg-gradient-to-r from-transparent via-teal-600/15 to-transparent my-6 sm:my-10 ${
+            className={`h-px bg-gradient-to-r from-transparent via-gray-500/15 to-transparent my-6 sm:my-10 ${
               theme === 'dark' ? 'opacity-30' : ''
             }`}
             aria-hidden="true"
@@ -770,14 +773,14 @@ export default function Home() {
           <section className="mb-8" aria-labelledby="summary-heading">
             <div data-aos="fade-up" className="mb-4 sm:mb-6 lg:mb-8">
               <p className={`text-xs sm:text-sm font-semibold uppercase tracking-widest mb-1 ${
-                theme === 'light' ? 'text-green-950' : 'text-green-400'
+                theme === 'light' ? 'text-gray-600' : 'text-gray-400'
               }`}>
                 At a Glance
               </p>
               <h2
                 id="summary-heading"
                 className={`text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight leading-tight ${
-                  theme === 'light' ? 'text-green-950' : 'text-white'
+                  theme === 'light' ? 'text-gray-900' : 'text-white'
                 }`}
               >
                 Election Summary
@@ -794,26 +797,26 @@ export default function Home() {
                     data-aos-delay={i * 80}
                     className={`relative rounded-xl sm:rounded-2xl border p-4 sm:p-5 text-center overflow-hidden shadow-sm hover:-translate-y-1 hover:shadow-lg transition-all duration-300 group ${
                       theme === 'light'
-                        ? 'bg-white border-teal-600/10'
+                        ? 'bg-white border-gray-200'
                         : 'bg-gray-800 border-gray-700'
                     }`}
                   >
                     <div
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-600 to-green-400 scale-x-0 group-hover:scale-x-100 transition-transform duration-400 origin-left"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-gray-600 to-gray-500 scale-x-0 group-hover:scale-x-100 transition-transform duration-400 origin-left"
                       aria-hidden="true"
                     />
                     <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center mx-auto mb-2 sm:mb-3 group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300">
-                      <Icon size={24} className={theme === 'light' ? 'text-green-950' : 'text-green-400'} aria-hidden="true" />
+                      <Icon size={24} className={getIconColor()} aria-hidden="true" />
                     </div>
                     <p className={`text-lg sm:text-2xl font-bold tracking-tight ${
                       theme === 'light'
-                        ? 'bg-gradient-to-br from-green-600 to-green-900 bg-clip-text text-transparent'
+                        ? 'text-gray-800'
                         : 'text-white'
                     }`}>
                       {item.value}
                     </p>
                     <p className={`text-[10px] sm:text-[11px] font-medium uppercase tracking-widest mt-1 ${
-                      theme === 'light' ? 'text-gray-600' : 'text-gray-400'
+                      theme === 'light' ? 'text-gray-500' : 'text-gray-400'
                     }`}>
                       {item.label}
                     </p>

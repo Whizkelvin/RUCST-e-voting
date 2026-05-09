@@ -30,6 +30,11 @@ export default function VerifyOTP() {
   const router = useRouter();
   const verificationLock = useRef(false);
 
+  // Get icon color based on theme
+  const getIconColor = () => {
+    return theme === 'light' ? 'text-gray-700' : 'text-gray-300';
+  };
+
   // Theme
   useEffect(() => { 
     setMounted(true); 
@@ -47,30 +52,30 @@ export default function VerifyOTP() {
   
   const themeStyles = useMemo(() => ({
     dark: { 
-      background: 'from-[#02140f] via-[#063d2e] to-[#0b2545]', 
+      background: 'from-gray-900 via-gray-800 to-gray-900', 
       cardBg: 'bg-white/10 backdrop-blur-2xl', 
       cardBorder: 'border-white/20', 
       textPrimary: 'text-white', 
-      textSecondary: 'text-emerald-100/80', 
+      textSecondary: 'text-gray-300', 
       inputBg: 'bg-white/10', 
       inputBorder: 'border-white/20', 
-      inputFocus: 'focus:border-[#f4a261] focus:ring-[#f4a261]/50', 
-      buttonPrimary: 'from-[#f4a261] to-[#e76f51]', 
+      inputFocus: 'focus:border-gray-400 focus:ring-gray-400/50', 
+      buttonPrimary: 'from-gray-700 to-gray-600', 
       buttonSecondary: 'bg-white/5 hover:bg-white/10 border-white/10', 
-      accent: '#f4a261' 
+      accent: '#9ca3af' 
     },
     light: { 
-      background: 'from-teal-50 via-white to-amber-50', 
+      background: 'from-gray-50 via-white to-gray-100', 
       cardBg: 'bg-white/90 backdrop-blur-2xl', 
       cardBorder: 'border-gray-200', 
       textPrimary: 'text-gray-900', 
       textSecondary: 'text-gray-600', 
       inputBg: 'bg-white', 
       inputBorder: 'border-gray-300', 
-      inputFocus: 'focus:border-teal-500 focus:ring-teal-500/50', 
-      buttonPrimary: 'from-teal-600 to-teal-700', 
+      inputFocus: 'focus:border-gray-500 focus:ring-gray-500/50', 
+      buttonPrimary: 'from-gray-700 to-gray-600', 
       buttonSecondary: 'bg-gray-100 hover:bg-gray-200 border-gray-200', 
-      accent: '#0d9488' 
+      accent: '#6b7280' 
     }
   }), []);
   
@@ -359,7 +364,7 @@ export default function VerifyOTP() {
     const newExpiry = new Date(Date.now() + 15 * 60 * 1000);
     const hashedOtp = await hashCode(otpCode);
     
-    console.log('🔐 Generating new OTP for voter:', voterId);
+    console.log('Generating new OTP for voter:', voterId);
     
     // Delete all existing OTPs for this voter
     const { error: deleteError } = await supabase
@@ -600,7 +605,7 @@ export default function VerifyOTP() {
       await logOtpVerification({ voter_id: voter.id, email: email, ip_address: clientIP, success: true });
       await logLogin({ email: email, user_role: 'voter', success: true, ip_address: clientIP });
       
-      toast.success('Verification successful! Redirecting...');
+      toast.success('Verification successful. Redirecting...');
       setTimeout(() => router.push("/vote"), 1500);
       
     } catch (error) { 
@@ -632,7 +637,7 @@ export default function VerifyOTP() {
   
   if (sessionError) {
     return ( 
-      <div className={`min-h-screen bg-gradient-to-br ${theme === 'dark' ? 'from-[#02140f] via-[#063d2e] to-[#0b2545]' : 'from-teal-50 via-white to-amber-50'} flex items-center justify-center p-4`}>
+      <div className={`min-h-screen bg-gradient-to-br ${theme === 'dark' ? 'from-gray-900 via-gray-800 to-gray-900' : 'from-gray-50 via-white to-gray-100'} flex items-center justify-center p-4`}>
         <Toaster position="top-center" richColors />
         <div className="relative w-full max-w-md">
           <div className={`${theme === 'dark' ? 'bg-white/10 border-white/20' : 'bg-white border-gray-200'} backdrop-blur-xl rounded-3xl shadow-2xl p-8 text-center`}>
@@ -642,7 +647,7 @@ export default function VerifyOTP() {
               </div>
             </div>
             <h2 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'} mb-2`}>Session Expired</h2>
-            <p className={`${theme === 'dark' ? 'text-emerald-100/80' : 'text-gray-600'} mb-6`}>Your session is invalid or has expired. Please login again to continue.</p>
+            <p className={`${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'} mb-6`}>Your session is invalid or has expired. Please login again to continue.</p>
             <button onClick={() => router.push('/login')} className={`w-full py-3 px-6 bg-gradient-to-r ${currentTheme.buttonPrimary} text-white font-semibold rounded-xl transition-all duration-300`}>Go to Login</button>
           </div>
         </div>
@@ -652,7 +657,7 @@ export default function VerifyOTP() {
   
   if (!voterInfo) {
     return ( 
-      <div className={`min-h-screen bg-gradient-to-br ${theme === 'dark' ? 'from-[#02140f] via-[#063d2e] to-[#0b2545]' : 'from-teal-50 via-white to-amber-50'} flex items-center justify-center`}>
+      <div className={`min-h-screen bg-gradient-to-br ${theme === 'dark' ? 'from-gray-900 via-gray-800 to-gray-900' : 'from-gray-50 via-white to-gray-100'} flex items-center justify-center`}>
         <Toaster position="top-center" richColors />
         <div className={`text-center ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
           <FaSpinner className="animate-spin text-4xl mx-auto mb-4" />
@@ -673,11 +678,11 @@ export default function VerifyOTP() {
       
       <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} flex items-center justify-center p-4 relative overflow-hidden transition-all duration-300`}>
         
-        {/* Animated Background */}
+        {/* Animated Background - Grayscale */}
         <div className="absolute inset-0 overflow-hidden">
-          <div className={`absolute -top-40 -right-32 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse ${theme === 'dark' ? 'bg-[#2d6a4f]' : 'bg-teal-400'}`}></div>
-          <div className={`absolute -bottom-40 -left-32 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse ${theme === 'dark' ? 'bg-[#f4a261]' : 'bg-amber-400'}`}></div>
-          <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse ${theme === 'dark' ? 'bg-[#40916c]' : 'bg-teal-300'}`}></div>
+          <div className={`absolute -top-40 -right-32 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse ${theme === 'dark' ? 'bg-gray-600' : 'bg-gray-400'}`}></div>
+          <div className={`absolute -bottom-40 -left-32 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse ${theme === 'dark' ? 'bg-gray-500' : 'bg-gray-300'}`}></div>
+          <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'}`}></div>
         </div>
         
         <div className="relative w-full max-w-md">
@@ -693,23 +698,19 @@ export default function VerifyOTP() {
               <h1 className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mb-2`}>Verify Your Identity</h1>
               
               <div className={`flex items-center justify-center gap-2 ${currentTheme.textSecondary} text-xs sm:text-sm`}>
-                <FaEnvelope className="w-3 h-3 sm:w-4 sm:h-4" />
+                <FaEnvelope className={`w-3 h-3 sm:w-4 sm:h-4 ${getIconColor()}`} />
                 <span className="truncate max-w-[200px] sm:max-w-none">{voterInfo.email}</span>
               </div>
-              
-             
               
               {/* Timer */}
               {timeRemaining > 0 && (
                 <div className="flex items-center justify-center gap-2 mt-3">
-                  <div className={`flex items-center gap-1 ${theme === 'dark' ? 'bg-yellow-500/20' : 'bg-yellow-100'} px-2 py-1 rounded-full`}>
-                    <FaClock className={`w-3 h-3 ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600'}`} />
-                    <span className={`text-[10px] ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600'}`}>OTP expires in: {formatDisplayTime()}</span>
+                  <div className={`flex items-center gap-1 ${theme === 'dark' ? 'bg-gray-500/20' : 'bg-gray-100'} px-2 py-1 rounded-full`}>
+                    <FaClock className={`w-3 h-3 ${getIconColor()}`} />
+                    <span className={`text-[10px] ${getIconColor()}`}>OTP expires in: {formatDisplayTime()}</span>
                   </div>
                 </div>
               )}
-              
-             
             </div>
             
             {/* OTP Input */}
@@ -730,7 +731,7 @@ export default function VerifyOTP() {
                     onPaste={index === 0 ? handlePaste : undefined}
                     disabled={isVerifying || isLocked}
                     className={`w-10 h-12 sm:w-14 sm:h-16 text-center text-xl sm:text-2xl font-bold ${currentTheme.inputBg} border-2 rounded-xl ${currentTheme.textPrimary} focus:outline-none focus:ring-2 transition-all duration-200 ${
-                      digit ? `border-${theme === 'dark' ? '[#f4a261]' : 'teal-500'} bg-white/20 ring-1 ring-${theme === 'dark' ? '[#f4a261]' : 'teal-500'}/50` : currentTheme.inputBorder
+                      digit ? `border-gray-500 bg-white/20 ring-1 ring-gray-500/50` : currentTheme.inputBorder
                     } ${currentTheme.inputFocus} ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
                     autoFocus={index === 0 && !isLocked}
                   />
@@ -753,7 +754,7 @@ export default function VerifyOTP() {
                 </div>
               ) : (
                 <div className="flex items-center justify-center space-x-2">
-                  <FaCheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <FaCheckCircle className={`w-4 h-4 sm:w-5 sm:h-5 ${getIconColor()}`} />
                   <span>Verify OTP</span>
                 </div>
               )}
@@ -764,20 +765,14 @@ export default function VerifyOTP() {
               <button
                 onClick={handleResendOtp}
                 disabled={resendCooldown > 0 || isLoading || isLocked}
-                className={`${theme === 'dark' ? 'text-[#f4a261] hover:text-[#e76f51]' : 'text-teal-600 hover:text-teal-700'} text-xs sm:text-sm disabled:opacity-50 transition-colors flex items-center justify-center gap-2 mx-auto`}
+                className={`${getIconColor()} text-xs sm:text-sm disabled:opacity-50 transition-colors flex items-center justify-center gap-2 mx-auto`}
               >
                 <FaClock className="w-3 h-3" />
                 {resendCooldown > 0 
-                  ? `Resend code available in ${formatResendCooldown()} ` 
+                  ? `Resend code available in ${formatResendCooldown()}` 
                   : "Didn't receive code? Resend OTP"}
               </button>
-              {resendCooldown > 0 && (
-                <p className={`text-[10px] mt-1 ${currentTheme.textSecondary} opacity-60`}>
-                  
-                </p>
-              )}
             </div>
-         
             
             {/* Back to Login */}
             <button
@@ -803,9 +798,6 @@ export default function VerifyOTP() {
                 <span>Go to Home</span>
               </Link>
             </div>
-            
-         
-            
           </div>
         </div>
       </div>

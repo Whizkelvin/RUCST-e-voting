@@ -21,43 +21,49 @@ import {
 import { supabase } from '@/lib/supabaseClient';
 import { OTPHash } from '@/utils/otpHash';
 
-// ─── Theme definitions ────────────────────────────────────────────────────────
+// ─── Theme definitions - Grayscale ──────────────────────────────────────────
 const THEME_STYLES = {
   dark: {
-    background: 'from-[#02140f] via-[#063d2e] to-[#0b2545]',
+    background: 'from-gray-900 via-gray-800 to-gray-900',
     cardBg: 'bg-white/10 backdrop-blur-2xl',
     cardBorder: 'border-white/20',
     textPrimary: 'text-white',
-    textSecondary: 'text-white/70',
+    textSecondary: 'text-gray-300',
     inputBg: 'bg-white/10',
     inputBorder: 'border-white/20',
-    inputFocus: 'focus:ring-purple-400 focus:border-transparent',
-    buttonPrimary: 'from-purple-700 to-purple-600 hover:from-purple-600 hover:to-purple-500',
-    buttonSecondary: 'text-purple-300 hover:text-purple-200',
+    inputFocus: 'focus:ring-gray-400 focus:border-transparent',
+    buttonPrimary: 'from-gray-700 to-gray-600 hover:from-gray-600 hover:to-gray-500',
+    buttonSecondary: 'text-gray-300 hover:text-gray-200',
     infoCardBg: 'bg-white/5',
     infoCardBorder: 'border-white/10',
-    adminCardBg: 'bg-purple-500/20 border-purple-400/50',
-    iconColor: 'text-purple-400',
-    glowBlob1: 'bg-purple-600',
-    glowBlob2: 'bg-blue-500',
+    adminCardBg: 'bg-gray-500/20 border-gray-400/50',
+    iconColor: 'text-gray-400',
+    glowBlob1: 'bg-gray-600',
+    glowBlob2: 'bg-gray-500',
+    timerHigh: 'bg-gray-500',
+    timerMedium: 'bg-gray-500',
+    timerLow: 'bg-red-500',
   },
   light: {
-    background: 'from-purple-50 via-white to-blue-50',
+    background: 'from-gray-50 via-white to-gray-100',
     cardBg: 'bg-white/90 backdrop-blur-2xl',
     cardBorder: 'border-gray-200',
     textPrimary: 'text-gray-900',
     textSecondary: 'text-gray-600',
     inputBg: 'bg-white',
     inputBorder: 'border-gray-300',
-    inputFocus: 'focus:ring-purple-500 focus:border-transparent',
-    buttonPrimary: 'from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400',
-    buttonSecondary: 'text-purple-600 hover:text-purple-700',
+    inputFocus: 'focus:ring-gray-500 focus:border-transparent',
+    buttonPrimary: 'from-gray-700 to-gray-600 hover:from-gray-600 hover:to-gray-500',
+    buttonSecondary: 'text-gray-600 hover:text-gray-700',
     infoCardBg: 'bg-gray-50',
     infoCardBorder: 'border-gray-200',
-    adminCardBg: 'bg-purple-50 border-purple-200',
-    iconColor: 'text-purple-600',
-    glowBlob1: 'bg-purple-400',
-    glowBlob2: 'bg-blue-400',
+    adminCardBg: 'bg-gray-100 border-gray-200',
+    iconColor: 'text-gray-600',
+    glowBlob1: 'bg-gray-400',
+    glowBlob2: 'bg-gray-300',
+    timerHigh: 'bg-gray-500',
+    timerMedium: 'bg-gray-500',
+    timerLow: 'bg-red-500',
   },
 };
 
@@ -86,6 +92,11 @@ export default function AdminVerifyOTP() {
   const timerRef = useRef(null);
   const router = useRouter();
   const currentTheme = THEME_STYLES[theme];
+
+  // Get icon color based on theme
+  const getIconColor = () => {
+    return theme === 'light' ? 'text-gray-700' : 'text-gray-300';
+  };
 
   // ── Theme ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -150,7 +161,7 @@ export default function AdminVerifyOTP() {
       (k) => localStorage.removeItem(k)
     );
 
-    toast.success('✅ Verification successful! Redirecting to dashboard...');
+    toast.success('Verification successful. Redirecting to dashboard...');
     setTimeout(() => router.push('/admin/manage-voters'), 2000);
   }, [router]);
 
@@ -185,7 +196,7 @@ export default function AdminVerifyOTP() {
         if (error) throw error;
 
         if (data.otp_verified) {
-          toast.info('Already verified! Redirecting...');
+          toast.info('Already verified. Redirecting...');
           completeLogin();
           return;
         }
@@ -259,7 +270,7 @@ export default function AdminVerifyOTP() {
       if (fetchError) throw fetchError;
 
       if (admin.otp_verified) {
-        toast.warning('OTP already verified! Redirecting...');
+        toast.warning('OTP already verified. Redirecting...');
         completeLogin();
         return;
       }
@@ -356,7 +367,7 @@ export default function AdminVerifyOTP() {
       const result = await response.json();
 
       if (result.success) {
-        toast.success('✅ New OTP sent to your email!');
+        toast.success('New OTP sent to your email');
         localStorage.setItem('temp_admin_expiry', newExpiry.getTime().toString());
         startTimer(OTP_EXPIRY_SECONDS);
         setOtp(Array(OTP_LENGTH).fill(''));
@@ -397,6 +408,11 @@ export default function AdminVerifyOTP() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   const timerPercent = Math.round((timeLeft / OTP_EXPIRY_SECONDS) * 100);
+  const getTimerColor = () => {
+    if (timerPercent > 50) return currentTheme.timerHigh;
+    if (timerPercent > 20) return currentTheme.timerMedium;
+    return currentTheme.timerLow;
+  };
 
   return (
     <div
@@ -415,7 +431,7 @@ export default function AdminVerifyOTP() {
           : <FaMoon className="text-gray-700 text-xl" />}
       </button>
 
-      {/* Ambient blobs */}
+      {/* Ambient blobs - Grayscale */}
       <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
         <div className={`absolute -top-24 -right-24 w-72 h-72 ${currentTheme.glowBlob1} opacity-20 blur-3xl rounded-full animate-pulse`} />
         <div className={`absolute -bottom-24 -left-24 w-72 h-72 ${currentTheme.glowBlob2} opacity-20 blur-3xl rounded-full animate-pulse delay-1000`} />
@@ -455,7 +471,7 @@ export default function AdminVerifyOTP() {
           {/* Title */}
           <div className="text-center mb-5 sm:mb-6">
             <div className="flex justify-center mb-3">
-              <div className={`p-3 ${theme === 'dark' ? 'bg-purple-500/20' : 'bg-purple-100'} rounded-full`}>
+              <div className={`p-3 ${theme === 'dark' ? 'bg-gray-500/20' : 'bg-gray-100'} rounded-full`}>
                 <FaShieldAlt className={`${currentTheme.iconColor} text-2xl sm:text-3xl`} />
               </div>
             </div>
@@ -493,7 +509,7 @@ export default function AdminVerifyOTP() {
                 aria-live="polite"
                 aria-label={`Time remaining: ${formatTime(timeLeft)}`}
               >
-                <FaClock className="text-yellow-400 text-sm sm:text-base" aria-hidden="true" />
+                <FaClock className={`${getIconColor()} text-sm sm:text-base`} aria-hidden="true" />
                 <span className={`${currentTheme.textPrimary} font-mono text-base sm:text-lg`}>
                   {formatTime(timeLeft)}
                 </span>
@@ -503,13 +519,7 @@ export default function AdminVerifyOTP() {
             {/* Progress bar */}
             <div className={`h-1 rounded-full ${theme === 'dark' ? 'bg-white/10' : 'bg-gray-200'} overflow-hidden`}>
               <div
-                className={`h-full rounded-full transition-all duration-1000 ${
-                  timerPercent > 50
-                    ? 'bg-purple-500'
-                    : timerPercent > 20
-                    ? 'bg-yellow-400'
-                    : 'bg-red-500'
-                }`}
+                className={`h-full rounded-full transition-all duration-1000 ${getTimerColor()}`}
                 style={{ width: `${timerPercent}%` }}
                 role="progressbar"
                 aria-valuenow={timerPercent}
@@ -520,7 +530,7 @@ export default function AdminVerifyOTP() {
 
             {canResend && (
               <p className="text-yellow-400 text-xs mt-2 text-center">
-                OTP expired. Click &quot;Resend OTP&quot; to get a new code.
+                OTP expired. Click "Resend OTP" to get a new code.
               </p>
             )}
           </div>
@@ -528,15 +538,15 @@ export default function AdminVerifyOTP() {
           {/* Status banners */}
           <div role="status" aria-live="polite">
             {verificationStatus === 'verifying' && (
-              <div className="mb-4 p-3 rounded-xl bg-blue-500/20 border border-blue-400/50 flex items-center gap-2">
-                <FaSpinner className="animate-spin text-blue-400 text-sm sm:text-base shrink-0" aria-hidden="true" />
-                <p className="text-blue-200 text-xs sm:text-sm">Verifying OTP…</p>
+              <div className="mb-4 p-3 rounded-xl bg-gray-500/20 border border-gray-400/50 flex items-center gap-2">
+                <FaSpinner className="animate-spin text-gray-400 text-sm sm:text-base shrink-0" aria-hidden="true" />
+                <p className="text-gray-300 text-xs sm:text-sm">Verifying OTP...</p>
               </div>
             )}
             {verificationStatus === 'success' && (
               <div className="mb-4 p-3 rounded-xl bg-green-500/20 border border-green-400/50 flex items-center gap-2">
                 <FaCheckCircle className="text-green-400 text-sm sm:text-base shrink-0" aria-hidden="true" />
-                <p className="text-green-200 text-xs sm:text-sm">Verification successful! Redirecting…</p>
+                <p className="text-green-200 text-xs sm:text-sm">Verification successful. Redirecting...</p>
               </div>
             )}
             {verificationStatus === 'failed' && (
@@ -582,8 +592,8 @@ export default function AdminVerifyOTP() {
                     'transition-all duration-200',
                     digit
                       ? theme === 'dark'
-                        ? 'border-purple-400 bg-purple-500/20 ring-1 ring-purple-400/50'
-                        : 'border-purple-500 bg-purple-50 ring-1 ring-purple-400/50'
+                        ? 'border-gray-400 bg-gray-500/20 ring-1 ring-gray-400/50'
+                        : 'border-gray-500 bg-gray-50 ring-1 ring-gray-400/50'
                       : currentTheme.inputBorder,
                     isLoading ? 'opacity-50 cursor-not-allowed' : '',
                   ].join(' ')}
@@ -603,7 +613,7 @@ export default function AdminVerifyOTP() {
             {isLoading ? (
               <span className="flex items-center justify-center gap-2">
                 <FaSpinner className="animate-spin text-sm sm:text-base" aria-hidden="true" />
-                Verifying…
+                Verifying...
               </span>
             ) : (
               <span className="flex items-center justify-center gap-2">
@@ -624,9 +634,9 @@ export default function AdminVerifyOTP() {
 
           {/* Footer tips */}
           <div className={`mt-5 sm:mt-6 text-center space-y-1 ${currentTheme.textSecondary} text-[10px] sm:text-xs opacity-60`}>
-            <p>🔐 For security, this OTP expires in 5 minutes</p>
-            <p>📧 Check your spam folder if you don&apos;t see the email</p>
-            <p>👑 Maximum 5 verification attempts allowed</p>
+            <p>For security, this OTP expires in 5 minutes</p>
+            <p>Check your spam folder if you do not see the email</p>
+            <p>Maximum 5 verification attempts allowed</p>
           </div>
         </div>
       </div>

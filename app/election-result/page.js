@@ -21,7 +21,7 @@ export default function ElectionResults() {
   const [totalVotes, setTotalVotes] = useState(0);
   const [theme, setTheme] = useState('dark');
   const [mounted, setMounted] = useState(false);
-  const [showStatistics, setShowStatistics] = useState(true); // Toggle state for statistics
+  const [showStatistics, setShowStatistics] = useState(true); 
   const router = useRouter();
   
   const { 
@@ -33,6 +33,11 @@ export default function ElectionResults() {
     totalStats,
     lastUpdated 
   } = useElectionData();
+
+  // Get icon color based on theme
+  const getIconColor = () => {
+    return theme === 'light' ? 'text-gray-700' : 'text-gray-300';
+  };
 
   // Theme management
   useEffect(() => {
@@ -64,10 +69,10 @@ export default function ElectionResults() {
     toast.success(newValue ? 'Statistics summary shown' : 'Statistics summary hidden');
   };
 
-  // Theme styles
+  // Theme styles - Grayscale
   const themeStyles = {
     dark: {
-      background: 'from-[#02140f] via-[#063d2e] to-[#0b2545]',
+      background: 'from-gray-900 via-gray-800 to-gray-900',
       cardBg: 'bg-white/10 backdrop-blur-lg',
       cardBorder: 'border-white/20',
       textPrimary: 'text-white',
@@ -76,11 +81,11 @@ export default function ElectionResults() {
       textLight: 'text-white/60',
       buttonHover: 'hover:bg-white/20',
       statBg: 'bg-white/10 backdrop-blur-lg',
-      winnerBg: 'bg-gradient-to-r from-yellow-400/10 to-transparent',
-      winnerBorder: 'border-yellow-400/50',
+      winnerBg: 'bg-gradient-to-r from-gray-500/10 to-transparent',
+      winnerBorder: 'border-gray-400/50',
       progressBg: 'bg-white/20',
-      progressWinner: 'bg-gradient-to-r from-yellow-400 to-amber-500',
-      progressNormal: 'bg-green-500',
+      progressWinner: 'bg-gray-400',
+      progressNormal: 'bg-gray-500',
       modalBg: 'bg-white/10 backdrop-blur-lg',
       toggleButton: 'bg-white/10 hover:bg-white/20',
     },
@@ -94,11 +99,11 @@ export default function ElectionResults() {
       textLight: 'text-gray-600',
       buttonHover: 'hover:bg-gray-200',
       statBg: 'bg-white/80 backdrop-blur-lg',
-      winnerBg: 'bg-gradient-to-r from-yellow-100/50 to-transparent',
-      winnerBorder: 'border-yellow-400',
+      winnerBg: 'bg-gradient-to-r from-gray-200/50 to-transparent',
+      winnerBorder: 'border-gray-400',
       progressBg: 'bg-gray-200',
-      progressWinner: 'bg-gradient-to-r from-yellow-500 to-amber-600',
-      progressNormal: 'bg-emerald-500',
+      progressWinner: 'bg-gray-700',
+      progressNormal: 'bg-gray-500',
       modalBg: 'bg-white/80 backdrop-blur-lg',
       toggleButton: 'bg-gray-100 hover:bg-gray-200',
     }
@@ -200,7 +205,7 @@ export default function ElectionResults() {
     a.download = `election_results_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success('Results exported successfully!');
+    toast.success('Results exported successfully');
   };
 
   if (!mounted) {
@@ -213,7 +218,7 @@ export default function ElectionResults() {
         <Toaster position="top-center" richColors />
         <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} flex items-center justify-center`}>
           <div className="text-center">
-            <FaSpinner className="animate-spin text-5xl text-green-500 mx-auto mb-4" />
+            <FaSpinner className={`animate-spin text-5xl ${getIconColor()} mx-auto mb-4`} />
             <p className={`${currentTheme.textPrimary} text-lg`}>Loading election results...</p>
           </div>
         </div>
@@ -227,12 +232,12 @@ export default function ElectionResults() {
         <Toaster position="top-center" richColors />
         <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} flex items-center justify-center p-4`}>
           <div className={`${currentTheme.cardBg} rounded-2xl p-8 max-w-md text-center border ${currentTheme.cardBorder}`}>
-            <FaInfoCircle className="text-5xl text-red-400 mx-auto mb-4" />
+            <FaInfoCircle className={`text-5xl ${getIconColor()} mx-auto mb-4`} />
             <p className={`${currentTheme.textPrimary} text-lg mb-2`}>Unable to load results</p>
             <p className={`${currentTheme.textMuted} text-sm`}>{error}</p>
             <button
               onClick={() => window.location.reload()}
-              className="mt-4 px-6 py-2 bg-green-600 rounded-lg text-white hover:bg-green-500 transition"
+              className="mt-4 px-6 py-2 bg-gray-600 rounded-lg text-white hover:bg-gray-500 transition"
             >
               Try Again
             </button>
@@ -277,7 +282,7 @@ export default function ElectionResults() {
         className="fixed top-4 left-4 z-50 p-3 rounded-full bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-110 transition-all duration-300 group"
         aria-label="Go to Home"
       >
-        <FaHome className={`text-xl ${theme === 'dark' ? 'text-white/80 group-hover:text-green-400' : 'text-gray-700 group-hover:text-green-500'} transition`} />
+        <FaHome className={`text-xl ${getIconColor()} transition`} />
       </Link>
       
       <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} pt-20 sm:pt-24 pb-8 sm:pb-12 transition-all duration-300`}>
@@ -318,15 +323,15 @@ export default function ElectionResults() {
                     </div>
                     <div className="text-xs sm:text-sm flex flex-col gap-1">
                       <div className="flex items-center justify-center gap-2">
-                        <FaCalendarAlt className="text-green-400" />
+                        <FaCalendarAlt className={getIconColor()} />
                         <span>Started: {formatDate(votingPeriod.start_time)}</span>
                       </div>
                       <div className="flex items-center justify-center gap-2">
-                        <FaClock className="text-green-400" />
+                        <FaClock className={getIconColor()} />
                         <span>Ends: {formatDate(votingPeriod.end_time)}</span>
                       </div>
                       {isVotingActive && (
-                        <div className="mt-2 px-3 py-1 bg-green-500/20 text-green-300 rounded-full text-xs inline-block animate-pulse">
+                        <div className="mt-2 px-3 py-1 bg-gray-500/20 text-gray-300 rounded-full text-xs inline-block animate-pulse">
                           Voting In Progress
                         </div>
                       )}
@@ -345,12 +350,10 @@ export default function ElectionResults() {
                 onClick={exportResults}
                 className={`flex items-center gap-2 px-4 py-2 ${currentTheme.statBg} ${currentTheme.buttonHover} rounded-lg ${currentTheme.textPrimary} transition text-sm sm:text-base`}
               >
-                <FaDownload />
+                <FaDownload className={getIconColor()} />
                 Export Results as CSV
               </button>
             )}
-            
-           
           </div>
 
           {/* Position Filter */}
@@ -365,7 +368,7 @@ export default function ElectionResults() {
                     data-aos-delay={500 + idx * 50}
                     className={`px-4 sm:px-6 py-1.5 sm:py-2 rounded-full font-semibold transition-all duration-300 text-xs sm:text-sm ${
                       selectedPosition === position
-                        ? 'bg-gradient-to-r from-green-600 to-emerald-500 text-white shadow-lg'
+                        ? 'bg-gradient-to-r from-gray-700 to-gray-600 text-white shadow-lg'
                         : `${currentTheme.statBg} ${currentTheme.textMuted} ${currentTheme.buttonHover}`
                     }`}
                   >
@@ -376,7 +379,7 @@ export default function ElectionResults() {
             </div>
           )}
 
-          {/* Results Display - COMES FIRST */}
+          {/* Results Display */}
           {!hasResults ? (
             <div data-aos="fade-up" className="text-center py-12">
               <div className={`${currentTheme.cardBg} rounded-2xl p-8 border ${currentTheme.cardBorder}`}>
@@ -393,7 +396,6 @@ export default function ElectionResults() {
             Object.entries(filteredResults).map(([position, candidates], idx) => (
               <div key={position} data-aos="fade-up" data-aos-delay={200 + idx * 100} className="mb-10 sm:mb-12">
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
-                  <FaTrophy className="text-2xl sm:text-3xl text-yellow-400" />
                   <h2 className={`text-xl sm:text-2xl font-bold ${currentTheme.textPrimary}`}>{position}</h2>
                   <div className="flex-1 h-px bg-gradient-to-r from-white/20 to-transparent"></div>
                   <span className={`${currentTheme.textLight} text-xs sm:text-sm`}>{candidates.length} candidates</span>
@@ -419,16 +421,6 @@ export default function ElectionResults() {
                       >
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                           <div className="flex items-center gap-3 sm:gap-4 flex-1">
-                            {/* Ranking Badge */}
-                            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-bold text-base sm:text-lg flex-shrink-0 ${
-                              index === 0 ? 'bg-yellow-400 text-gray-900' :
-                              index === 1 ? 'bg-gray-400 text-gray-900' :
-                              index === 2 ? 'bg-amber-600 text-white' :
-                              'bg-white/20 text-white'
-                            }`}>
-                              {index === 0 ? <FaTrophy className="text-sm sm:text-base" /> : index === 1 ? <FaMedal className="text-sm sm:text-base" /> : index + 1}
-                            </div>
-
                             {/* Candidate Image */}
                             <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden bg-gray-700 flex-shrink-0">
                               {candidate.image_url ? (
@@ -451,7 +443,7 @@ export default function ElectionResults() {
                               <div className="flex flex-wrap items-center gap-2">
                                 <h3 className={`text-base sm:text-xl font-semibold ${currentTheme.textPrimary} truncate`}>{candidate.name}</h3>
                                 {isWinner && (
-                                  <span className="px-2 py-0.5 sm:py-1 bg-yellow-400/20 text-yellow-300 text-[10px] sm:text-xs rounded-full flex items-center gap-1 whitespace-nowrap">
+                                  <span className="px-2 py-0.5 sm:py-1 bg-gray-600 text-white text-[10px] sm:text-xs rounded-full flex items-center gap-1 whitespace-nowrap">
                                     <FaCheckCircle className="text-[8px] sm:text-xs" />
                                     Winner
                                   </span>
@@ -499,49 +491,53 @@ export default function ElectionResults() {
             ))
           )}
 
-           {/* Toggle Statistics Button */}
-            <button
-              onClick={toggleStatistics}
-              className={`flex items-center gap-2 px-4 py-2 ${currentTheme.toggleButton} rounded-lg ${currentTheme.textPrimary} transition-all duration-300 hover:scale-105 text-sm sm:text-base`}
-            >
-              {showStatistics ? (
-                <>
-                  <FaEyeSlash />
-                  Hide Statistics Summary
-                </>
-              ) : (
-                <>
-                  <FaEye />
-                  Show Statistics Summary
-                </>
-              )}
-            </button>
+          {/* Toggle Statistics Button */}
+          {hasResults && (
+            <div className="flex justify-center mb-6">
+              <button
+                onClick={toggleStatistics}
+                className={`flex items-center gap-2 px-4 py-2 ${currentTheme.toggleButton} rounded-lg ${currentTheme.textPrimary} transition-all duration-300 hover:scale-105 text-sm sm:text-base`}
+              >
+                {showStatistics ? (
+                  <>
+                    <FaEyeSlash className={getIconColor()} />
+                    Hide Statistics Summary
+                  </>
+                ) : (
+                  <>
+                    <FaEye className={getIconColor()} />
+                    Show Statistics Summary
+                  </>
+                )}
+              </button>
+            </div>
+          )}
 
-          {/* ========== STATISTICS SUMMARY - OPTIONAL TOGGLE ========== */}
+          {/* Statistics Summary - Optional Toggle */}
           {showStatistics && hasResults && (
             <div data-aos="fade-up" data-aos-delay="300" className="mt-10 sm:mt-12">
               <div className="text-center mb-6">
                 <div className="flex items-center justify-center gap-3 mb-2">
-                  <FaChartLine className="text-2xl text-green-400" />
+                  <FaChartLine className={`text-2xl ${getIconColor()}`} />
                   <h2 className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary}`}>
                     Election Statistics Summary
                   </h2>
                 </div>
-                <div className="w-20 h-1 bg-gradient-to-r from-green-500 to-emerald-500 mx-auto rounded-full"></div>
+                <div className="w-20 h-1 bg-gradient-to-r from-gray-500 to-gray-400 mx-auto rounded-full"></div>
                 <p className={`${currentTheme.textLight} text-xs mt-2`}>
                   Click the "Hide Statistics" button above to collapse this section
                 </p>
               </div>
 
               {/* Statistics Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
                 <div data-aos="fade-up" data-aos-delay="350" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder} transition-all duration-300 hover:scale-105`}>
                   <div className="flex items-center justify-between">
                     <div>
                       <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Total Votes Cast</p>
                       <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVotes.toLocaleString()}</p>
                     </div>
-                    <FaVoteYea className="text-3xl sm:text-4xl text-green-400" />
+                    <FaVoteYea className={`text-3xl sm:text-4xl ${getIconColor()}`} />
                   </div>
                 </div>
 
@@ -551,11 +547,9 @@ export default function ElectionResults() {
                       <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Registered Voters</p>
                       <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVoters.toLocaleString()}</p>
                     </div>
-                    <FaUsers className="text-3xl sm:text-4xl text-blue-400" />
+                    <FaUsers className={`text-3xl sm:text-4xl ${getIconColor()}`} />
                   </div>
                 </div>
-
-               
 
                 <div data-aos="fade-up" data-aos-delay="500" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder} transition-all duration-300 hover:scale-105`}>
                   <div className="flex items-center justify-between">
@@ -563,7 +557,7 @@ export default function ElectionResults() {
                       <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Voter Turnout</p>
                       <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{getVoterTurnout()}%</p>
                     </div>
-                    <FaPercentage className="text-3xl sm:text-4xl text-yellow-400" />
+                    <FaPercentage className={`text-3xl sm:text-4xl ${getIconColor()}`} />
                   </div>
                 </div>
               </div>
@@ -574,7 +568,7 @@ export default function ElectionResults() {
           <div data-aos="fade-up" className="mt-6 sm:mt-8 text-center">
             <div className={`${currentTheme.cardBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
               <div className="flex items-center justify-center gap-2 mb-2">
-                <FaShieldAlt className="text-green-400 text-sm sm:text-base" />
+                <FaShieldAlt className={`text-sm sm:text-base ${getIconColor()}`} />
                 <p className={`${currentTheme.textLight} text-xs sm:text-sm`}>
                   These results are final and certified by the Electoral Commission of Regent University.
                 </p>
@@ -582,7 +576,7 @@ export default function ElectionResults() {
               <p className={`${currentTheme.textLight} text-xs sm:text-sm`}>
                 Last updated: {lastUpdated?.toLocaleTimeString() || 'Just now'}
                 {isVotingActive && (
-                  <span className="block mt-2 text-green-400 text-[10px] sm:text-xs animate-pulse">
+                  <span className="block mt-2 text-gray-400 text-[10px] sm:text-xs animate-pulse">
                     Live updates are active
                   </span>
                 )}

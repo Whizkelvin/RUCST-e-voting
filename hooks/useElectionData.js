@@ -211,10 +211,10 @@ export const useElectionData = () => {
           totalVoters = count || 0;
         }
       } catch (err) {
-        // Silently handle error
+       
       }
       
-      // 5. Fetch total votes
+     
       let totalVotes = 0;
       try {
         const { count, error: votesError } = await supabase
@@ -225,10 +225,10 @@ export const useElectionData = () => {
           totalVotes = count || 0;
         }
       } catch (err) {
-        // Silently handle error
+        
       }
       
-      // 6. Fetch unique voters who have voted
+     
       let totalVotersWhoVoted = 0;
       try {
         const { data: uniqueVoters, error: uniqueError } = await supabase
@@ -241,10 +241,10 @@ export const useElectionData = () => {
           totalVotersWhoVoted = uniqueVoterIds.length;
         }
       } catch (err) {
-        // Silently handle error
+        
       }
       
-      // Calculate participation rate
+      
       const participationRate = totalVoters > 0 
         ? (totalVotersWhoVoted / totalVoters) * 100 
         : 0;
@@ -257,7 +257,7 @@ export const useElectionData = () => {
         remainingVoters: Math.max(0, totalVoters - totalVotersWhoVoted)
       });
       
-      // 7. Create voting progress from candidates grouped by position
+      
       let progressData = [];
       
       if (Object.keys(candidatesByPosition).length > 0) {

@@ -19,8 +19,8 @@ const votingSteps = [
     title: "Login with School Credentials",
     description: "Access the system using your official Regent University email and Student ID.",
     icon: <FaEnvelope />,
-    accent: "from-rose-500 to-red-700",
-    dot: "bg-rose-500",
+    accent: "from-gray-600 to-gray-700",
+    dot: "bg-gray-500",
     requirements: ["@regent.edu.gh email", "Valid Student ID"],
   },
   {
@@ -28,8 +28,8 @@ const votingSteps = [
     title: "Email Verification",
     description: "A One-Time Password (OTP) is sent to your school email to confirm identity.",
     icon: <FaKey />,
-    accent: "from-violet-500 to-purple-700",
-    dot: "bg-violet-500",
+    accent: "from-gray-600 to-gray-700",
+    dot: "bg-gray-500",
     requirements: ["OTP valid for 10 minutes", "Single-use code"],
   },
   {
@@ -37,8 +37,8 @@ const votingSteps = [
     title: "Select Candidates",
     description: "Carefully choose one candidate per position before proceeding.",
     icon: <FaVoteYea />,
-    accent: "from-emerald-500 to-teal-700",
-    dot: "bg-emerald-500",
+    accent: "from-gray-600 to-gray-700",
+    dot: "bg-gray-500",
     requirements: ["One candidate per position", "Review before submit"],
   },
   {
@@ -46,8 +46,8 @@ const votingSteps = [
     title: "Submit Vote",
     description: "Confirm and securely submit your vote. This action is final.",
     icon: <FaFileSignature />,
-    accent: "from-amber-500 to-orange-700",
-    dot: "bg-amber-500",
+    accent: "from-gray-600 to-gray-700",
+    dot: "bg-gray-500",
     requirements: ["Final confirmation", "No edits allowed"],
   },
   {
@@ -55,8 +55,8 @@ const votingSteps = [
     title: "View Results",
     description: "Election results are published after the voting period ends.",
     icon: <FaFlagCheckered />,
-    accent: "from-sky-500 to-blue-700",
-    dot: "bg-sky-500",
+    accent: "from-gray-600 to-gray-700",
+    dot: "bg-gray-500",
     requirements: ["End of voting", "Public announcement"],
   },
 ];
@@ -65,6 +65,11 @@ const VoteProcess = () => {
   const router = useRouter();
   const [theme, setTheme] = useState('dark');
   const [mounted, setMounted] = useState(false);
+
+  // Get icon color based on theme
+  const getIconColor = () => {
+    return theme === 'light' ? 'text-gray-700' : 'text-gray-300';
+  };
 
   // Initialize AOS
   useEffect(() => {
@@ -92,28 +97,28 @@ const VoteProcess = () => {
     toast.success(`${newTheme === 'dark' ? 'Dark' : 'Light'} mode activated`);
   };
 
-  // Theme styles
+  // Theme styles - Grayscale
   const themeStyles = {
     dark: {
-      background: 'from-slate-900 via-slate-800 to-slate-900',
-      cardBg: 'bg-white/4',
-      cardBorder: 'border-white/8',
-      cardHoverBorder: 'hover:border-white/15',
+      background: 'from-gray-900 via-gray-800 to-gray-900',
+      cardBg: 'bg-white/5',
+      cardBorder: 'border-white/10',
+      cardHoverBorder: 'hover:border-white/20',
       textPrimary: 'text-white',
-      textSecondary: 'text-white/50',
-      textMuted: 'text-white/45',
-      textLight: 'text-white/70',
-      badgeBg: 'bg-white/4',
+      textSecondary: 'text-gray-300',
+      textMuted: 'text-gray-400',
+      textLight: 'text-gray-300',
+      badgeBg: 'bg-white/5',
       badgeBorder: 'border-white/10',
-      requirementBg: 'bg-white/3',
-      requirementBorder: 'border-white/6',
-      ctaBg: 'bg-white/4',
-      ctaBorder: 'border-white/8',
-      buttonPrimary: 'from-emerald-600 to-teal-600',
-      buttonPrimaryHover: 'hover:from-emerald-500 hover:to-teal-500',
+      requirementBg: 'bg-white/5',
+      requirementBorder: 'border-white/10',
+      ctaBg: 'bg-white/5',
+      ctaBorder: 'border-white/10',
+      buttonPrimary: 'from-gray-700 to-gray-600',
+      buttonPrimaryHover: 'hover:from-gray-600 hover:to-gray-500',
       buttonSecondary: 'bg-white/5 hover:bg-white/10',
       buttonSecondaryBorder: 'border-white/10 hover:border-white/20',
-      glow: 'from-rose-600/6 via-transparent to-emerald-600/6',
+      glow: 'from-gray-600/6 via-transparent to-gray-600/6',
     },
     light: {
       background: 'from-gray-50 via-white to-gray-100',
@@ -121,7 +126,7 @@ const VoteProcess = () => {
       cardBorder: 'border-gray-200',
       cardHoverBorder: 'hover:border-gray-300',
       textPrimary: 'text-gray-900',
-      textSecondary: 'text-gray-500',
+      textSecondary: 'text-gray-600',
       textMuted: 'text-gray-500',
       textLight: 'text-gray-600',
       badgeBg: 'bg-gray-100',
@@ -130,11 +135,11 @@ const VoteProcess = () => {
       requirementBorder: 'border-gray-200',
       ctaBg: 'bg-white',
       ctaBorder: 'border-gray-200',
-      buttonPrimary: 'from-emerald-600 to-teal-600',
-      buttonPrimaryHover: 'hover:from-emerald-500 hover:to-teal-500',
+      buttonPrimary: 'from-gray-700 to-gray-600',
+      buttonPrimaryHover: 'hover:from-gray-600 hover:to-gray-500',
       buttonSecondary: 'bg-gray-100 hover:bg-gray-200',
       buttonSecondaryBorder: 'border-gray-200 hover:border-gray-300',
-      glow: 'from-emerald-600/6 via-transparent to-teal-600/6',
+      glow: 'from-gray-600/6 via-transparent to-gray-600/6',
     }
   };
 
@@ -169,13 +174,13 @@ const VoteProcess = () => {
         )}
       </button>
 
-      {/* Background blobs */}
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-emerald-600/8 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-40 right-1/4 w-80 h-80 bg-rose-600/8 rounded-full blur-3xl pointer-events-none" />
+      {/* Background blobs - Grayscale */}
+      <div className="absolute top-0 left-1/4 w-96 h-96 bg-gray-600/8 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-40 right-1/4 w-80 h-80 bg-gray-500/8 rounded-full blur-3xl pointer-events-none" />
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
 
-        {/* ── HEADER ── */}
+        {/* HEADER */}
         <div 
           data-aos="fade-down" 
           data-aos-duration="1000"
@@ -186,9 +191,9 @@ const VoteProcess = () => {
             data-aos-delay="100"
             className={`inline-flex items-center gap-2.5 ${currentTheme.badgeBg} border ${currentTheme.badgeBorder} ${currentTheme.textLight} px-4 sm:px-5 py-2 rounded-full text-xs font-semibold uppercase tracking-widest mb-6`}
           >
-            <GiStairsGoal className="text-emerald-400" />
+            <GiStairsGoal className={getIconColor()} />
             Secure Voting Process
-            <FaLock className="text-rose-400 text-[10px]" />
+            <FaLock className="text-gray-500 text-[10px]" />
           </div>
 
           <h2 
@@ -197,7 +202,7 @@ const VoteProcess = () => {
             className={`text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold ${currentTheme.textPrimary} tracking-tight leading-tight`}
           >
             How{" "}
-            <span className="bg-gradient-to-r from-rose-400 to-emerald-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-gray-500 to-gray-400 bg-clip-text text-transparent">
               Voting
             </span>{" "}
             Works
@@ -217,17 +222,17 @@ const VoteProcess = () => {
             data-aos-delay="400"
             className="mt-6 sm:mt-7 flex flex-wrap justify-center gap-3 sm:gap-5"
           >
-            <div className="flex items-center gap-2 text-emerald-400 text-xs sm:text-sm">
+            <div className={`flex items-center gap-2 text-xs sm:text-sm ${getIconColor()}`}>
               <FaShieldAlt /> End-to-End Encryption
             </div>
             <div className={`w-px h-4 ${currentTheme.textMuted} self-center hidden sm:block`} />
-            <div className="flex items-center gap-2 text-rose-400 text-xs sm:text-sm">
+            <div className={`flex items-center gap-2 text-xs sm:text-sm ${getIconColor()}`}>
               <FaLock /> Secure Authentication
             </div>
           </div>
         </div>
 
-        {/* ── TIMELINE ── */}
+        {/* TIMELINE */}
         <div className="relative">
 
           {/* Centre line - hidden on mobile */}
@@ -244,7 +249,7 @@ const VoteProcess = () => {
                   data-aos-duration="800"
                   className={`relative flex flex-col items-center gap-6 lg:gap-0 lg:flex-row ${isRight ? "" : "lg:flex-row-reverse"}`}
                 >
-                  {/* ── Card side ── */}
+                  {/* Card side */}
                   <div className={`w-full lg:w-5/12 ${isRight ? "lg:pr-12" : "lg:pl-12"}`}>
                     <div 
                       data-aos="zoom-in"
@@ -271,7 +276,7 @@ const VoteProcess = () => {
                       {/* Requirements */}
                       <div className={`${currentTheme.requirementBg} border ${currentTheme.requirementBorder} rounded-xl p-3 sm:p-4`}>
                         <p className={`text-xs font-semibold uppercase tracking-widest ${currentTheme.textMuted} mb-2 sm:mb-3 flex items-center gap-2`}>
-                          <FaCheckCircle className="text-emerald-500" /> Requirements
+                          <FaCheckCircle className={getIconColor()} /> Requirements
                         </p>
                         <ul className="space-y-1.5 sm:space-y-2">
                           {step.requirements.map((req, i) => (
@@ -290,18 +295,18 @@ const VoteProcess = () => {
                     </div>
                   </div>
 
-                  {/* ── Centre node ── */}
+                  {/* Centre node */}
                   <div className="z-10 shrink-0 relative lg:absolute lg:left-1/2 lg:-translate-x-1/2">
                     <div 
                       data-aos="zoom-in"
                       data-aos-delay={index * 100}
-                      className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br ${step.accent} text-white flex items-center justify-center text-lg sm:text-xl font-bold shadow-2xl border-4 ${theme === 'dark' ? 'border-slate-900' : 'border-white'} ring-2 ring-white/10 transition-all duration-300 hover:scale-110`}
+                      className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br ${step.accent} text-white flex items-center justify-center text-lg sm:text-xl font-bold shadow-2xl border-4 ${theme === 'dark' ? 'border-gray-900' : 'border-white'} ring-2 ring-white/10 transition-all duration-300 hover:scale-110`}
                     >
                       {step.step}
                     </div>
                   </div>
 
-                  {/* ── Empty side (spacer) ── */}
+                  {/* Empty side (spacer) */}
                   <div className="hidden lg:block lg:w-5/12" />
                 </div>
               );
@@ -309,7 +314,7 @@ const VoteProcess = () => {
           </div>
         </div>
 
-        {/* ── CTA ── */}
+        {/* CTA */}
         <div 
           data-aos="fade-up"
           data-aos-duration="1000"
@@ -328,7 +333,7 @@ const VoteProcess = () => {
               className={`relative text-2xl sm:text-3xl lg:text-4xl font-bold ${currentTheme.textPrimary} tracking-tight mb-3 sm:mb-4`}
             >
               Ready to{" "}
-              <span className="bg-gradient-to-r from-rose-400 to-emerald-400 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-gray-500 to-gray-400 bg-clip-text text-transparent">
                 Cast Your Vote?
               </span>
             </h3>
@@ -348,7 +353,7 @@ const VoteProcess = () => {
             >
               <button
                 onClick={() => router.push("/login")}
-                className={`group relative overflow-hidden inline-flex items-center justify-center gap-2 bg-gradient-to-r ${currentTheme.buttonPrimary} ${currentTheme.buttonPrimaryHover} text-white px-6 sm:px-8 lg:px-10 py-3 sm:py-4 rounded-xl font-semibold shadow-lg shadow-emerald-600/20 hover:shadow-emerald-500/30 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 text-sm sm:text-base`}
+                className={`group relative overflow-hidden inline-flex items-center justify-center gap-2 bg-gradient-to-r ${currentTheme.buttonPrimary} ${currentTheme.buttonPrimaryHover} text-white px-6 sm:px-8 lg:px-10 py-3 sm:py-4 rounded-xl font-semibold shadow-lg shadow-gray-600/20 hover:shadow-gray-500/30 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 text-sm sm:text-base`}
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
                 <FaVoteYea />
@@ -372,26 +377,26 @@ const VoteProcess = () => {
             >
               <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>
                 Need assistance? Contact{" "}
-                <a href="mailto:support@regent.edu.gh" className="text-emerald-400 hover:text-emerald-300 font-medium transition-colors">
+                <a href="mailto:support@regent.edu.gh" className="text-gray-400 hover:text-gray-300 font-medium transition-colors">
                   support@regent.edu.gh
                 </a>
                 {" "}or call{" "}
-                <span className="text-rose-400 font-medium">+233 30 123 4567</span>
+                <span className="text-gray-500 font-medium">+233 30 123 4567</span>
               </p>
             </div>
           </div>
         </div>
 
-        {/* ── SECURITY BADGES ── */}
+        {/* SECURITY BADGES */}
         <div 
           data-aos="fade-up"
           data-aos-delay="500"
           className="mt-10 sm:mt-14 flex flex-wrap justify-center items-center gap-4 sm:gap-6"
         >
           {[
-            { icon: <FaLock className="text-emerald-500" />, label: "256-bit SSL Encryption" },
-            { icon: <FaShieldAlt className="text-rose-400" />, label: "GDPR Compliant" },
-            { icon: <FaCheckCircle className="text-emerald-500" />, label: "ISO 27001 Certified" },
+            { icon: <FaLock className={getIconColor()} />, label: "256-bit SSL Encryption" },
+            { icon: <FaShieldAlt className={getIconColor()} />, label: "GDPR Compliant" },
+            { icon: <FaCheckCircle className={getIconColor()} />, label: "ISO 27001 Certified" },
           ].map(({ icon, label }, i, arr) => (
             <React.Fragment key={label}>
               <div 
