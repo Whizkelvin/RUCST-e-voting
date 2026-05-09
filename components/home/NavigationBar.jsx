@@ -35,7 +35,7 @@ const NavigationBar = ({ isVotingActive, isMobileMenuOpen, setIsMobileMenuOpen, 
     { name: 'How to Vote', href: '/how-to-vote', icon: GiStairsGoal, mobileOnly: false },
     { name: 'Elections', href: '#elections', icon: GiVote, mobileOnly: false, isAnchor: true },
     { name: 'Become a Candidate', href: '/candidate-nomination', icon: FaUserPlus, mobileOnly: false },
-    { name: 'Candidate only', href: '#progress', icon: GiChart, mobileOnly: false, isAnchor: true },
+    
   ];
 
   const closeMobileMenu = () => {

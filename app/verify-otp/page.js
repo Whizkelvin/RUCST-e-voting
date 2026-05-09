@@ -43,12 +43,22 @@ export default function VerifyOTP() {
     document.documentElement.setAttribute('data-theme', savedTheme); 
   }, []);
   
-  const toggleTheme = () => { 
-    const newTheme = theme === 'dark' ? 'light' : 'dark'; 
-    setTheme(newTheme); 
-    localStorage.setItem('theme', newTheme); 
-    document.documentElement.setAttribute('data-theme', newTheme); 
-  };
+const toggleTheme = () => {
+  const newTheme = theme === 'dark' ? 'light' : 'dark';
+
+  // Save scroll position
+  const scrollY = window.scrollY;
+
+  setTheme(newTheme);
+  localStorage.setItem('theme', newTheme);
+  document.documentElement.setAttribute('data-theme', newTheme);
+
+  requestAnimationFrame(() => {
+    document.body.style.overflowY = 'auto';
+    window.scrollTo(0, scrollY);
+    window.dispatchEvent(new Event('resize'));
+  });
+};
   
   const themeStyles = useMemo(() => ({
     dark: { 
@@ -676,10 +686,10 @@ export default function VerifyOTP() {
         {theme === 'dark' ? <FaSun className="text-yellow-400 text-xl" /> : <FaMoon className="text-gray-700 text-xl" />}
       </button>
       
-      <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} flex items-center justify-center p-4 relative overflow-hidden transition-all duration-300`}>
+      <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} flex justify-center py-10 px-4 relative overflow-x-hidden overflow-y-auto transition-all duration-300`}>
         
         {/* Animated Background - Grayscale */}
-        <div className="absolute inset-0 overflow-hidden">
+       <div className="absolute inset-0 overflow-x-hidden">
           <div className={`absolute -top-40 -right-32 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse ${theme === 'dark' ? 'bg-gray-600' : 'bg-gray-400'}`}></div>
           <div className={`absolute -bottom-40 -left-32 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse ${theme === 'dark' ? 'bg-gray-500' : 'bg-gray-300'}`}></div>
           <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'}`}></div>

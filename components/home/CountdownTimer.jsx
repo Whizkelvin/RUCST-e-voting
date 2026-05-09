@@ -1,9 +1,9 @@
 'use client';
 
-import { FaPlayCircle, FaClock, FaCalendarAlt } from 'react-icons/fa';
+import { FaPlayCircle, FaClock, FaCalendarAlt, FaStopCircle, FaBan } from 'react-icons/fa';
 import { useEffect, useState, useCallback } from 'react';
 
-const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn, totalStats, loading, theme }) => {
+const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn, totalStats, loading, theme, isVotingStopped = false }) => {
   const [localTimeLeft, setLocalTimeLeft] = useState(timeLeft);
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -28,6 +28,17 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
 
   // Function to calculate time left based on voting period
   const calculateTimeLeft = useCallback(() => {
+    // If voting is manually stopped, return stopped status
+    if (isVotingStopped) {
+      return {
+        days: 0,
+        hours: 0,
+        minutes: 0,
+        seconds: 0,
+        status: 'Voting has been stopped by the Electoral Commission'
+      };
+    }
+
     if (!votingPeriod || !votingPeriod.start_time || !votingPeriod.end_time) {
       return {
         days: 0,
@@ -93,21 +104,31 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
         status: 'Voting has ended'
       };
     }
-  }, [votingPeriod]);
+  }, [votingPeriod, isVotingStopped]);
 
   // Update local time left when props change
   useEffect(() => {
-    if (timeLeft && timeLeft.status) {
+    if (isVotingStopped) {
+      setLocalTimeLeft({
+        days: 0,
+        hours: 0,
+        minutes: 0,
+        seconds: 0,
+        status: 'Voting has been stopped by the Electoral Commission'
+      });
+    } else if (timeLeft && timeLeft.status) {
       setLocalTimeLeft(timeLeft);
     } else if (votingPeriod) {
-      // If timeLeft is empty but we have votingPeriod, calculate it
       const calculated = calculateTimeLeft();
       setLocalTimeLeft(calculated);
     }
-  }, [timeLeft, votingPeriod, calculateTimeLeft]);
+  }, [timeLeft, votingPeriod, calculateTimeLeft, isVotingStopped]);
 
   // Real-time countdown timer
   useEffect(() => {
+    // Don't run timer if voting is stopped
+    if (isVotingStopped) return;
+    
     // Only start the timer if voting is active or hasn't started yet
     if (!votingPeriod || !votingPeriod.start_time || !votingPeriod.end_time) {
       return;
@@ -127,7 +148,7 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
 
       return () => clearInterval(timer);
     }
-  }, [votingPeriod, calculateTimeLeft]);
+  }, [votingPeriod, calculateTimeLeft, isVotingStopped]);
 
   // Helper to safely get time values
   const getTimeValue = (value, defaultValue = 0) => {
@@ -139,6 +160,10 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
 
   // Determine voting status and message
   const getVotingStatus = () => {
+    if (isVotingStopped) {
+      return "Voting has been stopped by the Electoral Commission";
+    }
+    
     if (!votingPeriod || !votingPeriod.start_time || !votingPeriod.end_time) {
       return "Voting schedule not configured";
     }
@@ -165,18 +190,46 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
      localTimeLeft.status !== undefined);
 
   // Determine if we should show the countdown
-  const shouldShowCountdown = localTimeLeft && 
+  const shouldShowCountdown = !isVotingStopped && localTimeLeft && 
     (localTimeLeft.status === 'Voting Active' || 
      (localTimeLeft.status && localTimeLeft.status.includes('starts in')));
 
-  // Dynamic gradient based on voting status (Black & White)
+  // Dynamic gradient based on voting status
   const getBackgroundGradient = () => {
-    if (isVotingActive) {
-      return "bg-gradient-to-r from-green-800 via-green-700 to-green-800";
-    } else if (votingStartsIn) {
-      return "bg-gradient-to-r from-green-900 via-green-800 to-green-900";
-    } else {
+    if (isVotingStopped) {
+      return "bg-gradient-to-r from-red-950 via-red-900 to-red-950";
+    } else if (isVotingActive) {
       return "bg-gradient-to-r from-green-950 via-green-900 to-green-950";
+    } else if (votingStartsIn) {
+      return "bg-gradient-to-r from-gray-800 via-gray-700 to-gray-800";
+    } else {
+      return "bg-gradient-to-r from-red-950 via-red-900 to-red-950";
+    }
+  };
+
+  // Get icon based on status
+  const getStatusIcon = () => {
+    if (isVotingStopped) {
+      return <FaBan className="w-8 h-8 text-red-400 animate-pulse" />;
+    } else if (isVotingActive) {
+      return <FaPlayCircle className="w-8 h-8 text-gray-300 animate-pulse" />;
+    } else if (votingStartsIn) {
+      return <FaClock className="w-8 h-8 text-gray-400 animate-pulse" />;
+    } else {
+      return <FaStopCircle className="w-8 h-8 text-gray-500" />;
+    }
+  };
+
+  // Get title based on status
+  const getTitle = () => {
+    if (isVotingStopped) {
+      return "Voting Stopped";
+    } else if (isVotingActive) {
+      return "Live Voting";
+    } else if (votingStartsIn) {
+      return "Upcoming Election";
+    } else {
+      return "Election Results";
     }
   };
 
@@ -186,21 +239,15 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between">
             <div className="flex items-center space-x-4 mb-4 md:mb-0">
-              {isVotingActive ? (
-                <FaPlayCircle className="w-8 h-8 text-gray-300 animate-pulse" />
-              ) : votingStartsIn ? (
-                <FaClock className="w-8 h-8 text-gray-400 animate-pulse" />
-              ) : (
-                <div></div>
-              )}
+              {getStatusIcon()}
               <div>
                 <h3 className="text-2xl font-bold font-display">
-                  {isVotingActive ? "Live Voting" : votingStartsIn ? "⏳ Upcoming Election" : " Election Results"}
+                  {getTitle()}
                 </h3>
-                <p className={`font-medium text-gray-300`}>
+                <p className={`font-medium ${isVotingStopped ? 'text-red-300' : 'text-gray-300'}`}>
                   {hasValidTimeData ? localTimeLeft.status : votingStatus}
                 </p>
-                {votingPeriod && (votingPeriod.start_time || votingPeriod.end_time) && (
+                {votingPeriod && (votingPeriod.start_time || votingPeriod.end_time) && !isVotingStopped && (
                   <p className="text-gray-400 text-sm mt-1">
                     <FaCalendarAlt className="inline w-3 h-3 mr-1" />
                     {votingPeriod.start_time && formatDate(votingPeriod.start_time)} 
@@ -244,8 +291,28 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
               </div>
             )}
 
+            {/* Display when voting has been stopped */}
+            {isVotingStopped && (
+              <div className="text-center mt-4 md:mt-0">
+                <div className="text-2xl sm:text-3xl font-bold bg-red-500/20 backdrop-blur-sm rounded-lg px-6 py-4 font-display text-red-300">
+                  Voting Process Stopped
+                </div>
+                <p className="text-red-300 text-sm mt-2">The Electoral Commission has halted voting. Please contact admin for more information.</p>
+              </div>
+            )}
+
+            {/* Display when voting has ended naturally */}
+            {!isVotingStopped && (localTimeLeft?.status === 'Voting has ended' || (!isVotingActive && !votingStartsIn && hasValidTimeData && !shouldShowCountdown)) && (
+              <div className="text-center mt-4 md:mt-0">
+                <div className="text-2xl sm:text-3xl font-bold bg-white/5 backdrop-blur-sm rounded-lg px-6 py-4 font-display text-gray-300">
+                  Voting Period Ended
+                </div>
+                <p className="text-gray-400 text-sm mt-2">Results are being finalized</p>
+              </div>
+            )}
+
             {/* Display when no valid time data is available */}
-            {!hasValidTimeData && !shouldShowCountdown && (
+            {!hasValidTimeData && !shouldShowCountdown && !isVotingStopped && (
               <div className="text-center mt-4 md:mt-0">
                 <div className="text-xl sm:text-2xl font-bold bg-white/10 backdrop-blur-sm rounded-lg px-6 py-4 font-display text-gray-200">
                   <FaClock className="inline w-6 h-6 mr-2" />
@@ -253,35 +320,38 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
                 </div>
               </div>
             )}
-
-            {/* Display when voting has ended */}
-            {(localTimeLeft?.status === 'Voting has ended' || (!isVotingActive && !votingStartsIn && hasValidTimeData && !shouldShowCountdown)) && (
-              <div className="text-center mt-4 md:mt-0">
-                <div className="text-2xl sm:text-3xl font-bold bg-white/5 backdrop-blur-sm rounded-lg px-6 py-4 font-display text-gray-300">
-                   Voting Period Ended
-                </div>
-                <p className="text-gray-400 text-sm mt-2">Results are being finalized</p>
-              </div>
-            )}
           </div>
           
-          {/* Voting Progress Section */}
-          <div className="mt-6">
-            <div className="flex justify-between text-sm text-gray-300 mb-2">
-              <span>Voting Progress</span>
-              <span className="font-bold text-gray-200">{loading ? '...' : `${(totalStats?.participationRate || 0).toFixed(1)}%`}</span>
+          {/* Voting Progress Section - Hide if voting is stopped */}
+          {!isVotingStopped && (
+            <div className="mt-6">
+              <div className="flex justify-between text-sm text-gray-300 mb-2">
+                <span>Voting Progress</span>
+                <span className="font-bold text-gray-200">{loading ? '...' : `${(totalStats?.participationRate || 0).toFixed(1)}%`}</span>
+              </div>
+              <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden">
+                <div 
+                  className="h-3 rounded-full transition-all duration-1000 shadow-inner bg-gradient-to-r from-gray-400 to-gray-500"
+                  style={{ width: loading ? '0%' : `${Math.min(100, totalStats?.participationRate || 0)}%` }}
+                ></div>
+              </div>
+              <div className="flex justify-between text-xs text-gray-400 mt-2">
+                <span>{loading ? '...' : `${(totalStats?.totalVotersWhoVoted || 0).toLocaleString()} voters have completed voting`}</span>
+                <span>{loading ? '...' : `${(totalStats?.remainingVoters || 0).toLocaleString()} voters yet to vote`}</span>
+              </div>
             </div>
-            <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden">
-              <div 
-                className="h-3 rounded-full transition-all duration-1000 shadow-inner bg-gradient-to-r from-gray-400 to-gray-500"
-                style={{ width: loading ? '0%' : `${Math.min(100, totalStats?.participationRate || 0)}%` }}
-              ></div>
+          )}
+
+          {/* Display message when voting is stopped - no progress bar */}
+          {isVotingStopped && (
+            <div className="mt-6 text-center">
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+                <p className="text-red-300 text-sm">
+                  Voting has been stopped. Please contact the Electoral Commission for assistance.
+                </p>
+              </div>
             </div>
-            <div className="flex justify-between text-xs text-gray-400 mt-2">
-              <span> {loading ? '...' : `${(totalStats?.totalVotersWhoVoted || 0).toLocaleString()} voters have completed voting`}</span>
-              <span> {loading ? '...' : `${(totalStats?.remainingVoters || 0).toLocaleString()} voters yet to vote`}</span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

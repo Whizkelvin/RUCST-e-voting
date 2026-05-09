@@ -36,7 +36,7 @@ export function AdminAuthProvider({ children }) {
     if (isAuthenticated) {
       // Set warning timer (9 minutes - show warning)
       warningTimerRef.current = setTimeout(() => {
-        toast.warning('⚠️ You will be logged out due to inactivity in 1 minute!', {
+        toast.warning('You will be logged out due to inactivity in 1 minute!', {
           position: "top-center",
           duration: 5000,
           closeButton: true,
@@ -131,6 +131,44 @@ export function AdminAuthProvider({ children }) {
     }
   }, [loginAttempts]);
 
+  // Refresh session - NEW METHOD
+  const refreshSession = useCallback(async () => {
+    const isAuthenticatedLocal = localStorage.getItem('is_authenticated') === 'true';
+    const userRole = localStorage.getItem('user_role');
+    const userEmail = localStorage.getItem('user_email');
+    const userDetails = localStorage.getItem('user_details');
+    
+    if (isAuthenticatedLocal && userRole && userEmail) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        // Check if session is valid
+        if (session) {
+          const roleData = userDetails ? JSON.parse(userDetails) : {};
+          setAdmin({
+            email: userEmail,
+            id: session.user.id,
+            role: userRole,
+            ...roleData
+          });
+          setIsAuthenticated(true);
+          localStorage.setItem('last_activity', Date.now().toString());
+          return true;
+        } else {
+          // Session expired, clear everything
+          clearSession();
+          setAdmin(null);
+          setIsAuthenticated(false);
+          return false;
+        }
+      } catch (error) {
+        console.error('Session refresh error:', error);
+        return false;
+      }
+    }
+    return false;
+  }, []);
+
   // Check for existing session on mount
   useEffect(() => {
     const checkExistingSession = async () => {
@@ -144,12 +182,7 @@ export function AdminAuthProvider({ children }) {
         const inactiveTime = Date.now() - parseInt(lastActivity);
         if (inactiveTime >= INACTIVITY_TIMEOUT) {
           // Session expired
-          localStorage.removeItem('is_authenticated');
-          localStorage.removeItem('user_role');
-          localStorage.removeItem('user_email');
-          localStorage.removeItem('user_id');
-          localStorage.removeItem('user_details');
-          localStorage.removeItem('last_activity');
+          clearSession();
           toast.info('Session expired. Please login again.');
           setLoading(false);
           return;
@@ -170,16 +203,37 @@ export function AdminAuthProvider({ children }) {
           });
           setIsAuthenticated(true);
           localStorage.setItem('last_activity', Date.now().toString());
+          
+          // Ensure cookies are set correctly
+          const maxAge = INACTIVITY_TIMEOUT / 1000;
+          document.cookie = `is_authenticated=true; path=/; max-age=${maxAge}; SameSite=Lax`;
+          document.cookie = `user_role=${userRole}; path=/; max-age=${maxAge}; SameSite=Lax`;
+          document.cookie = `user_email=${encodeURIComponent(userEmail)}; path=/; max-age=${maxAge}; SameSite=Lax`;
         } else {
           // Clear invalid session
           clearSession();
+          setAdmin(null);
+          setIsAuthenticated(false);
         }
       }
       setLoading(false);
     };
     
     checkExistingSession();
-  }, []);
+    
+    // NEW: Listen for storage events (in case session is set in another tab)
+    const handleStorageChange = (e) => {
+      if (e.key === 'is_authenticated' && e.newValue === 'true') {
+        refreshSession();
+      } else if (e.key === 'is_authenticated' && e.newValue === null) {
+        setAdmin(null);
+        setIsAuthenticated(false);
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [refreshSession]);
 
   const clearSession = () => {
     localStorage.removeItem('is_authenticated');
@@ -188,6 +242,13 @@ export function AdminAuthProvider({ children }) {
     localStorage.removeItem('user_id');
     localStorage.removeItem('user_details');
     localStorage.removeItem('last_activity');
+    
+    // Clear cookies
+    const cookieOptions = 'path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT';
+    document.cookie = `is_authenticated=; ${cookieOptions}`;
+    document.cookie = `user_role=; ${cookieOptions}`;
+    document.cookie = `user_email=; ${cookieOptions}`;
+    document.cookie = `user_id=; ${cookieOptions}`;
   };
 
   const fetchAdminProfile = async (user) => {
@@ -218,7 +279,7 @@ export function AdminAuthProvider({ children }) {
         localStorage.setItem('last_activity', Date.now().toString());
         
         // Set cookies for middleware
-        const maxAge = INACTIVITY_TIMEOUT / 1000; // 600 seconds
+        const maxAge = INACTIVITY_TIMEOUT / 1000;
         document.cookie = `is_authenticated=true; path=/; max-age=${maxAge}; SameSite=Lax`;
         document.cookie = `user_role=${adminData.role || 'admin'}; path=/; max-age=${maxAge}; SameSite=Lax`;
         document.cookie = `user_email=${encodeURIComponent(user.email)}; path=/; max-age=${maxAge}; SameSite=Lax`;
@@ -289,15 +350,8 @@ export function AdminAuthProvider({ children }) {
       setAdmin(null);
       setIsAuthenticated(false);
       
-      // Clear localStorage
+      // Clear localStorage and cookies
       clearSession();
-      
-      // Clear cookies
-      const cookieOptions = 'path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT';
-      document.cookie = `is_authenticated=; ${cookieOptions}`;
-      document.cookie = `user_role=; ${cookieOptions}`;
-      document.cookie = `user_email=; ${cookieOptions}`;
-      document.cookie = `user_id=; ${cookieOptions}`;
       
       router.push('/');
       toast.info('Logged out successfully');
@@ -323,6 +377,7 @@ export function AdminAuthProvider({ children }) {
     loading,
     login,
     logout,
+    refreshSession, // NEW: Expose refresh method
     loginAttempts,
     lockoutUntil,
     remainingLockoutTime: lockoutUntil ? Math.max(0, Math.ceil((new Date(lockoutUntil) - new Date()) / 60000)) : 0

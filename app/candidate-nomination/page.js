@@ -22,6 +22,8 @@ export default function CandidateNomination() {
   const [voterExists, setVoterExists] = useState(false);
   const [voterData, setVoterData] = useState(null);
   const [existingNomination, setExistingNomination] = useState(null);
+  const [theme, setTheme] = useState('dark');
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
 
   const {
@@ -38,6 +40,26 @@ export default function CandidateNomination() {
 
   const watchedSecretCode = watch('secretCode');
   const manifestoLength = watch('manifesto')?.length || 0;
+
+  // Theme management
+  useEffect(() => {
+    setMounted(true);
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    setTheme(savedTheme);
+    document.documentElement.setAttribute('data-theme', savedTheme);
+  }, []);
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
+  };
+
+  // Get icon color based on theme
+  const getIconColor = () => {
+    return theme === 'light' ? 'text-gray-700' : 'text-gray-300';
+  };
 
   useEffect(() => {
     AOS.init({ duration: 800, once: true });
@@ -78,7 +100,7 @@ export default function CandidateNomination() {
       setValue('position', code.position);
       if (code.department) setValue('department', code.department);
       if (code.year_of_study) setValue('yearOfStudy', code.year_of_study.toString());
-      toast.success('Secret code verified! Please complete your nomination details.');
+      toast.success('Secret code verified. Please complete your nomination details.');
       checkVoterExists(code.candidate_email);
     } catch (error) {
       toast.error('Error verifying code. Please try again.');
@@ -173,7 +195,7 @@ export default function CandidateNomination() {
         ip_address: ip, performed_by: formData.email.toLowerCase().trim()
       });
 
-      toast.success('Nomination submitted successfully! Your application will be reviewed by the Electoral Commission.');
+      toast.success('Nomination submitted successfully. Your application will be reviewed by the Electoral Commission.');
       setTimeout(() => router.push('/nomination-success'), 2000);
     } catch (error) {
       toast.error(error.message || 'Failed to submit nomination. Please try again.');
@@ -182,24 +204,75 @@ export default function CandidateNomination() {
     }
   };
 
-  // Input base classes
-  const inputBase = "w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-emerald-400/60 focus:border-emerald-400/50 focus:bg-white/8 transition-all duration-200 text-sm";
+  // Theme styles - Grayscale
+  const themeStyles = {
+    dark: {
+      background: 'from-gray-900 via-gray-800 to-gray-900',
+      cardBg: 'bg-white/6 backdrop-blur-2xl',
+      cardBorder: 'border-white/10',
+      textPrimary: 'text-white',
+      textSecondary: 'text-white/50',
+      textMuted: 'text-white/40',
+      inputBg: 'bg-white/5',
+      inputBorder: 'border-white/10',
+      inputFocus: 'focus:ring-gray-400 focus:border-gray-400/50',
+      placeholder: 'placeholder-white/30',
+      buttonPrimary: 'from-gray-700 to-gray-600 hover:from-gray-600 hover:to-gray-500',
+      verifiedBg: 'bg-gray-500/10 border-gray-400/30',
+      accentBar: 'from-gray-500 via-gray-400 to-gray-600',
+    },
+    light: {
+      background: 'from-gray-50 via-white to-gray-100',
+      cardBg: 'bg-white/80 backdrop-blur-2xl',
+      cardBorder: 'border-gray-200',
+      textPrimary: 'text-gray-900',
+      textSecondary: 'text-gray-600',
+      textMuted: 'text-gray-500',
+      inputBg: 'bg-white',
+      inputBorder: 'border-gray-300',
+      inputFocus: 'focus:ring-gray-500 focus:border-gray-500',
+      placeholder: 'placeholder-gray-400',
+      buttonPrimary: 'from-gray-700 to-gray-600 hover:from-gray-600 hover:to-gray-500',
+      verifiedBg: 'bg-gray-100 border-gray-300',
+      accentBar: 'from-gray-500 via-gray-400 to-gray-600',
+    }
+  };
+
+  const currentTheme = themeStyles[theme];
+
+  // Input classes based on theme
+  const inputBase = `w-full pl-10 pr-4 py-3 ${currentTheme.inputBg} border ${currentTheme.inputBorder} rounded-xl ${currentTheme.textPrimary} ${currentTheme.placeholder} focus:outline-none focus:ring-2 ${currentTheme.inputFocus} transition-all duration-200 text-sm`;
+
+  if (!mounted) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-950 via-teal-900 to-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} flex items-center justify-center p-4 relative overflow-hidden transition-all duration-300`}>
 
-      {/* Ambient blobs */}
-      <div className="absolute -top-28 -right-20 w-96 h-96 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-24 -left-16 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute top-1/2 left-1/4 w-64 h-64 bg-teal-400/8 rounded-full blur-3xl pointer-events-none" />
+      {/* Theme Toggle Button */}
+      <button
+        onClick={toggleTheme}
+        className="fixed top-4 right-4 z-50 p-3 rounded-full bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-110 transition-all duration-300"
+        aria-label="Toggle theme"
+      >
+        {theme === 'dark' ? (
+          <div>🌞</div>
+        ) : (
+          <div>🌙</div>
+        )}
+      </button>
+
+      {/* Ambient blobs - Grayscale */}
+      <div className="absolute -top-28 -right-20 w-96 h-96 bg-gray-500/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-24 -left-16 w-80 h-80 bg-gray-400/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/2 left-1/4 w-64 h-64 bg-gray-600/8 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative z-10 w-full max-w-xl" data-aos="fade-up">
 
         {/* Card */}
-        <div className="bg-white/6 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden">
+        <div className={`${currentTheme.cardBg} backdrop-blur-2xl border ${currentTheme.cardBorder} rounded-3xl shadow-2xl overflow-hidden`}>
 
-          {/* Top accent */}
-          <div className="h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400" />
+          {/* Top accent - Grayscale */}
+          <div className={`h-1 bg-gradient-to-r ${currentTheme.accentBar}`} />
 
           <div className="p-7 sm:p-8">
 
@@ -211,22 +284,27 @@ export default function CandidateNomination() {
                   width={56} height={56} alt="Logo"
                   className="object-contain rounded-lg"
                 />
+                <Image
+                  src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1774528110/Gemini_Generated_Image_57c2xl57c2xl57c2_ykckzf.png"
+                  width={56} height={56} alt="E-Voting Logo"
+                  className="object-contain rounded-lg"
+                />
               </div>
-              <h1 className="text-2xl font-bold text-white tracking-tight">Candidate Nomination</h1>
-              <p className="text-white/50 text-sm mt-1.5">Submit your candidacy for the upcoming election</p>
+              <h1 className={`text-2xl font-bold ${currentTheme.textPrimary} tracking-tight`}>Candidate Nomination</h1>
+              <p className={`${currentTheme.textSecondary} text-sm mt-1.5`}>Submit your candidacy for the upcoming election</p>
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
 
-              {/* ── SECRET CODE ── */}
+              {/* SECRET CODE */}
               <div
                 data-aos="fade-up" data-aos-delay="60"
-                className={`p-4 rounded-2xl border transition-all duration-300 ${codeValid ? 'bg-emerald-500/10 border-emerald-400/30' : 'bg-white/4 border-white/10'}`}
+                className={`p-4 rounded-2xl border transition-all duration-300 ${codeValid ? currentTheme.verifiedBg : `${currentTheme.inputBg} border ${currentTheme.cardBorder}`}`}
               >
-                <p className="text-xs font-semibold uppercase tracking-widest text-white/40 mb-3">Step 1 — Verify Secret Code</p>
+                <p className={`text-xs font-semibold uppercase tracking-widest ${currentTheme.textMuted} mb-3`}>Step 1 — Verify Secret Code</p>
                 <div className="flex gap-2">
                   <div className="relative flex-1 group">
-                    <FaKey className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 group-focus-within:text-emerald-400 transition text-xs" />
+                    <FaKey className={`absolute left-3 top-1/2 -translate-y-1/2 ${getIconColor()} transition text-xs`} />
                     <input
                       {...register('secretCode', { required: 'Secret code is required', minLength: { value: 6, message: 'Code must be at least 6 characters' } })}
                       type="text"
@@ -239,35 +317,35 @@ export default function CandidateNomination() {
                     type="button"
                     onClick={verifySecretCode}
                     disabled={isVerifying || codeValid}
-                    className="px-5 py-3 bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white text-sm font-semibold rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+                    className="px-5 py-3 bg-gradient-to-br from-gray-600 to-gray-700 hover:from-gray-500 hover:to-gray-600 text-white text-sm font-semibold rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
                   >
                     {isVerifying
                       ? <FaSpinner className="animate-spin" />
                       : codeValid
-                      ? <><FaCheckCircle className="text-emerald-300" /> Verified</>
+                      ? <><FaCheckCircle className={getIconColor()} /> Verified</>
                       : 'Verify'}
                   </button>
                 </div>
                 {errors.secretCode && <p className="text-red-400 text-xs mt-2">{errors.secretCode.message}</p>}
                 {codeValid && (
-                  <p className="text-emerald-300 text-xs mt-2.5 flex items-center gap-1.5">
+                  <p className={`text-gray-400 text-xs mt-2.5 flex items-center gap-1.5`}>
                     <FaCheckCircle /> Verified for <strong>{codeData?.position}</strong> position
                   </p>
                 )}
               </div>
 
-              {/* ── PERSONAL INFO ── */}
+              {/* PERSONAL INFO */}
               <div className={`space-y-4 transition-opacity duration-300 ${!codeValid ? 'opacity-40 pointer-events-none select-none' : 'opacity-100'}`}>
 
                 {/* Section label */}
                 <div className="flex items-center gap-3" data-aos="fade-up" data-aos-delay="100">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-white/40">Step 2 — Personal Information</p>
+                  <p className={`text-xs font-semibold uppercase tracking-widest ${currentTheme.textMuted}`}>Step 2 — Personal Information</p>
                   <div className="flex-1 h-px bg-white/10" />
                 </div>
 
                 {/* Email */}
                 <div data-aos="fade-up" data-aos-delay="120" className="relative group">
-                  <FaEnvelope className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 group-focus-within:text-emerald-400 transition text-xs" />
+                  <FaEnvelope className={`absolute left-3 top-1/2 -translate-y-1/2 ${getIconColor()} transition text-xs`} />
                   <input
                     {...register('email', { required: 'Email is required', pattern: { value: /^[A-Z0-9._%+-]+@regent\.edu\.gh$/i, message: 'Only @regent.edu.gh emails allowed' } })}
                     type="email" placeholder="University email"
@@ -279,7 +357,7 @@ export default function CandidateNomination() {
 
                 {/* Name */}
                 <div data-aos="fade-up" data-aos-delay="140" className="relative group">
-                  <FaUser className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 group-focus-within:text-emerald-400 transition text-xs" />
+                  <FaUser className={`absolute left-3 top-1/2 -translate-y-1/2 ${getIconColor()} transition text-xs`} />
                   <input
                     {...register('name', { required: 'Full name is required' })}
                     type="text" placeholder="Full name"
@@ -291,7 +369,7 @@ export default function CandidateNomination() {
 
                 {/* School ID */}
                 <div data-aos="fade-up" data-aos-delay="160" className="relative group">
-                  <FaIdCard className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 group-focus-within:text-emerald-400 transition text-xs" />
+                  <FaIdCard className={`absolute left-3 top-1/2 -translate-y-1/2 ${getIconColor()} transition text-xs`} />
                   <input
                     {...register('schoolId', { required: 'School ID is required', pattern: { value: /^[0-9]{8}$/, message: 'Must be 8 digits' } })}
                     type="text" placeholder="School ID (8 digits)"
@@ -302,7 +380,7 @@ export default function CandidateNomination() {
 
                 {/* Position */}
                 <div data-aos="fade-up" data-aos-delay="180" className="relative group">
-                  <FaGraduationCap className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 group-focus-within:text-emerald-400 transition text-xs" />
+                  <FaGraduationCap className={`absolute left-3 top-1/2 -translate-y-1/2 ${getIconColor()} transition text-xs`} />
                   <input
                     {...register('position', { required: 'Position is required' })}
                     type="text" placeholder="Position running for"
@@ -315,7 +393,7 @@ export default function CandidateNomination() {
                 {/* Department + Year — side by side */}
                 <div className="grid grid-cols-2 gap-3" data-aos="fade-up" data-aos-delay="200">
                   <div className="relative group">
-                    <FaBuilding className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 group-focus-within:text-emerald-400 transition text-xs" />
+                    <FaBuilding className={`absolute left-3 top-1/2 -translate-y-1/2 ${getIconColor()} transition text-xs`} />
                     <input
                       {...register('department', { required: 'Department is required' })}
                       type="text" placeholder="Department"
@@ -324,16 +402,16 @@ export default function CandidateNomination() {
                     {errors.department && <p className="text-red-400 text-xs mt-1">{errors.department.message}</p>}
                   </div>
                   <div className="relative group">
-                    <FaGraduationCap className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 group-focus-within:text-emerald-400 transition text-xs" />
+                    <FaGraduationCap className={`absolute left-3 top-1/2 -translate-y-1/2 ${getIconColor()} transition text-xs`} />
                     <select
                       {...register('yearOfStudy', { required: 'Year of study is required' })}
                       className={`${inputBase} appearance-none`}
                     >
-                      <option value="" className="bg-slate-800">Year of study</option>
-                      <option value="100" className="bg-slate-800">100 Level</option>
-                      <option value="200" className="bg-slate-800">200 Level</option>
-                      <option value="300" className="bg-slate-800">300 Level</option>
-                      <option value="400" className="bg-slate-800">400 Level</option>
+                      <option value="" className={theme === 'dark' ? 'bg-gray-800' : 'bg-white'}>Year of study</option>
+                      <option value="100" className={theme === 'dark' ? 'bg-gray-800' : 'bg-white'}>100 Level</option>
+                      <option value="200" className={theme === 'dark' ? 'bg-gray-800' : 'bg-white'}>200 Level</option>
+                      <option value="300" className={theme === 'dark' ? 'bg-gray-800' : 'bg-white'}>300 Level</option>
+                      <option value="400" className={theme === 'dark' ? 'bg-gray-800' : 'bg-white'}>400 Level</option>
                     </select>
                     {errors.yearOfStudy && <p className="text-red-400 text-xs mt-1">{errors.yearOfStudy.message}</p>}
                   </div>
@@ -341,7 +419,7 @@ export default function CandidateNomination() {
 
                 {/* Manifesto */}
                 <div data-aos="fade-up" data-aos-delay="220" className="relative group">
-                  <FaFileAlt className="absolute left-3 top-4 text-white/30 group-focus-within:text-emerald-400 transition text-xs" />
+                  <FaFileAlt className={`absolute left-3 top-4 ${getIconColor()} transition text-xs`} />
                   <textarea
                     {...register('manifesto', {
                       required: 'Manifesto is required',
@@ -355,20 +433,20 @@ export default function CandidateNomination() {
                   {errors.manifesto && <p className="text-red-400 text-xs mt-1">{errors.manifesto.message}</p>}
                   {/* Character count */}
                   <div className="flex justify-between items-center mt-1.5 px-0.5">
-                    <span className={`text-xs ${manifestoLength < 100 ? 'text-amber-400/70' : 'text-emerald-400/70'}`}>
-                      {manifestoLength < 100 ? `${100 - manifestoLength} more characters needed` : 'Minimum met ✓'}
+                    <span className={`text-xs ${manifestoLength < 100 ? 'text-amber-400/70' : 'text-gray-400'}`}>
+                      {manifestoLength < 100 ? `${100 - manifestoLength} more characters needed` : 'Minimum met'}
                     </span>
-                    <span className="text-xs text-white/25">{manifestoLength}/2000</span>
+                    <span className={`text-xs ${currentTheme.textMuted}`}>{manifestoLength}/2000</span>
                   </div>
                 </div>
               </div>
 
-              {/* ── SUBMIT ── */}
+              {/* SUBMIT */}
               <div data-aos="fade-up" data-aos-delay="260">
                 <button
                   type="submit"
                   disabled={isLoading || !codeValid || !!existingNomination}
-                  className="w-full flex items-center justify-center gap-2.5 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold rounded-xl shadow-lg shadow-emerald-600/20 hover:shadow-emerald-500/30 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none transition-all duration-200"
+                  className={`w-full flex items-center justify-center gap-2.5 py-3.5 bg-gradient-to-r ${currentTheme.buttonPrimary} text-white font-semibold rounded-xl shadow-lg hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none transition-all duration-200`}
                 >
                   {isLoading ? (
                     <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Submitting Nomination…</>
@@ -382,18 +460,18 @@ export default function CandidateNomination() {
 
             </form>
 
-            {/* Info footer */}
+            {/* Info footer - No emojis */}
             <div data-aos="fade-up" data-aos-delay="300" className="mt-6 pt-5 border-t border-white/8">
               <div className="flex flex-col gap-1.5 text-center">
-                {[
-                  { icon: '🔐', text: 'Nomination requires a valid EC secret code' },
-                  { icon: '📝', text: 'Manifesto must be at least 100 characters' },
-                  { icon: '⏳', text: 'Nominations will be reviewed by the Electoral Commission' },
-                ].map(({ icon, text }) => (
-                  <p key={text} className="text-xs text-white/35 flex items-center justify-center gap-1.5">
-                    <span>{icon}</span> {text}
-                  </p>
-                ))}
+                <p className={`text-xs ${currentTheme.textMuted} flex items-center justify-center gap-1.5`}>
+                  Nomination requires a valid EC secret code
+                </p>
+                <p className={`text-xs ${currentTheme.textMuted} flex items-center justify-center gap-1.5`}>
+                  Manifesto must be at least 100 characters
+                </p>
+                <p className={`text-xs ${currentTheme.textMuted} flex items-center justify-center gap-1.5`}>
+                  Nominations will be reviewed by the Electoral Commission
+                </p>
               </div>
             </div>
 

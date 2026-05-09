@@ -30,6 +30,7 @@ export default function AdminLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState("light");
+  const [authChecked, setAuthChecked] = useState(false); // NEW: Track if auth check is complete
   const router = useRouter();
   const pathname = usePathname();
 
@@ -65,22 +66,47 @@ export default function AdminLayout({ children }) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // FIXED: Better authentication check
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
-      router.push("/");
+    // Check both loading state and authentication
+    if (!loading) {
+      setAuthChecked(true);
+      
+      // Double-check localStorage as fallback
+      const localAuth = localStorage.getItem('is_authenticated') === 'true';
+      const userRole = localStorage.getItem('user_role');
+      const allowedRoles = ['admin', 'electoral_commission', 'ec', 'dean'];
+      const hasValidRole = userRole && allowedRoles.includes(userRole.toLowerCase());
+      
+      if (!isAuthenticated && !localAuth) {
+        console.log('No authentication found, redirecting to login');
+        router.replace('/login');
+      } else if (!hasValidRole && isAuthenticated) {
+        console.log('Invalid role, redirecting to home');
+        router.replace('/');
+      }
     }
   }, [loading, isAuthenticated, router]);
 
-  useEffect(() => {
-    if (mobileMenuOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "unset";
-    }
-    return () => {
-      document.body.style.overflow = "unset";
-    };
-  }, [mobileMenuOpen]);
+  // Don't show anything until auth is checked
+  if (loading || !authChecked) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center ${
+        theme === "light" ? "bg-gray-50" : "bg-gradient-to-br from-gray-900 to-gray-800"
+      }`}>
+        <div className="text-center px-4">
+          <FaSpinner className="animate-spin text-3xl sm:text-4xl text-gray-500 mx-auto mb-4" />
+          <p className={theme === "light" ? "text-gray-600" : "text-white"}>
+            Verifying access...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) return null;
+
+  const closeMobileMenu = () => setMobileMenuOpen(false);
 
   // ========== ROLE-BASED NAVIGATION ==========
   const userRole = admin?.role || "admin";
@@ -97,17 +123,14 @@ export default function AdminLayout({ children }) {
 
   // Navigation based on role
   const getNavigation = () => {
-    // Dashboard for everyone
     const dashboard = { name: "Dashboard", href: getDashboardLink(), icon: FaHome };
     
-    // DEAN NAVIGATION (Only 3 items)
     const deanNav = [
       { name: "Manage Candidates", href: "/admin/manage-candidates", icon: FaUserGraduate },
       { name: "Election Results", href: "/admin/election-results", icon: FaChartBar },
       { name: "Nomination Codes", href: "/admin/generate-nomination-codes", icon: FaKey },
     ];
     
-    // EC NAVIGATION (5 items)
     const ecNav = [
       { name: "Manage Voters", href: "/admin/manage-voters", icon: FaUsers },
       { name: "Manage Candidates", href: "/admin/manage-candidates", icon: FaUserGraduate },
@@ -116,7 +139,6 @@ export default function AdminLayout({ children }) {
       { name: "Election Results", href: "/admin/election-results", icon: FaChartBar },
     ];
     
-    // SUPER ADMIN NAVIGATION (Full access - 8 items)
     const adminNav = [
       { name: "Manage Voters", href: "/admin/manage-voters", icon: FaUsers },
       { name: "Manage Candidates", href: "/admin/manage-candidates", icon: FaUserGraduate },
@@ -128,22 +150,13 @@ export default function AdminLayout({ children }) {
       { name: "Audit Report", href: "/admin/audit-report", icon: FaChartLine },
     ];
     
-    // Return based on role
-    if (isDean) {
-      return [dashboard, ...deanNav];
-    }
-    
-    if (isEC) {
-      return [dashboard, ...ecNav];
-    }
-    
-    // Super Admin gets everything
+    if (isDean) return [dashboard, ...deanNav];
+    if (isEC) return [dashboard, ...ecNav];
     return [dashboard, ...adminNav];
   };
 
   const navigation = getNavigation();
   
-  // Portal title and color based on role
   const getPortalTitle = () => {
     if (isDean) return "Dean's Portal";
     if (isEC) return "EC Portal";
@@ -160,25 +173,6 @@ export default function AdminLayout({ children }) {
   const portalColor = getPortalColor();
 
   const isActiveLink = (href) => pathname === href;
-
-  if (loading) {
-    return (
-      <div className={`min-h-screen flex items-center justify-center ${
-        theme === "light" ? "bg-gray-50" : "bg-gradient-to-br from-gray-900 to-gray-800"
-      }`}>
-        <div className="text-center px-4">
-          <FaSpinner className="animate-spin text-3xl sm:text-4xl text-teal-500 mx-auto mb-4" />
-          <p className={theme === "light" ? "text-gray-600" : "text-white"}>
-            Loading...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) return null;
-
-  const closeMobileMenu = () => setMobileMenuOpen(false);
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
@@ -267,7 +261,6 @@ export default function AdminLayout({ children }) {
               : "bg-gray-900/95 backdrop-blur-lg border-b border-white/10"
           }`}>
             <div className="py-4 px-4">
-              {/* User Info */}
               <div className={`px-3 py-3 border-b mb-3 ${
                 theme === "light" ? "border-gray-200" : "border-white/10"
               }`}>
@@ -282,7 +275,6 @@ export default function AdminLayout({ children }) {
                 </span>
               </div>
 
-              {/* Navigation Links */}
               <div className="space-y-1">
                 {navigation.map((item) => {
                   const Icon = item.icon;
@@ -313,7 +305,6 @@ export default function AdminLayout({ children }) {
                 theme === "light" ? "border-t border-gray-200" : "border-t border-white/10"
               }`}></div>
 
-              {/* Logout Button */}
               <button
                 onClick={() => {
                   closeMobileMenu();
@@ -340,7 +331,6 @@ export default function AdminLayout({ children }) {
         }`}
       >
         <div className="flex flex-col h-full">
-          {/* Sidebar Header */}
           <div className={`h-16 flex items-center justify-between px-4 ${
             theme === "light" ? "border-b border-gray-200" : "border-b border-white/10"
           }`}>
@@ -373,7 +363,6 @@ export default function AdminLayout({ children }) {
             </button>
           </div>
 
-          {/* Theme Toggle in Sidebar (Desktop) */}
           {sidebarOpen && (
             <div className="px-3 py-4 border-b border-gray-200 dark:border-white/10">
               <button
@@ -393,7 +382,6 @@ export default function AdminLayout({ children }) {
             </div>
           )}
 
-          {/* Navigation */}
           <nav className="flex-1 py-6 overflow-y-auto">
             <div className="space-y-1 px-3">
               {navigation.map((item) => {
@@ -429,7 +417,6 @@ export default function AdminLayout({ children }) {
             </div>
           </nav>
 
-          {/* Sidebar Footer */}
           <div className={`p-4 ${
             theme === "light" ? "border-t border-gray-200" : "border-t border-white/10"
           }`}>
@@ -503,7 +490,6 @@ export default function AdminLayout({ children }) {
 
         {/* Main Content */}
         <main className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
-          {/* Mobile content padding (to account for mobile header) */}
           <div className="lg:hidden h-14"></div>
           {children}
         </main>

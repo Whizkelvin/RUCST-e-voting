@@ -85,9 +85,10 @@ export default function AdminVerifyOTP() {
   const [timeLeft, setTimeLeft] = useState(OTP_EXPIRY_SECONDS);
   const [canResend, setCanResend] = useState(false);
   const [adminData, setAdminData] = useState(null);
-  const [verificationStatus, setVerificationStatus] = useState(null); // null | 'verifying' | 'success' | 'failed' | 'expired'
+  const [verificationStatus, setVerificationStatus] = useState(null);
   const [theme, setTheme] = useState('dark');
   const [mounted, setMounted] = useState(false);
+  const [redirecting, setRedirecting] = useState(false); // NEW: Track redirect state
 
   const timerRef = useRef(null);
   const router = useRouter();
@@ -135,35 +136,47 @@ export default function AdminVerifyOTP() {
   // Cleanup on unmount
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
-  // ── Complete login & redirect ─────────────────────────────────────────────
-  const completeLogin = useCallback(() => {
-    const authId   = localStorage.getItem('temp_admin_auth_id');
-    const email    = localStorage.getItem('temp_admin_email');
-    const role     = localStorage.getItem('temp_admin_role');
-    const name     = localStorage.getItem('temp_admin_name');
-    const maxAge   = 30 * 60;
-    const cookieOpts = `path=/; max-age=${maxAge}; SameSite=Lax`;
+  // ── Complete login & redirect - FIXED ─────────────────────────────────────
+  // ── Complete login & redirect - FIXED ─────────────────────────────────────
+// In AdminVerifyOTP component, update completeLogin:
+const completeLogin = useCallback(async () => {
+  if (redirecting) return;
+  setRedirecting(true);
 
-    localStorage.setItem('is_authenticated', 'true');
-    localStorage.setItem('user_role', role);
-    localStorage.setItem('user_email', email);
-    localStorage.setItem('user_name', name);
-    localStorage.setItem('user_id', authId);
-    localStorage.setItem('last_activity', Date.now().toString());
+  const authId   = localStorage.getItem('temp_admin_auth_id');
+  const email    = localStorage.getItem('temp_admin_email');
+  const role     = localStorage.getItem('temp_admin_role');
+  const name     = localStorage.getItem('temp_admin_name');
+  const maxAge   = 60 * 60;
+  const cookieOpts = `path=/; max-age=${maxAge}; SameSite=Lax`;
 
-    document.cookie = `is_authenticated=true; ${cookieOpts}`;
-    document.cookie = `user_role=${role}; ${cookieOpts}`;
-    document.cookie = `user_email=${encodeURIComponent(email)}; ${cookieOpts}`;
-    if (authId) document.cookie = `user_id=${authId}; ${cookieOpts}`;
+  // Set localStorage
+  localStorage.setItem('is_authenticated', 'true');
+  localStorage.setItem('user_role', role);
+  localStorage.setItem('user_email', email);
+  localStorage.setItem('user_name', name);
+  localStorage.setItem('user_id', authId);
+  localStorage.setItem('last_activity', Date.now().toString());
 
-    ['temp_admin_id', 'temp_admin_email', 'temp_admin_name',
-     'temp_admin_role', 'temp_admin_auth_id', 'temp_admin_expiry'].forEach(
-      (k) => localStorage.removeItem(k)
-    );
+  // Set cookies
+  document.cookie = `is_authenticated=true; ${cookieOpts}`;
+  document.cookie = `user_role=${role}; ${cookieOpts}`;
+  document.cookie = `user_email=${encodeURIComponent(email)}; ${cookieOpts}`;
+  if (authId) document.cookie = `user_id=${authId}; ${cookieOpts}`;
 
-    toast.success('Verification successful. Redirecting to dashboard...');
-    setTimeout(() => router.push('/admin/manage-voters'), 2000);
-  }, [router]);
+  // Clear temp data
+  ['temp_admin_id', 'temp_admin_email', 'temp_admin_name',
+   'temp_admin_role', 'temp_admin_auth_id', 'temp_admin_expiry'].forEach(
+    (k) => localStorage.removeItem(k)
+  );
+
+  toast.success('Verification successful. Redirecting to dashboard...');
+
+  // Force a hard navigation to ensure cookies are read
+  setTimeout(() => {
+    window.location.href = '/admin/manage-voters';
+  }, 1500);
+}, [redirecting]);
 
   // ── Load admin data & sync timer from DB ─────────────────────────────────
   useEffect(() => {
@@ -174,7 +187,7 @@ export default function AdminVerifyOTP() {
 
     if (!adminId || !adminEmail) {
       toast.error('Session expired. Please login again.');
-      router.push('/login');
+      router.replace('/login');
       return;
     }
 
@@ -297,7 +310,9 @@ export default function AdminVerifyOTP() {
         if (updateError) throw updateError;
 
         setVerificationStatus('success');
-        completeLogin();
+        
+        // Call completeLogin to handle redirect
+        await completeLogin();
       } else {
         const newAttempts = (admin.otp_attempts || 0) + 1;
         const { error: updateError } = await supabase
@@ -391,13 +406,13 @@ export default function AdminVerifyOTP() {
       (k) => localStorage.removeItem(k)
     );
     if (timerRef.current) clearInterval(timerRef.current);
-    router.push('/login');
+    router.replace('/login');
   }, [router]);
 
   // ── Guards ────────────────────────────────────────────────────────────────
   if (!mounted) return null;
 
-  if (!adminData) {
+  if (!adminData && !redirecting) {
     return (
       <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} flex items-center justify-center`}>
         <Toaster position="top-center" richColors />
@@ -444,6 +459,7 @@ export default function AdminVerifyOTP() {
           {/* Back */}
           <button
             onClick={goBackToLogin}
+            disabled={redirecting}
             className={`absolute top-4 left-4 ${currentTheme.textSecondary} hover:${currentTheme.textPrimary} transition-colors`}
             aria-label="Back to login"
           >
@@ -489,13 +505,13 @@ export default function AdminVerifyOTP() {
               <FaUserShield className={`${currentTheme.iconColor} text-lg sm:text-xl shrink-0`} aria-hidden="true" />
               <div className="flex-1 min-w-0">
                 <p className={`${currentTheme.textPrimary} font-medium text-sm sm:text-base truncate`}>
-                  {adminData.name}
+                  {adminData?.name}
                 </p>
                 <p className={`${currentTheme.textSecondary} text-xs sm:text-sm truncate`}>
-                  {adminData.email}
+                  {adminData?.email}
                 </p>
                 <p className={`${currentTheme.iconColor} text-xs mt-0.5`}>
-                  Role: {adminData.role}
+                  Role: {adminData?.role}
                 </p>
               </div>
             </div>
@@ -595,10 +611,10 @@ export default function AdminVerifyOTP() {
                         ? 'border-gray-400 bg-gray-500/20 ring-1 ring-gray-400/50'
                         : 'border-gray-500 bg-gray-50 ring-1 ring-gray-400/50'
                       : currentTheme.inputBorder,
-                    isLoading ? 'opacity-50 cursor-not-allowed' : '',
+                    isLoading || redirecting ? 'opacity-50 cursor-not-allowed' : '',
                   ].join(' ')}
-                  disabled={isLoading}
-                  autoFocus={index === 0}
+                  disabled={isLoading || redirecting}
+                  autoFocus={index === 0 && !redirecting}
                 />
               ))}
             </div>
@@ -607,13 +623,18 @@ export default function AdminVerifyOTP() {
           {/* Verify button */}
           <button
             onClick={verifyOTP}
-            disabled={isLoading || verificationStatus === 'success'}
+            disabled={isLoading || verificationStatus === 'success' || redirecting}
             className={`w-full py-2.5 sm:py-3 rounded-xl font-semibold text-white bg-gradient-to-r ${currentTheme.buttonPrimary} transition-all duration-300 shadow-lg hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 mb-3 text-sm sm:text-base`}
           >
             {isLoading ? (
               <span className="flex items-center justify-center gap-2">
                 <FaSpinner className="animate-spin text-sm sm:text-base" aria-hidden="true" />
                 Verifying...
+              </span>
+            ) : redirecting ? (
+              <span className="flex items-center justify-center gap-2">
+                <FaSpinner className="animate-spin text-sm sm:text-base" aria-hidden="true" />
+                Redirecting...
               </span>
             ) : (
               <span className="flex items-center justify-center gap-2">
@@ -626,7 +647,7 @@ export default function AdminVerifyOTP() {
           {/* Resend button */}
           <button
             onClick={resendOTP}
-            disabled={!canResend || isLoading}
+            disabled={!canResend || isLoading || redirecting}
             className={`w-full py-2 rounded-xl font-medium ${currentTheme.buttonSecondary} transition-all duration-300 disabled:opacity-50 text-xs sm:text-sm`}
           >
             {canResend ? 'Resend OTP' : `Resend OTP in ${formatTime(timeLeft)}`}

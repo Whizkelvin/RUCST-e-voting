@@ -1,4 +1,4 @@
-// hooks/useElectionData.js - Updated with image handling
+// hooks/useElectionData.js - Updated with voting stopped/paused handling
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -14,6 +14,7 @@ export const useElectionData = () => {
   });
   const [votingProgress, setVotingProgress] = useState([]);
   const [isVotingActive, setIsVotingActive] = useState(false);
+  const [isVotingStopped, setIsVotingStopped] = useState(false);  // NEW: Add this
   const [votingPeriod, setVotingPeriod] = useState(null);
   const [votingStartsIn, setVotingStartsIn] = useState(null);
   const [timeLeft, setTimeLeft] = useState({
@@ -42,7 +43,19 @@ export const useElectionData = () => {
     return data.publicUrl;
   };
 
-  const calculateTimeLeft = useCallback((startTime, endTime) => {
+  const calculateTimeLeft = useCallback((startTime, endTime, isStopped = false) => {
+    // If voting is stopped, return stopped status
+    if (isStopped) {
+      return {
+        days: 0,
+        hours: 0,
+        minutes: 0,
+        seconds: 0,
+        status: 'stopped',
+        displayStatus: 'Voting has been stopped by the Electoral Commission'
+      };
+    }
+
     try {
       const now = new Date();
       const start = new Date(startTime);
@@ -123,13 +136,18 @@ export const useElectionData = () => {
       let endTime = null;
       let isActive = false;
       let currentVotingPeriodId = null;
+      let isStopped = false;  // NEW: Track stopped status
       
       if (votingPeriodData) {
         startTime = votingPeriodData.start_date || votingPeriodData.start_time;
         endTime = votingPeriodData.end_date || votingPeriodData.end_time;
         currentVotingPeriodId = votingPeriodData.id;
         
-        if (startTime && endTime) {
+        // NEW: Check if voting is manually stopped
+        isStopped = votingPeriodData.is_stopped === true;
+        setIsVotingStopped(isStopped);
+        
+        if (startTime && endTime && !isStopped) {
           const now = new Date();
           const start = new Date(startTime);
           const end = new Date(endTime);
@@ -142,10 +160,23 @@ export const useElectionData = () => {
             name: votingPeriodData.title || 'Voting Period'
           });
           
-          const timeData = calculateTimeLeft(startTime, endTime);
+          const timeData = calculateTimeLeft(startTime, endTime, false);
           setTimeLeft(timeData);
           setIsVotingActive(isActive);
           setVotingStartsIn(!isActive && now < start);
+        } else if (isStopped) {
+          // If voting is stopped, override status
+          setVotingPeriod({
+            start_time: startTime,
+            end_time: endTime,
+            id: votingPeriodData.id,
+            name: votingPeriodData.title || 'Voting Period'
+          });
+          
+          const stoppedTimeData = calculateTimeLeft(startTime, endTime, true);
+          setTimeLeft(stoppedTimeData);
+          setIsVotingActive(false);
+          setVotingStartsIn(false);
         } else {
           setTimeLeft({
             days: 0,
@@ -156,6 +187,7 @@ export const useElectionData = () => {
           });
           setIsVotingActive(false);
           setVotingStartsIn(false);
+          setIsVotingStopped(false);
         }
       } else {
         setTimeLeft({
@@ -167,6 +199,21 @@ export const useElectionData = () => {
         });
         setIsVotingActive(false);
         setVotingStartsIn(false);
+        setIsVotingStopped(false);
+      }
+      
+      // If voting is stopped, return early with empty progress
+      if (isStopped) {
+        setVotingProgress([]);
+        setTotalStats({
+          totalVoters: 0,
+          totalVotes: 0,
+          participationRate: 0,
+          totalVotersWhoVoted: 0,
+          remainingVoters: 0
+        });
+        setLoading(false);
+        return;
       }
       
       // 2. Fetch candidates based on voting_period_id
@@ -211,10 +258,10 @@ export const useElectionData = () => {
           totalVoters = count || 0;
         }
       } catch (err) {
-       
+        // Ignore error
       }
       
-     
+      // 5. Fetch total votes count
       let totalVotes = 0;
       try {
         const { count, error: votesError } = await supabase
@@ -225,10 +272,10 @@ export const useElectionData = () => {
           totalVotes = count || 0;
         }
       } catch (err) {
-        
+        // Ignore error
       }
       
-     
+      // 6. Fetch unique voters who voted
       let totalVotersWhoVoted = 0;
       try {
         const { data: uniqueVoters, error: uniqueError } = await supabase
@@ -241,10 +288,10 @@ export const useElectionData = () => {
           totalVotersWhoVoted = uniqueVoterIds.length;
         }
       } catch (err) {
-        
+        // Ignore error
       }
       
-      
+      // 7. Calculate participation rate
       const participationRate = totalVoters > 0 
         ? (totalVotersWhoVoted / totalVoters) * 100 
         : 0;
@@ -257,7 +304,7 @@ export const useElectionData = () => {
         remainingVoters: Math.max(0, totalVoters - totalVotersWhoVoted)
       });
       
-      
+      // 8. Build progress data for each position
       let progressData = [];
       
       if (Object.keys(candidatesByPosition).length > 0) {
@@ -355,6 +402,7 @@ export const useElectionData = () => {
     totalStats,
     votingProgress,
     isVotingActive,
+    isVotingStopped,  // NEW: Return this
     votingPeriod,
     votingStartsIn,
     timeLeft,

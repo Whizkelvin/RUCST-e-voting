@@ -247,7 +247,7 @@ function LoginContent() {
       let timeRemaining = '';
       
       if (!settings.is_active) {
-        message = 'Voting is currently disabled by the Electoral Commission. Please contact admin.';
+        message = 'Voting is currently disabled by the Electoral Commission.';
       } else if (!hasStarted) {
         const hoursUntil = Math.ceil((startDate - now) / (1000 * 60 * 60));
         message = `Voting starts on ${startDate.toLocaleString()} (in ${hoursUntil} hours)`;
@@ -342,12 +342,19 @@ function LoginContent() {
     document.documentElement.setAttribute('data-theme', savedTheme);
   }, []);
 
-  const toggleTheme = useCallback(() => {
-    const newTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
-    document.documentElement.setAttribute('data-theme', newTheme);
-  }, [theme]);
+ const toggleTheme = useCallback(() => {
+  const newTheme = theme === 'dark' ? 'light' : 'dark';
+
+  setTheme(newTheme);
+  localStorage.setItem('theme', newTheme);
+  document.documentElement.setAttribute('data-theme', newTheme);
+
+  // Force repaint
+  requestAnimationFrame(() => {
+    document.body.style.height = 'auto';
+    window.dispatchEvent(new Event('resize'));
+  });
+}, [theme]);
 
   useEffect(() => {
     AOS.init({
@@ -996,7 +1003,7 @@ function LoginContent() {
         }}
       />
       
-      <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} flex items-center justify-center p-4 relative overflow-hidden transition-all duration-300`}>
+      <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} flex justify-center py-10 p-4 relative overflow-x-hidden overflow-y-auto transition-all duration-300`}>
         
         {/* Animated Background Elements - Grayscale */}
         <div className="absolute inset-0">
@@ -1070,12 +1077,12 @@ function LoginContent() {
                   )}
                   <p className={`text-md font-cursive ${
                     votingStatus.hasEnded 
-                      ? 'text-white'
-                      : !votingStatus.hasStarted
                       ? 'text-gray-300'
+                      : !votingStatus.hasStarted
+                      ? 'text-black'
                       : votingStatus.isActive
                       ? getIconColor()
-                      : 'text-gray-300'
+                      : 'text-black'
                   }`}>
                     {votingStatus.message}
                   </p>

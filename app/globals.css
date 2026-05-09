@@ -65,3 +65,15 @@ html {
 [data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
   background: #0d9488;
 }
+
+html, body {
+  min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+/* Prevent scroll lock during theme transition */
+body {
+  overflow-y: auto !important;
+}

@@ -377,11 +377,11 @@ const VoteProcess = () => {
             >
               <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>
                 Need assistance? Contact{" "}
-                <a href="mailto:support@regent.edu.gh" className="text-gray-400 hover:text-gray-300 font-medium transition-colors">
-                  support@regent.edu.gh
+                <a href="mailto:yaw.galo@regent.edu.gh" className="text-gray-400 hover:text-gray-300 font-medium transition-colors">
+                  yaw.galo@regent.edu.gh
                 </a>
                 {" "}or call{" "}
-                <span className="text-gray-500 font-medium">+233 30 123 4567</span>
+                <span className="text-gray-500 font-medium">+233 55 142 3628</span>
               </p>
             </div>
           </div>

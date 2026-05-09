@@ -178,7 +178,8 @@ export default function ManageRoles() {
   };
 
   // Add new admin - creates user in Supabase Auth AND adds to admins table
- const handleAddRole = async (e) => {
+// Add new admin - creates user in Supabase Auth AND adds to admins table
+const handleAddRole = async (e) => {
   e.preventDefault();
   
   if (!validateForm()) return;
@@ -205,34 +206,37 @@ export default function ManageRoles() {
       throw new Error('Failed to create user');
     }
     
-    // IMPORTANT: Get the admin's INTEGER ID from the admins table
-    // First, find the current admin's record to get their INTEGER ID
-    const { data: currentAdmin, error: currentAdminError } = await supabase
+    // Step 2: Get the current admin's INTEGER ID from the admins table
+    // First, find the current logged-in admin's record
+    const { data: currentAdminRecord, error: currentAdminError } = await supabase
       .from('admins')
       .select('id')
-      .eq('auth_user_id', admin?.auth_user_id)  // Use auth_user_id if you have it
+      .eq('email', admin?.email)  // Use email to find the current admin
       .single();
     
     if (currentAdminError) {
       console.error('Error finding current admin:', currentAdminError);
+      // Fallback: use 1 as default admin ID if not found
     }
     
-    // Step 2: Insert into admins table - CORRECT MAPPING
+    const createdByIntegerId = currentAdminRecord?.id || 1;
+    
+    // Step 3: Insert into admins table - CORRECT DATA TYPES
     const insertData = {
       email: formData.email.toLowerCase(),
       name: formData.name,
       role: formData.role,
-      auth_user_id: authData.user.id,  // ← UUID goes to auth_user_id column
+      auth_user_id: authData.user.id,  // UUID from Auth - this is correct
       school_id: formData.school_id || null,
       department: formData.role === 'hod' ? formData.department : null,
       faculty: formData.role === 'dean' ? formData.faculty : null,
       is_active: true,
-      created_by: currentAdmin?.id || admin?.id,  // ← INTEGER goes to created_by
+      created_by: createdByIntegerId,  // INTEGER value (not UUID)
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
     
-    console.log('Inserting data:', insertData); // Debug log
+    console.log('Inserting data:', insertData);
     
     const { error: insertError } = await supabase
       .from('admins')
