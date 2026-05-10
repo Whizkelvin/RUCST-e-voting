@@ -27,9 +27,37 @@ import {
   FaClock,
   FaUserGraduate,
   FaChartLine,
-  FaFileExcel
+  FaFileExcel,
+  FaUniversity
 } from 'react-icons/fa';
 import * as XLSX from 'xlsx';
+
+// Department and Programs Data
+const departmentsData = {
+  FECAS: {
+    name: 'FECAS - Faculty of Engineering, Computing and Applied Sciences',
+    programs: [
+      'BSc. Computer Science',
+      'BSc. Information Technology',
+      'BEng. Applied Electronics & Systems Engineering'
+    ]
+  },
+  SBLL: {
+    name: 'SBLL - School of Business, Law and Languages',
+    programs: [
+      'BSc. Accounting and Information Systems',
+      'Bachelor of Business Administration (e-commerce Option)',
+      'BSc. Management with Computing (Human Resource Management and Marketing Management Options)'
+    ]
+  },
+  FAS: {
+    name: 'FAS - Faculty of Arts and Sciences',
+    programs: [
+      'BSc. Psychology',
+      'Bachelor of Theology with Management'
+    ]
+  }
+};
 
 export default function ManageVoters() {
   const { admin, isAuthenticated, loading: authLoading } = useAdminAuth();
@@ -41,11 +69,13 @@ export default function ManageVoters() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [editingVoter, setEditingVoter] = useState(null);
   const [theme, setTheme] = useState('light');
+  const [availablePrograms, setAvailablePrograms] = useState([]);
   const [formData, setFormData] = useState({
     email: '',
     name: '',
     school_id: '',
     department: '',
+    program: '',
     year_of_study: ''
   });
   const [formErrors, setFormErrors] = useState({});
@@ -97,7 +127,6 @@ export default function ManageVoters() {
 
       setVoters(data || []);
       
-      // Calculate stats
       const voted = (data || []).filter(v => v.has_voted === true).length;
       const notVoted = (data || []).filter(v => v.has_voted === false || !v.has_voted).length;
       const turnout = data?.length > 0 ? ((voted / data.length) * 100).toFixed(1) : 0;
@@ -116,6 +145,57 @@ export default function ManageVoters() {
     }
   };
 
+  // Capitalize name function - prevents numbers
+  const capitalizeName = (name) => {
+    // Remove any numbers from the name
+    let cleanedName = name.replace(/[0-9]/g, '');
+    // Capitalize first letter of each word
+    return cleanedName
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  // Validate name has no numbers
+  const validateNameNoNumbers = (name) => {
+    const hasNumbers = /\d/.test(name);
+    if (hasNumbers) {
+      return { isValid: false, error: 'Name cannot contain numbers. Please use letters only.' };
+    }
+    return { isValid: true, error: null };
+  };
+
+  // Handle department change - update programs dropdown
+  const handleDepartmentChange = (deptKey) => {
+    setFormData({ 
+      ...formData, 
+      department: deptKey,
+      program: '' // Reset program when department changes
+    });
+    
+    if (deptKey && departmentsData[deptKey]) {
+      setAvailablePrograms(departmentsData[deptKey].programs);
+    } else {
+      setAvailablePrograms([]);
+    }
+  };
+
+  // Handle name change with capitalization and validation
+  const handleNameChange = (e) => {
+    const rawName = e.target.value;
+    const capitalized = capitalizeName(rawName);
+    setFormData({ ...formData, name: capitalized });
+    
+    // Real-time validation
+    const validation = validateNameNoNumbers(capitalized);
+    if (!validation.isValid && capitalized) {
+      setFormErrors({ ...formErrors, name: validation.error });
+    } else {
+      setFormErrors({ ...formErrors, name: null });
+    }
+  };
+
   const validateForm = () => {
     const errors = {};
     
@@ -127,6 +207,11 @@ export default function ManageVoters() {
     
     if (!formData.name) {
       errors.name = 'Name is required';
+    } else {
+      const nameValidation = validateNameNoNumbers(formData.name);
+      if (!nameValidation.isValid) {
+        errors.name = nameValidation.error;
+      }
     }
     
     if (!formData.school_id) {
@@ -137,6 +222,10 @@ export default function ManageVoters() {
     
     if (!formData.department) {
       errors.department = 'Department is required';
+    }
+    
+    if (!formData.program) {
+      errors.program = 'Program of study is required';
     }
     
     if (!formData.year_of_study) {
@@ -154,7 +243,6 @@ export default function ManageVoters() {
     
     setSubmitting(true);
     try {
-      // Check if voter already exists
       const { data: existing, error: checkError } = await supabase
         .from('voters')
         .select('email')
@@ -167,7 +255,6 @@ export default function ManageVoters() {
         return;
       }
       
-      // Check if school ID already exists
       const { data: existingSchoolId, error: schoolIdError } = await supabase
         .from('voters')
         .select('school_id')
@@ -180,7 +267,6 @@ export default function ManageVoters() {
         return;
       }
       
-      // Insert new voter
       const { data, error } = await supabase
         .from('voters')
         .insert({
@@ -188,6 +274,7 @@ export default function ManageVoters() {
           name: formData.name,
           school_id: formData.school_id,
           department: formData.department,
+          program: formData.program,
           year_of_study: parseInt(formData.year_of_study),
           has_voted: false,
           created_at: new Date().toISOString()
@@ -216,7 +303,6 @@ export default function ManageVoters() {
     
     setSubmitting(true);
     try {
-      // Check if email already exists (excluding current voter)
       const { data: existing, error: checkError } = await supabase
         .from('voters')
         .select('email')
@@ -230,7 +316,6 @@ export default function ManageVoters() {
         return;
       }
       
-      // Check if school ID already exists (excluding current voter)
       const { data: existingSchoolId, error: schoolIdError } = await supabase
         .from('voters')
         .select('school_id')
@@ -244,7 +329,6 @@ export default function ManageVoters() {
         return;
       }
       
-      // Update voter
       const { error } = await supabase
         .from('voters')
         .update({
@@ -252,6 +336,7 @@ export default function ManageVoters() {
           name: formData.name,
           school_id: formData.school_id,
           department: formData.department,
+          program: formData.program,
           year_of_study: parseInt(formData.year_of_study),
           updated_at: new Date().toISOString()
         })
@@ -275,7 +360,6 @@ export default function ManageVoters() {
 
   const handleDeleteVoter = async (voterId) => {
     try {
-      // Check if voter has already voted
       const { data: voter, error: checkError } = await supabase
         .from('voters')
         .select('has_voted')
@@ -310,8 +394,10 @@ export default function ManageVoters() {
       name: '',
       school_id: '',
       department: '',
+      program: '',
       year_of_study: ''
     });
+    setAvailablePrograms([]);
     setFormErrors({});
   };
 
@@ -322,58 +408,44 @@ export default function ManageVoters() {
       name: voter.name,
       school_id: voter.school_id,
       department: voter.department || '',
-      year_of_study: voter.year_of_study.toString()
+      program: voter.program || '',
+      year_of_study: voter.year_of_study?.toString() || ''
     });
+    
+    if (voter.department && departmentsData[voter.department]) {
+      setAvailablePrograms(departmentsData[voter.department].programs);
+    }
+    
     setShowEditModal(true);
   };
 
-  // ========== DOWNLOAD TEMPLATE FUNCTION ==========
+  // Download Template Function
   const downloadTemplate = () => {
-    // Define template headers
     const template = [
       {
         'Name': 'John Doe',
         'Email': 'john.doe@regent.edu.gh',
         'School ID': '12345678',
-        'Department': 'Computer Science',
+        'Department': 'FECAS',
+        'Program': 'BSc. Computer Science',
         'Year of Study': 100
-      },
-      {
-        'Name': 'Jane Smith',
-        'Email': 'jane.smith@regent.edu.gh',
-        'School ID': '87654321',
-        'Department': 'Business Administration',
-        'Year of Study': 200
       }
     ];
     
-    // Create worksheet
     const ws = XLSX.utils.json_to_sheet(template);
-    
-    // Set column widths
     ws['!cols'] = [
       { wch: 25 }, // Name
       { wch: 30 }, // Email
       { wch: 15 }, // School ID
-      { wch: 25 }, // Department
+      { wch: 20 }, // Department
+      { wch: 35 }, // Program
       { wch: 15 }  // Year of Study
     ];
     
-    // Add instructions in a comment
-    ws['A1'].c = [{ t: 'Enter the full name of the student' }];
-    ws['B1'].c = [{ t: 'Must be a valid @regent.edu.gh email' }];
-    ws['C1'].c = [{ t: '8-digit school ID (e.g., 12345678)' }];
-    ws['D1'].c = [{ t: 'Department name (e.g., Computer Science)' }];
-    ws['E1'].c = [{ t: '100, 200, 300, or 400' }];
-    
-    // Create workbook
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Voters_Template');
-    
-    // Download file
     XLSX.writeFile(wb, `voter_upload_template_${new Date().toISOString().split('T')[0]}.xlsx`);
-    
-    toast.success('Template downloaded! Add your voter data and upload using Bulk Upload.');
+    toast.success('Template downloaded!');
   };
 
   const handleBulkUpload = async (e) => {
@@ -391,40 +463,38 @@ export default function ManageVoters() {
         
         let successCount = 0;
         let errorCount = 0;
-        const errors = [];
         
         for (const row of jsonData) {
           try {
-            // Support multiple column name variations
-            const name = row.Name || row.name || row.NAME;
-            const email = row.Email || row.email || row.EMAIL;
-            const school_id = row['School ID'] || row.school_id || row.SchoolID || row.SCHOOL_ID;
-            const department = row.Department || row.department || row.DEPT;
-            const year_of_study = row['Year of Study'] || row.year_of_study || row.Year || row.YEAR;
+            const name = row.Name || row.name;
+            const email = row.Email || row.email;
+            const school_id = row['School ID'] || row.school_id;
+            const department = row.Department || row.department;
+            const program = row.Program || row.program;
+            const year_of_study = row['Year of Study'] || row.year_of_study;
             
-            // Validate required fields
-            if (!name || !email || !school_id) {
+            if (!name || !email || !school_id || !department || !program) {
               errorCount++;
-              errors.push(`Missing required fields in row: ${JSON.stringify(row)}`);
               continue;
             }
             
-            // Validate email domain
+            // Validate name has no numbers
+            if (/\d/.test(name)) {
+              errorCount++;
+              continue;
+            }
+            
             if (!email.toLowerCase().endsWith('@regent.edu.gh')) {
               errorCount++;
-              errors.push(`Invalid email domain: ${email}`);
               continue;
             }
             
-            // Validate school ID format
             const schoolIdStr = school_id.toString().padStart(8, '0');
             if (!/^[0-9]{8}$/.test(schoolIdStr)) {
               errorCount++;
-              errors.push(`Invalid school ID format: ${school_id}`);
               continue;
             }
             
-            // Check if exists
             const { data: existing } = await supabase
               .from('voters')
               .select('id')
@@ -433,31 +503,17 @@ export default function ManageVoters() {
             
             if (existing) {
               errorCount++;
-              errors.push(`Email already exists: ${email}`);
               continue;
             }
             
-            // Check if school ID exists
-            const { data: existingSchoolId } = await supabase
-              .from('voters')
-              .select('id')
-              .eq('school_id', schoolIdStr)
-              .maybeSingle();
-            
-            if (existingSchoolId) {
-              errorCount++;
-              errors.push(`School ID already exists: ${schoolIdStr}`);
-              continue;
-            }
-            
-            // Insert new voter
             const { error } = await supabase
               .from('voters')
               .insert({
                 email: email.toLowerCase(),
                 name: name,
                 school_id: schoolIdStr,
-                department: department || '',
+                department: department,
+                program: program,
                 year_of_study: parseInt(year_of_study) || 100,
                 has_voted: false,
                 created_at: new Date().toISOString()
@@ -468,13 +524,7 @@ export default function ManageVoters() {
             
           } catch (err) {
             errorCount++;
-            errors.push(`Error adding row: ${err.message}`);
-            console.error('Error adding row:', err);
           }
-        }
-        
-        if (errors.length > 0 && errors.length <= 5) {
-          console.error('Upload errors:', errors);
         }
         
         toast.success(`✅ Added ${successCount} voters. ❌ Failed: ${errorCount}`);
@@ -482,12 +532,12 @@ export default function ManageVoters() {
         
       } catch (error) {
         console.error('Error processing file:', error);
-        toast.error('Failed to process file. Please use the template format.');
+        toast.error('Failed to process file');
       }
     };
     
     reader.readAsArrayBuffer(file);
-    e.target.value = ''; // Reset file input
+    e.target.value = '';
   };
 
   const exportToExcel = () => {
@@ -496,10 +546,10 @@ export default function ManageVoters() {
       'Email': voter.email,
       'School ID': voter.school_id,
       'Department': voter.department,
+      'Program': voter.program,
       'Year': voter.year_of_study,
       'Has Voted': voter.has_voted ? 'Yes' : 'No',
-      'Voted At': voter.voted_at ? new Date(voter.voted_at).toLocaleString() : 'Not voted',
-      'Created At': new Date(voter.created_at).toLocaleString()
+      'Voted At': voter.voted_at ? new Date(voter.voted_at).toLocaleString() : 'Not voted'
     }));
     
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -523,9 +573,7 @@ export default function ManageVoters() {
         <Toaster position="top-center" richColors />
         <div className="text-center">
           <FaSpinner className="animate-spin text-4xl text-teal-500 mx-auto mb-4" />
-          <p className={theme === 'light' ? 'text-gray-600' : 'text-white'}>
-            Loading voters...
-          </p>
+          <p className={theme === 'light' ? 'text-gray-600' : 'text-white'}>Loading voters...</p>
         </div>
       </div>
     );
@@ -539,7 +587,6 @@ export default function ManageVoters() {
     }`}>
       <Toaster position="top-center" richColors closeButton />
 
-      {/* Theme Toggle Button */}
       <button
         onClick={toggleTheme}
         className="fixed bottom-6 right-6 z-50 p-3 rounded-full shadow-lg transition-all duration-300 hover:scale-110"
@@ -555,14 +602,10 @@ export default function ManageVoters() {
         
         {/* Header */}
         <div className="mb-8">
-          <h1 className={`text-3xl font-bold ${
-            theme === 'light' ? 'text-gray-900' : 'text-white'
-          }`}>
+          <h1 className={`text-3xl font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
             Manage Voters
           </h1>
-          <p className={`mt-2 ${
-            theme === 'light' ? 'text-gray-600' : 'text-gray-300'
-          }`}>
+          <p className={`mt-2 ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>
             Add, edit, or remove voters from the election database
           </p>
           <p className="text-teal-600 dark:text-teal-400 text-sm mt-1">
@@ -573,72 +616,48 @@ export default function ManageVoters() {
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <div className={`rounded-xl p-4 border ${
-            theme === 'light'
-              ? 'bg-white border-gray-200 shadow-sm'
-              : 'bg-white/10 backdrop-blur-lg border-white/20'
+            theme === 'light' ? 'bg-white border-gray-200 shadow-sm' : 'bg-white/10 backdrop-blur-lg border-white/20'
           }`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className={`text-xs ${
-                  theme === 'light' ? 'text-gray-500' : 'text-white/70'
-                }`}>Total Voters</p>
-                <p className={`text-2xl font-bold mt-1 ${
-                  theme === 'light' ? 'text-gray-900' : 'text-white'
-                }`}>{stats.total}</p>
+                <p className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-white/70'}`}>Total Voters</p>
+                <p className={`text-2xl font-bold mt-1 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{stats.total}</p>
               </div>
               <FaUsers className="text-2xl text-teal-500" />
             </div>
           </div>
           
           <div className={`rounded-xl p-4 border ${
-            theme === 'light'
-              ? 'bg-white border-gray-200 shadow-sm'
-              : 'bg-white/10 backdrop-blur-lg border-white/20'
+            theme === 'light' ? 'bg-white border-gray-200 shadow-sm' : 'bg-white/10 backdrop-blur-lg border-white/20'
           }`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className={`text-xs ${
-                  theme === 'light' ? 'text-gray-500' : 'text-white/70'
-                }`}>Have Voted</p>
-                <p className="text-2xl font-bold mt-1 text-teal-600 dark:text-teal-400">
-                  {stats.voted}
-                </p>
+                <p className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-white/70'}`}>Have Voted</p>
+                <p className="text-2xl font-bold mt-1 text-teal-600 dark:text-teal-400">{stats.voted}</p>
               </div>
               <FaCheckCircle className="text-2xl text-teal-500" />
             </div>
           </div>
           
           <div className={`rounded-xl p-4 border ${
-            theme === 'light'
-              ? 'bg-white border-gray-200 shadow-sm'
-              : 'bg-white/10 backdrop-blur-lg border-white/20'
+            theme === 'light' ? 'bg-white border-gray-200 shadow-sm' : 'bg-white/10 backdrop-blur-lg border-white/20'
           }`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className={`text-xs ${
-                  theme === 'light' ? 'text-gray-500' : 'text-white/70'
-                }`}>Not Voted</p>
-                <p className="text-2xl font-bold mt-1 text-teal-600 dark:text-teal-400">
-                  {stats.notVoted}
-                </p>
+                <p className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-white/70'}`}>Not Voted</p>
+                <p className="text-2xl font-bold mt-1 text-teal-600 dark:text-teal-400">{stats.notVoted}</p>
               </div>
               <FaTimesCircle className="text-2xl text-teal-500" />
             </div>
           </div>
 
           <div className={`rounded-xl p-4 border ${
-            theme === 'light'
-              ? 'bg-white border-gray-200 shadow-sm'
-              : 'bg-white/10 backdrop-blur-lg border-white/20'
+            theme === 'light' ? 'bg-white border-gray-200 shadow-sm' : 'bg-white/10 backdrop-blur-lg border-white/20'
           }`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className={`text-xs ${
-                  theme === 'light' ? 'text-gray-500' : 'text-white/70'
-                }`}>Turnout</p>
-                <p className="text-2xl font-bold mt-1 text-teal-600 dark:text-teal-400">
-                  {stats.turnout}%
-                </p>
+                <p className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-white/70'}`}>Turnout</p>
+                <p className="text-2xl font-bold mt-1 text-teal-600 dark:text-teal-400">{stats.turnout}%</p>
               </div>
               <FaChartLine className="text-2xl text-teal-500" />
             </div>
@@ -647,9 +666,7 @@ export default function ManageVoters() {
 
         {/* Actions Bar */}
         <div className={`rounded-xl p-4 sm:p-6 border mb-8 ${
-          theme === 'light'
-            ? 'bg-white border-gray-200 shadow-sm'
-            : 'bg-white/10 backdrop-blur-lg border-white/20'
+          theme === 'light' ? 'bg-white border-gray-200 shadow-sm' : 'bg-white/10 backdrop-blur-lg border-white/20'
         }`}>
           <div className="flex flex-col sm:flex-row gap-4 justify-between items-stretch sm:items-center">
             <div className="flex-1 min-w-[200px]">
@@ -661,172 +678,94 @@ export default function ManageVoters() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
-                    theme === 'light'
-                      ? 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
-                      : 'bg-white/5 border-white/20 text-white placeholder-gray-400'
+                    theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-white/5 border-white/20 text-white'
                   }`}
                 />
               </div>
             </div>
             
             <div className="flex gap-3 flex-wrap">
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition"
-              >
+              <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition">
                 <FaUserPlus /> Add Voter
               </button>
-              
-              {/* Download Template Button */}
-              <button
-                onClick={downloadTemplate}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white transition"
-              >
+              <button onClick={downloadTemplate} className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white transition">
                 <FaFileExcel /> Download Template
               </button>
-              
               <label className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition cursor-pointer">
                 <FaUpload /> Bulk Upload
-                <input
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={handleBulkUpload}
-                  className="hidden"
-                />
+                <input type="file" accept=".xlsx,.xls,.csv" onChange={handleBulkUpload} className="hidden" />
               </label>
-              
-              <button
-                onClick={exportToExcel}
-                className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition"
-              >
+              <button onClick={exportToExcel} className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition">
                 <FaDownload /> Export
               </button>
             </div>
           </div>
         </div>
 
-        {/* Template Instructions */}
-        <div className={`mb-6 p-4 rounded-lg border ${
-          theme === 'light'
-            ? 'bg-blue-50 border-blue-200'
-            : 'bg-blue-500/10 border-blue-500/20'
-        }`}>
-          <div className="flex items-start gap-3">
-            <FaFileExcel className="text-green-600 dark:text-green-400 text-xl mt-0.5" />
-            <div>
-              <p className={`font-medium ${theme === 'light' ? 'text-blue-800' : 'text-blue-300'}`}>
-                📋 Bulk Upload Instructions:
-              </p>
-              <p className={`text-sm mt-1 ${theme === 'light' ? 'text-blue-700' : 'text-blue-400'}`}>
-                1. Click <strong>"Download Template"</strong> to get the Excel template<br />
-                2. Fill in voter details (Name, Email, School ID, Department, Year of Study)<br />
-                3. Email must end with <strong>@regent.edu.gh</strong><br />
-                4. School ID must be <strong>8 digits</strong><br />
-                5. Year of Study: <strong>100, 200, 300, or 400</strong><br />
-                6. Click <strong>"Bulk Upload"</strong> to import your data
-              </p>
-            </div>
-          </div>
-        </div>
-
         {/* Voters Table */}
         <div className={`rounded-xl border overflow-hidden ${
-          theme === 'light'
-            ? 'bg-white border-gray-200 shadow-sm'
-            : 'bg-white/10 backdrop-blur-lg border-white/20'
+          theme === 'light' ? 'bg-white border-gray-200 shadow-sm' : 'bg-white/10 backdrop-blur-lg border-white/20'
         }`}>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[800px]">
-              <thead className={`border-b ${
-                theme === 'light' ? 'bg-gray-50 border-gray-200' : 'bg-white/5 border-white/10'
-              }`}>
+              <thead className={`border-b ${theme === 'light' ? 'bg-gray-50 border-gray-200' : 'bg-white/5 border-white/10'}`}>
                 <tr>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                    School ID
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider hidden md:table-cell">
-                    Department
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider hidden sm:table-cell">
-                    Year
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                    Actions
-                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Name</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Email</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">School ID</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider hidden md:table-cell">Department</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider hidden lg:table-cell">Program</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider hidden sm:table-cell">Year</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className={`divide-y ${
-                theme === 'light' ? 'divide-gray-100' : 'divide-white/10'
-              }`}>
+              <tbody className={`divide-y ${theme === 'light' ? 'divide-gray-100' : 'divide-white/10'}`}>
                 {filteredVoters.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center text-gray-400">
-                      No voters found
-                    </td>
+                    <td colSpan="8" className="px-6 py-12 text-center text-gray-400">No voters found</td>
                   </tr>
                 ) : (
                   filteredVoters.map((voter) => (
-                    <tr
-                      key={voter.id}
-                      className={`transition ${
-                        theme === 'light' ? 'hover:bg-gray-50' : 'hover:bg-white/5'
-                      }`}
-                    >
+                    <tr key={voter.id} className={`transition ${theme === 'light' ? 'hover:bg-gray-50' : 'hover:bg-white/5'}`}>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <FaUserGraduate className="text-teal-500 text-sm" />
-                          <div className={`font-medium ${
-                            theme === 'light' ? 'text-gray-900' : 'text-white'
-                          }`}>
-                            {voter.name}
-                          </div>
+                          <div className={`font-medium ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{voter.name}</div>
                         </div>
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <FaEnvelope className="text-teal-500 text-xs" />
-                          <div className={`text-sm ${
-                            theme === 'light' ? 'text-gray-600' : 'text-gray-300'
-                          }`}>
-                            {voter.email}
-                          </div>
+                          <div className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>{voter.email}</div>
                         </div>
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <FaIdCard className="text-teal-500 text-xs" />
-                          <code className={`text-sm font-mono ${
-                            theme === 'light' ? 'text-teal-600' : 'text-teal-400'
-                          }`}>
-                            {voter.school_id}
-                          </code>
+                          <code className={`text-sm font-mono ${theme === 'light' ? 'text-teal-600' : 'text-teal-400'}`}>{voter.school_id}</code>
                         </div>
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap hidden md:table-cell">
                         <div className="flex items-center gap-2">
                           <FaBuilding className="text-teal-500 text-xs" />
-                          <div className={`text-sm ${
-                            theme === 'light' ? 'text-gray-600' : 'text-gray-300'
-                          }`}>
+                          <div className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>
                             {voter.department || 'N/A'}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 hidden lg:table-cell">
+                        <div className="flex items-center gap-2">
+                          <FaUniversity className="text-teal-500 text-xs" />
+                          <div className={`text-sm truncate max-w-xs ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>
+                            {voter.program || 'N/A'}
                           </div>
                         </div>
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap hidden sm:table-cell">
                         <div className="flex items-center gap-2">
                           <FaGraduationCap className="text-teal-500 text-xs" />
-                          <div className={`text-sm ${
-                            theme === 'light' ? 'text-gray-600' : 'text-gray-300'
-                          }`}>
+                          <div className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>
                             Level {voter.year_of_study}
                           </div>
                         </div>
@@ -844,23 +783,10 @@ export default function ManageVoters() {
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => openEditModal(voter)}
-                            className="text-teal-600 dark:text-teal-400 hover:text-teal-500 transition"
-                            title="Edit voter"
-                          >
+                          <button onClick={() => openEditModal(voter)} className="text-teal-600 dark:text-teal-400 hover:text-teal-500 transition" title="Edit voter">
                             <FaEdit />
                           </button>
-                          <button
-                            onClick={() => setShowDeleteConfirm(voter.id)}
-                            disabled={voter.has_voted}
-                            className={`text-red-500 transition ${
-                              voter.has_voted 
-                                ? 'opacity-50 cursor-not-allowed' 
-                                : 'hover:text-red-600'
-                            }`}
-                            title={voter.has_voted ? 'Cannot delete voters who have already voted' : 'Delete voter'}
-                          >
+                          <button onClick={() => setShowDeleteConfirm(voter.id)} disabled={voter.has_voted} className={`text-red-500 transition ${voter.has_voted ? 'opacity-50 cursor-not-allowed' : 'hover:text-red-600'}`} title={voter.has_voted ? 'Cannot delete voters who have already voted' : 'Delete voter'}>
                             <FaTrash />
                           </button>
                         </div>
@@ -876,33 +802,22 @@ export default function ManageVoters() {
 
       {/* Add Voter Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className={`rounded-xl max-w-md w-full p-6 ${
-            theme === 'light' ? 'bg-white' : 'bg-gray-800'
-          }`}>
-            <h2 className={`text-2xl font-bold mb-4 ${
-              theme === 'light' ? 'text-gray-900' : 'text-white'
-            }`}>
-              Add New Voter
-            </h2>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className={`rounded-xl max-w-md w-full p-6 my-8 ${theme === 'light' ? 'bg-white' : 'bg-gray-800'}`}>
+            <h2 className={`text-2xl font-bold mb-4 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>Add New Voter</h2>
             
             <form onSubmit={handleAddVoter} className="space-y-4">
+              {/* Name Field with Capitalization */}
               <div>
-                <label className={`block mb-2 ${
-                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
-                }`}>
-                  Full Name *
-                </label>
+                <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Full Name *</label>
                 <div className="relative">
                   <FaUserPlus className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
                   <input
                     type="text"
                     value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
-                      theme === 'light'
-                        ? 'bg-white border-gray-300 text-gray-900'
-                        : 'bg-gray-700 border-gray-600 text-white'
+                    onChange={handleNameChange}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 capitalize ${
+                      theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
                     placeholder="John Doe"
                   />
@@ -910,12 +825,9 @@ export default function ManageVoters() {
                 {formErrors.name && <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>}
               </div>
               
+              {/* Email Field */}
               <div>
-                <label className={`block mb-2 ${
-                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
-                }`}>
-                  Email *
-                </label>
+                <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Email *</label>
                 <div className="relative">
                   <FaEnvelope className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
                   <input
@@ -923,9 +835,7 @@ export default function ManageVoters() {
                     value={formData.email}
                     onChange={(e) => setFormData({...formData, email: e.target.value})}
                     className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
-                      theme === 'light'
-                        ? 'bg-white border-gray-300 text-gray-900'
-                        : 'bg-gray-700 border-gray-600 text-white'
+                      theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
                     placeholder="john.doe@regent.edu.gh"
                   />
@@ -933,12 +843,9 @@ export default function ManageVoters() {
                 {formErrors.email && <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>}
               </div>
               
+              {/* School ID Field */}
               <div>
-                <label className={`block mb-2 ${
-                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
-                }`}>
-                  School ID *
-                </label>
+                <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>School ID *</label>
                 <div className="relative">
                   <FaIdCard className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
                   <input
@@ -946,9 +853,7 @@ export default function ManageVoters() {
                     value={formData.school_id}
                     onChange={(e) => setFormData({...formData, school_id: e.target.value})}
                     className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
-                      theme === 'light'
-                        ? 'bg-white border-gray-300 text-gray-900'
-                        : 'bg-gray-700 border-gray-600 text-white'
+                      theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
                     placeholder="12345678"
                     maxLength="8"
@@ -957,44 +862,61 @@ export default function ManageVoters() {
                 {formErrors.school_id && <p className="text-red-500 text-xs mt-1">{formErrors.school_id}</p>}
               </div>
               
+              {/* Department Dropdown */}
               <div>
-                <label className={`block mb-2 ${
-                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
-                }`}>
-                  Department *
-                </label>
+                <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Department *</label>
                 <div className="relative">
                   <FaBuilding className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
-                  <input
-                    type="text"
+                  <select
                     value={formData.department}
-                    onChange={(e) => setFormData({...formData, department: e.target.value})}
+                    onChange={(e) => handleDepartmentChange(e.target.value)}
                     className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
-                      theme === 'light'
-                        ? 'bg-white border-gray-300 text-gray-900'
-                        : 'bg-gray-700 border-gray-600 text-white'
+                      theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
-                    placeholder="Computer Science"
-                  />
+                  >
+                    <option value="">Select Department</option>
+                    {Object.entries(departmentsData).map(([key, dept]) => (
+                      <option key={key} value={key}>{dept.name}</option>
+                    ))}
+                  </select>
                 </div>
                 {formErrors.department && <p className="text-red-500 text-xs mt-1">{formErrors.department}</p>}
               </div>
               
+              {/* Program Dropdown - Populated based on Department */}
               <div>
-                <label className={`block mb-2 ${
-                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
-                }`}>
-                  Year of Study *
-                </label>
+                <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Program of Study *</label>
+                <div className="relative">
+                  <FaUniversity className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
+                  <select
+                    value={formData.program}
+                    onChange={(e) => setFormData({...formData, program: e.target.value})}
+                    disabled={!formData.department}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      !formData.department ? 'opacity-50 cursor-not-allowed' : ''
+                    } ${
+                      theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
+                  >
+                    <option value="">{formData.department ? 'Select Program' : 'Select Department First'}</option>
+                    {availablePrograms.map((program, idx) => (
+                      <option key={idx} value={program}>{program}</option>
+                    ))}
+                  </select>
+                </div>
+                {formErrors.program && <p className="text-red-500 text-xs mt-1">{formErrors.program}</p>}
+              </div>
+              
+              {/* Year of Study Dropdown */}
+              <div>
+                <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Year of Study *</label>
                 <div className="relative">
                   <FaGraduationCap className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
                   <select
                     value={formData.year_of_study}
                     onChange={(e) => setFormData({...formData, year_of_study: e.target.value})}
                     className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
-                      theme === 'light'
-                        ? 'bg-white border-gray-300 text-gray-900'
-                        : 'bg-gray-700 border-gray-600 text-white'
+                      theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
                   >
                     <option value="">Select Year</option>
@@ -1008,25 +930,10 @@ export default function ManageVoters() {
               </div>
               
               <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddModal(false);
-                    resetForm();
-                  }}
-                  className={`flex-1 px-4 py-2 rounded-lg transition ${
-                    theme === 'light'
-                      ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                      : 'bg-gray-700 hover:bg-gray-600 text-white'
-                  }`}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition disabled:opacity-50"
-                >
+                <button type="button" onClick={() => { setShowAddModal(false); resetForm(); }} className={`flex-1 px-4 py-2 rounded-lg transition ${
+                  theme === 'light' ? 'bg-gray-200 hover:bg-gray-300 text-gray-700' : 'bg-gray-700 hover:bg-gray-600 text-white'
+                }`}>Cancel</button>
+                <button type="submit" disabled={submitting} className="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition disabled:opacity-50">
                   {submitting ? <FaSpinner className="animate-spin mx-auto" /> : 'Add Voter'}
                 </button>
               </div>
@@ -1035,48 +942,31 @@ export default function ManageVoters() {
         </div>
       )}
 
-      {/* Edit Voter Modal */}
+      {/* Edit Voter Modal - Similar structure */}
       {showEditModal && editingVoter && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className={`rounded-xl max-w-md w-full p-6 ${
-            theme === 'light' ? 'bg-white' : 'bg-gray-800'
-          }`}>
-            <h2 className={`text-2xl font-bold mb-4 ${
-              theme === 'light' ? 'text-gray-900' : 'text-white'
-            }`}>
-              Edit Voter
-            </h2>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className={`rounded-xl max-w-md w-full p-6 my-8 ${theme === 'light' ? 'bg-white' : 'bg-gray-800'}`}>
+            <h2 className={`text-2xl font-bold mb-4 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>Edit Voter</h2>
             
             <form onSubmit={handleEditVoter} className="space-y-4">
               <div>
-                <label className={`block mb-2 ${
-                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
-                }`}>
-                  Full Name *
-                </label>
+                <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Full Name *</label>
                 <div className="relative">
                   <FaUserPlus className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
                   <input
                     type="text"
                     value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
-                      theme === 'light'
-                        ? 'bg-white border-gray-300 text-gray-900'
-                        : 'bg-gray-700 border-gray-600 text-white'
+                    onChange={handleNameChange}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 capitalize ${
+                      theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
-                    placeholder="John Doe"
                   />
                 </div>
                 {formErrors.name && <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>}
               </div>
               
               <div>
-                <label className={`block mb-2 ${
-                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
-                }`}>
-                  Email *
-                </label>
+                <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Email *</label>
                 <div className="relative">
                   <FaEnvelope className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
                   <input
@@ -1084,22 +974,15 @@ export default function ManageVoters() {
                     value={formData.email}
                     onChange={(e) => setFormData({...formData, email: e.target.value})}
                     className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
-                      theme === 'light'
-                        ? 'bg-white border-gray-300 text-gray-900'
-                        : 'bg-gray-700 border-gray-600 text-white'
+                      theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
-                    placeholder="john.doe@regent.edu.gh"
                   />
                 </div>
                 {formErrors.email && <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>}
               </div>
               
               <div>
-                <label className={`block mb-2 ${
-                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
-                }`}>
-                  School ID *
-                </label>
+                <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>School ID *</label>
                 <div className="relative">
                   <FaIdCard className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
                   <input
@@ -1107,11 +990,8 @@ export default function ManageVoters() {
                     value={formData.school_id}
                     onChange={(e) => setFormData({...formData, school_id: e.target.value})}
                     className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
-                      theme === 'light'
-                        ? 'bg-white border-gray-300 text-gray-900'
-                        : 'bg-gray-700 border-gray-600 text-white'
+                      theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
-                    placeholder="12345678"
                     maxLength="8"
                   />
                 </div>
@@ -1119,43 +999,57 @@ export default function ManageVoters() {
               </div>
               
               <div>
-                <label className={`block mb-2 ${
-                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
-                }`}>
-                  Department *
-                </label>
+                <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Department *</label>
                 <div className="relative">
                   <FaBuilding className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
-                  <input
-                    type="text"
+                  <select
                     value={formData.department}
-                    onChange={(e) => setFormData({...formData, department: e.target.value})}
+                    onChange={(e) => handleDepartmentChange(e.target.value)}
                     className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
-                      theme === 'light'
-                        ? 'bg-white border-gray-300 text-gray-900'
-                        : 'bg-gray-700 border-gray-600 text-white'
+                      theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
-                    placeholder="Computer Science"
-                  />
+                  >
+                    <option value="">Select Department</option>
+                    {Object.entries(departmentsData).map(([key, dept]) => (
+                      <option key={key} value={key}>{dept.name}</option>
+                    ))}
+                  </select>
                 </div>
                 {formErrors.department && <p className="text-red-500 text-xs mt-1">{formErrors.department}</p>}
               </div>
               
               <div>
-                <label className={`block mb-2 ${
-                  theme === 'light' ? 'text-gray-700' : 'text-gray-300'
-                }`}>
-                  Year of Study *
-                </label>
+                <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Program of Study *</label>
+                <div className="relative">
+                  <FaUniversity className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
+                  <select
+                    value={formData.program}
+                    onChange={(e) => setFormData({...formData, program: e.target.value})}
+                    disabled={!formData.department}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      !formData.department ? 'opacity-50 cursor-not-allowed' : ''
+                    } ${
+                      theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
+                  >
+                    <option value="">{formData.department ? 'Select Program' : 'Select Department First'}</option>
+                    {availablePrograms.map((program, idx) => (
+                      <option key={idx} value={program}>{program}</option>
+                    ))}
+                  </select>
+                </div>
+                {formErrors.program && <p className="text-red-500 text-xs mt-1">{formErrors.program}</p>}
+              </div>
+              
+              <div>
+                <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Year of Study *</label>
                 <div className="relative">
                   <FaGraduationCap className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
                   <select
                     value={formData.year_of_study}
                     onChange={(e) => setFormData({...formData, year_of_study: e.target.value})}
                     className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
-                      theme === 'light'
-                        ? 'bg-white border-gray-300 text-gray-900'
-                        : 'bg-gray-700 border-gray-600 text-white'
+                      theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
                   >
                     <option value="">Select Year</option>
@@ -1169,26 +1063,10 @@ export default function ManageVoters() {
               </div>
               
               <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowEditModal(false);
-                    setEditingVoter(null);
-                    resetForm();
-                  }}
-                  className={`flex-1 px-4 py-2 rounded-lg transition ${
-                    theme === 'light'
-                      ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                      : 'bg-gray-700 hover:bg-gray-600 text-white'
-                  }`}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition disabled:opacity-50"
-                >
+                <button type="button" onClick={() => { setShowEditModal(false); setEditingVoter(null); resetForm(); }} className={`flex-1 px-4 py-2 rounded-lg transition ${
+                  theme === 'light' ? 'bg-gray-200 hover:bg-gray-300 text-gray-700' : 'bg-gray-700 hover:bg-gray-600 text-white'
+                }`}>Cancel</button>
+                <button type="submit" disabled={submitting} className="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition disabled:opacity-50">
                   {submitting ? <FaSpinner className="animate-spin mx-auto" /> : 'Update Voter'}
                 </button>
               </div>
@@ -1200,36 +1078,16 @@ export default function ManageVoters() {
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className={`rounded-xl max-w-md w-full p-6 ${
-            theme === 'light' ? 'bg-white' : 'bg-gray-800'
-          }`}>
-            <h2 className={`text-2xl font-bold mb-4 ${
-              theme === 'light' ? 'text-gray-900' : 'text-white'
-            }`}>
-              Confirm Delete
-            </h2>
-            <p className={`mb-6 ${
-              theme === 'light' ? 'text-gray-600' : 'text-gray-300'
-            }`}>
+          <div className={`rounded-xl max-w-md w-full p-6 ${theme === 'light' ? 'bg-white' : 'bg-gray-800'}`}>
+            <h2 className={`text-2xl font-bold mb-4 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>Confirm Delete</h2>
+            <p className={`mb-6 ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>
               Are you sure you want to delete this voter? This action cannot be undone.
             </p>
             <div className="flex gap-3">
-              <button
-                onClick={() => setShowDeleteConfirm(null)}
-                className={`flex-1 px-4 py-2 rounded-lg transition ${
-                  theme === 'light'
-                    ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                    : 'bg-gray-700 hover:bg-gray-600 text-white'
-                }`}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleDeleteVoter(showDeleteConfirm)}
-                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-white transition"
-              >
-                Delete
-              </button>
+              <button onClick={() => setShowDeleteConfirm(null)} className={`flex-1 px-4 py-2 rounded-lg transition ${
+                theme === 'light' ? 'bg-gray-200 hover:bg-gray-300 text-gray-700' : 'bg-gray-700 hover:bg-gray-600 text-white'
+              }`}>Cancel</button>
+              <button onClick={() => handleDeleteVoter(showDeleteConfirm)} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-white transition">Delete</button>
             </div>
           </div>
         </div>

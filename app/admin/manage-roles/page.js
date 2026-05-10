@@ -64,6 +64,49 @@ export default function ManageRoles() {
     { value: 'admin', label: 'Super Admin', icon: FaUserShield, color: 'red' }
   ];
 
+  // ========== HELPER FUNCTIONS ==========
+  
+  // Capitalize name function - removes numbers and capitalizes each word
+  const capitalizeName = (name) => {
+    // Remove any numbers from the name
+    let cleanedName = name.replace(/[0-9]/g, '');
+    // Remove extra spaces
+    cleanedName = cleanedName.replace(/\s+/g, ' ').trim();
+    // Capitalize first letter of each word
+    return cleanedName
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  // Validate name has no numbers
+  const validateNameNoNumbers = (name) => {
+    const hasNumbers = /\d/.test(name);
+    if (hasNumbers) {
+      return { isValid: false, error: 'Name cannot contain numbers. Please use letters only.' };
+    }
+    if (name.length < 2) {
+      return { isValid: false, error: 'Name must be at least 2 characters.' };
+    }
+    return { isValid: true, error: null };
+  };
+
+  // Handle name change with capitalization and validation
+  const handleNameChange = (e) => {
+    const rawName = e.target.value;
+    const capitalized = capitalizeName(rawName);
+    setFormData({ ...formData, name: capitalized });
+    
+    // Real-time validation
+    const validation = validateNameNoNumbers(capitalized);
+    if (!validation.isValid && capitalized) {
+      setFormErrors({ ...formErrors, name: validation.error });
+    } else {
+      setFormErrors({ ...formErrors, name: null });
+    }
+  };
+
   // Theme management
   useEffect(() => {
     const savedTheme = localStorage.getItem('rolesTheme');
@@ -119,8 +162,14 @@ export default function ManageRoles() {
       errors.email = 'Must be a valid @regent.edu.gh email';
     }
     
+    // Name validation with number check
     if (!formData.name) {
       errors.name = 'Name is required';
+    } else {
+      const nameValidation = validateNameNoNumbers(formData.name);
+      if (!nameValidation.isValid) {
+        errors.name = nameValidation.error;
+      }
     }
     
     if (!formData.role) {
@@ -178,91 +227,91 @@ export default function ManageRoles() {
   };
 
   // Add new admin - creates user in Supabase Auth AND adds to admins table
-// Add new admin - creates user in Supabase Auth AND adds to admins table
-const handleAddRole = async (e) => {
-  e.preventDefault();
-  
-  if (!validateForm()) return;
-  
-  setSubmitting(true);
-  try {
-    // Step 1: Create user in Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: formData.email.toLowerCase(),
-      password: formData.password,
-      options: {
-        data: {
-          name: formData.name,
-          role: formData.role,
-          department: formData.department,
-          faculty: formData.faculty
+  const handleAddRole = async (e) => {
+    e.preventDefault();
+    
+    if (!validateForm()) return;
+    
+    // Clean name - remove any numbers
+    const cleanName = formData.name.replace(/[0-9]/g, '').trim();
+    
+    setSubmitting(true);
+    try {
+      // Step 1: Create user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email.toLowerCase(),
+        password: formData.password,
+        options: {
+          data: {
+            name: cleanName,
+            role: formData.role,
+            department: formData.department,
+            faculty: formData.faculty
+          }
         }
+      });
+      
+      if (authError) throw authError;
+      
+      if (!authData.user) {
+        throw new Error('Failed to create user');
       }
-    });
-    
-    if (authError) throw authError;
-    
-    if (!authData.user) {
-      throw new Error('Failed to create user');
-    }
-    
-    // Step 2: Get the current admin's INTEGER ID from the admins table
-    // First, find the current logged-in admin's record
-    const { data: currentAdminRecord, error: currentAdminError } = await supabase
-      .from('admins')
-      .select('id')
-      .eq('email', admin?.email)  // Use email to find the current admin
-      .single();
-    
-    if (currentAdminError) {
-      console.error('Error finding current admin:', currentAdminError);
-      // Fallback: use 1 as default admin ID if not found
-    }
-    
-    const createdByIntegerId = currentAdminRecord?.id || 1;
-    
-    // Step 3: Insert into admins table - CORRECT DATA TYPES
-    const insertData = {
-      email: formData.email.toLowerCase(),
-      name: formData.name,
-      role: formData.role,
-      auth_user_id: authData.user.id,  // UUID from Auth - this is correct
-      school_id: formData.school_id || null,
-      department: formData.role === 'hod' ? formData.department : null,
-      faculty: formData.role === 'dean' ? formData.faculty : null,
-      is_active: true,
-      created_by: createdByIntegerId,  // INTEGER value (not UUID)
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    
-    console.log('Inserting data:', insertData);
-    
-    const { error: insertError } = await supabase
-      .from('admins')
-      .insert(insertData);
-    
-    if (insertError) {
-      console.error('Insert error:', insertError);
-      toast.error('Failed to add role: ' + insertError.message);
+      
+      // Step 2: Get the current admin's INTEGER ID from the admins table
+      const { data: currentAdminRecord, error: currentAdminError } = await supabase
+        .from('admins')
+        .select('id')
+        .eq('email', admin?.email)
+        .single();
+      
+      if (currentAdminError) {
+        console.error('Error finding current admin:', currentAdminError);
+      }
+      
+      const createdByIntegerId = currentAdminRecord?.id || 1;
+      
+      // Step 3: Insert into admins table with cleaned name
+      const insertData = {
+        email: formData.email.toLowerCase(),
+        name: cleanName,
+        role: formData.role,
+        auth_user_id: authData.user.id,
+        school_id: formData.school_id || null,
+        department: formData.role === 'hod' ? formData.department : null,
+        faculty: formData.role === 'dean' ? formData.faculty : null,
+        is_active: true,
+        created_by: createdByIntegerId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      console.log('Inserting data:', insertData);
+      
+      const { error: insertError } = await supabase
+        .from('admins')
+        .insert(insertData);
+      
+      if (insertError) {
+        console.error('Insert error:', insertError);
+        toast.error('Failed to add role: ' + insertError.message);
+        setSubmitting(false);
+        return;
+      }
+      
+      toast.success(`${cleanName} added as ${getRoleLabel(formData.role)} successfully!`);
+      toast.info(`Temporary password sent to ${formData.email}`);
+      
+      setShowAddModal(false);
+      resetForm();
+      fetchRoles();
+      
+    } catch (error) {
+      console.error('Error adding role:', error);
+      toast.error('Failed to add role: ' + error.message);
+    } finally {
       setSubmitting(false);
-      return;
     }
-    
-    toast.success(`${formData.name} added as ${getRoleLabel(formData.role)} successfully!`);
-    toast.info(`Temporary password sent to ${formData.email}`);
-    
-    setShowAddModal(false);
-    resetForm();
-    fetchRoles();
-    
-  } catch (error) {
-    console.error('Error adding role:', error);
-    toast.error('Failed to add role: ' + error.message);
-  } finally {
-    setSubmitting(false);
-  }
-};
+  };
 
   // Update existing admin
   const handleUpdateRole = async (e) => {
@@ -270,11 +319,14 @@ const handleAddRole = async (e) => {
     
     if (!validateForm()) return;
     
+    // Clean name - remove any numbers
+    const cleanName = formData.name.replace(/[0-9]/g, '').trim();
+    
     setSubmitting(true);
     try {
-      // Update admins table
+      // Update admins table with cleaned name
       const updateData = {
-        name: formData.name,
+        name: cleanName,
         email: formData.email.toLowerCase(),
         updated_at: new Date().toISOString()
       };
@@ -317,20 +369,6 @@ const handleAddRole = async (e) => {
     } finally {
       setSubmitting(false);
     }
-
-    const insertData = {
-    email: formData.email.toLowerCase(),
-    name: formData.name,
-    role: formData.role,
-    auth_user_id: authData.user.id,  // UUID from new user
-    school_id: formData.school_id || null,
-    department: formData.role === 'hod' ? formData.department : null,
-    faculty: formData.role === 'dean' ? formData.faculty : null,
-    is_active: true,
-    created_by: admin?.id,  // ✅ Now this is INTEGER (e.g., 1, 2, 3)
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  };
   };
 
   // Delete admin - removes from admins table (optionally from Auth)
@@ -348,8 +386,6 @@ const handleAddRole = async (e) => {
       
       // Optionally delete from Supabase Auth
       if (roleToDelete.auth_user_id) {
-        // Note: This requires admin privileges and service role key
-        // You might want to skip this or handle it separately
         console.log(`Auth user ${roleToDelete.auth_user_id} needs to be deleted manually or via API`);
       }
       
@@ -586,8 +622,8 @@ const handleAddRole = async (e) => {
                   <tr>
                     <td colSpan="5" className="px-6 py-12 text-center text-gray-400">
                       No admin roles found
-                     </td>
-                   </tr>
+                    </td>
+                  </tr>
                 ) : (
                   filteredRoles.map((role) => {
                     const RoleIcon = getRoleIcon(role.role);
@@ -599,7 +635,7 @@ const handleAddRole = async (e) => {
                               <RoleIcon className="text-emerald-500" />
                             </div>
                             <div>
-                              <div className="font-medium">{role.name}</div>
+                              <div className="font-medium capitalize">{role.name}</div>
                               <div className="text-sm text-gray-500">{role.email}</div>
                             </div>
                           </div>
@@ -662,6 +698,7 @@ const handleAddRole = async (e) => {
             </div>
             
             <form onSubmit={editingRole ? handleUpdateRole : handleAddRole} className="space-y-4">
+              {/* Name Field with Capitalization */}
               <div>
                 <label className={`block mb-2 text-sm font-medium ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>
                   Full Name *
@@ -669,12 +706,17 @@ const handleAddRole = async (e) => {
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                  onChange={handleNameChange}
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 capitalize ${
                     theme === 'light' ? 'bg-white border-gray-300' : 'bg-gray-700 border-gray-600 text-white'
                   }`}
                   required
+                  placeholder="John Doe"
                 />
+                {formErrors.name && <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>}
+                <p className={`text-xs mt-1 ${theme === 'light' ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Numbers will be automatically removed. Names are automatically capitalized.
+                </p>
               </div>
               
               <div>
@@ -695,7 +737,7 @@ const handleAddRole = async (e) => {
               
               <div>
                 <label className={`block mb-2 text-sm font-medium ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>
-                  School ID (Optional)
+                  School ID *
                 </label>
                 <input
                   type="text"
@@ -707,7 +749,7 @@ const handleAddRole = async (e) => {
                   placeholder="8-digit School ID"
                   maxLength={8}
                 />
-                <p className="text-xs text-gray-400 mt-1">Optional: For identification purposes</p>
+                
               </div>
               
               <div>
@@ -725,7 +767,7 @@ const handleAddRole = async (e) => {
                   <option value="">Select Role</option>
                   <option value="electoral_commission">Electoral Commission</option>
                   <option value="dean">Dean</option>
-                  <option value="hod">Head of Department</option>
+             
                   <option value="it_admin">IT Admin</option>
                   <option value="admin">Super Admin</option>
                 </select>

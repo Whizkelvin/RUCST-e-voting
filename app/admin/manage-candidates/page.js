@@ -57,6 +57,49 @@ export default function ManageCandidates() {
   const [positions, setPositions] = useState([]);
   const router = useRouter();
 
+  // ========== HELPER FUNCTIONS ==========
+  
+  // Capitalize name function - removes numbers and capitalizes each word
+  const capitalizeName = (name) => {
+    // Remove any numbers from the name
+    let cleanedName = name.replace(/[0-9]/g, '');
+    // Remove extra spaces
+    cleanedName = cleanedName.replace(/\s+/g, ' ').trim();
+    // Capitalize first letter of each word
+    return cleanedName
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  // Validate name has no numbers
+  const validateNameNoNumbers = (name) => {
+    const hasNumbers = /\d/.test(name);
+    if (hasNumbers) {
+      return { isValid: false, error: 'Name cannot contain numbers. Please use letters only.' };
+    }
+    if (name.length < 2) {
+      return { isValid: false, error: 'Name must be at least 2 characters.' };
+    }
+    return { isValid: true, error: null };
+  };
+
+  // Handle name change with capitalization and validation
+  const handleNameChange = (e) => {
+    const rawName = e.target.value;
+    const capitalized = capitalizeName(rawName);
+    setFormData({ ...formData, name: capitalized });
+    
+    // Real-time validation
+    const validation = validateNameNoNumbers(capitalized);
+    if (!validation.isValid && capitalized) {
+      setFormErrors({ ...formErrors, name: validation.error });
+    } else {
+      setFormErrors({ ...formErrors, name: null });
+    }
+  };
+
   // Theme management
   useEffect(() => {
     const savedTheme = localStorage.getItem('candidatesTheme');
@@ -301,7 +344,16 @@ export default function ManageCandidates() {
   const validateForm = () => {
     const errors = {};
     
-    if (!formData.name?.trim()) errors.name = 'Name is required';
+    // Name validation with number check
+    if (!formData.name?.trim()) {
+      errors.name = 'Name is required';
+    } else {
+      const nameValidation = validateNameNoNumbers(formData.name);
+      if (!nameValidation.isValid) {
+        errors.name = nameValidation.error;
+      }
+    }
+    
     if (!formData.position?.trim()) errors.position = 'Position is required';
     if (!formData.department?.trim()) errors.department = 'Department is required';
     if (!formData.manifesto?.trim()) {
@@ -352,8 +404,11 @@ export default function ManageCandidates() {
         if (uploadedUrl) imageUrl = uploadedUrl;
       }
       
+      // Clean name - remove any numbers
+      const cleanName = formData.name.replace(/[0-9]/g, '').trim();
+      
       const candidateData = {
-        name: formData.name.trim(),
+        name: cleanName,
         position: formData.position.trim(),
         position_id: positionId,
         department: formData.department.trim(),
@@ -418,8 +473,11 @@ export default function ManageCandidates() {
         }
       }
       
+      // Clean name - remove any numbers
+      const cleanName = formData.name.replace(/[0-9]/g, '').trim();
+      
       const candidateData = {
-        name: formData.name.trim(),
+        name: cleanName,
         position: formData.position.trim(),
         position_id: positionId,
         department: formData.department.trim(),
@@ -962,7 +1020,7 @@ export default function ManageCandidates() {
                               </div>
                             )}
                             <div>
-                              <div className={`font-medium text-sm sm:text-base ${
+                              <div className={`font-medium text-sm sm:text-base capitalize ${
                                 theme === 'light' ? 'text-gray-900' : 'text-white'
                               }`}>
                                 {candidate.name}
@@ -1078,6 +1136,7 @@ export default function ManageCandidates() {
             </div>
             
             <form onSubmit={editingCandidate ? handleUpdateCandidate : handleAddCandidate} className="p-4 sm:p-6 space-y-4 sm:space-y-5">
+              {/* Name Field with Capitalization and Validation */}
               <div>
                 <label className={`block text-sm mb-2 ${
                   theme === 'light' ? 'text-gray-700' : 'text-gray-300'
@@ -1085,8 +1144,8 @@ export default function ManageCandidates() {
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm ${
+                  onChange={handleNameChange}
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm capitalize ${
                     theme === 'light'
                       ? 'bg-white border-gray-300 text-gray-900'
                       : 'bg-gray-700 border-gray-600 text-white'
@@ -1094,6 +1153,11 @@ export default function ManageCandidates() {
                   placeholder="John Doe"
                 />
                 {formErrors.name && <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>}
+                <p className={`text-xs mt-1 ${
+                  theme === 'light' ? 'text-gray-400' : 'text-gray-500'
+                }`}>
+                  Numbers will be automatically removed. Names are automatically capitalized.
+                </p>
               </div>
               
               <div>
