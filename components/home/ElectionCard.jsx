@@ -220,7 +220,7 @@ const ElectionCard = ({ election, index, isVotingActive, votingPeriod, loading, 
       {/* Vote Button - Only show if voting is active */}
       {isVotingActive && election.status === 'active' && election.candidatesCount > 0 && !votingEnded && (
         <Link href={`/vote/${election.id}`}>
-          <button className="w-full mt-4 py-3 px-4 bg-gradient-to-r from-gray-700 to-gray-900 text-white rounded-lg hover:shadow-lg hover:scale-[1.02] transition-all duration-300 font-semibold flex items-center justify-center space-x-2">
+          <button className="w-full mt-4 py-3 px-4 bg-green-950 text-white rounded-lg hover:shadow-lg hover:scale-[1.02] transition-all duration-300 font-semibold flex items-center justify-center space-x-2">
             <FaVoteYea className="text-lg" />
             <span>Vote Now</span>
           </button>

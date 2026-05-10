@@ -88,7 +88,7 @@ const NavigationBar = ({ isVotingActive, isMobileMenuOpen, setIsMobileMenuOpen, 
             </div>
             
             <div className="sm:block">
-              <h1 className={`text-base sm:text-xl font-bold bg-gradient-to-r from-green-950 to-emerald-700 bg-clip-text text-transparent ${
+              <h1 className={`text-base sm:text-xl font-bold bg-gradient-to-r from-green-700 to-emerald-700 bg-clip-text text-transparent ${
                 theme === 'dark' && 'brightness-110'
               }`}>
                 RUCST

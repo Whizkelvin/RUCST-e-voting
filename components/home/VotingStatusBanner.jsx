@@ -33,7 +33,7 @@ const VotingStatusBanner = ({ isVotingActive, theme }) => {
         </div>
         <button
           onClick={() => router.push(isVotingActive ? '/login' : '/election-result')}
-          className={`px-6 py-3 ${theme === 'light' ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-700 hover:bg-gray-600'} text-white font-semibold rounded-xl transition-colors transform hover:scale-105 duration-300`}
+          className={`px-6 py-3 ${theme === 'light' ? 'bg-green-700 hover:bg-green-600' : 'bg-green-700 hover:bg-green-600'} text-white font-semibold rounded-xl transition-colors transform hover:scale-105 duration-300`}
         >
           {isVotingActive ? 'Go to Voting' : 'View Results'}
         </button>
