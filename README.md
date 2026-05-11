@@ -37,3 +37,17 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 
 RJu5WK7AHJQgPuIS# RUCST-e-voting
+
+{/* Action Buttons Row - Export & Toggle Statistics */}
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+            {/* Export Button */}
+            {hasResults && (
+              <button
+                onClick={exportResults}
+                className={`flex items-center gap-2 px-4 py-2 ${currentTheme.statBg} ${currentTheme.buttonHover} rounded-lg ${currentTheme.textPrimary} transition text-sm sm:text-base`}
+              >
+                <FaDownload className={getIconColor()} />
+                Export Results as CSV
+              </button>
+            )}
+          </div>

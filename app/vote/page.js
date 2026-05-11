@@ -275,6 +275,8 @@ export default function VotePage() {
     toast.info(`Selection cleared for ${position?.title}`);
   };
 
+
+
   const openConfirmModal = () => {
     const missingSelections = positions.filter(pos => !selectedCandidates[pos.id]);
     if (missingSelections.length > 0) { 
@@ -284,87 +286,135 @@ export default function VotePage() {
     setShowConfirmModal(true);
   };
 
-  const handleSubmitVote = async () => {
-    setShowConfirmModal(false);
-    setSubmitting(true);
-    
-    try {
-      // Prepare votes with position title
-      const votesToInsert = positions.map(position => ({ 
-        voter_id: voter.id, 
-        candidate_id: selectedCandidates[position.id],
-        position_id: position.id,
-        position: position.title,
-        election_id: election.id, 
-        voting_period_id: votingPeriod.id, 
-        ip_address: clientIP || 'unknown', 
-        created_at: new Date().toISOString() 
-      }));
-      
-      // Insert all votes
-      const { error: voteError } = await supabase
-        .from('votes')
-        .insert(votesToInsert);
-      
-      if (voteError) throw new Error(voteError.message || 'Failed to cast vote');
-      
-      // Update voter table - Set has_voted to true and voted_at to current time
-      const { error: updateError } = await supabase
-        .from('voters')
-        .update({ 
-          has_voted: true, 
-          voted_at: new Date().toISOString()
-        })
-        .eq('id', voter.id);
-      
-      if (updateError) {
-        console.error('Error updating voter status:', updateError);
-        toast.warning('Votes recorded but status update failed. Please contact admin.');
-      }
-      
-      // Log successful vote
-      await logVoteCast({ 
-        voter_id: voter.id, 
-        voter_name: voter.name, 
-        ip_address: clientIP, 
-        success: true,
-        votes_count: votesToInsert.length
-      });
-      
-      setHasVoted(true);
-      
-      // Update local storage
-      const updatedVoterData = { 
-        ...voter, 
-        has_voted: true, 
-        voted_at: new Date().toISOString() 
-      };
-      localStorage.setItem('voter_data', JSON.stringify(updatedVoterData));
-      localStorage.setItem('has_voted', 'true');
-      localStorage.setItem('voted_voter_id', voter.id);
-      localStorage.setItem('voted_election_id', election.id);
-      
-      toast.success('Your vote has been cast successfully! Redirecting...');
-      
-      setTimeout(() => {
-        router.push('/');
-      }, 3000);
-      
-    } catch (error) {
-      console.error('Submit vote error:', error);
-      toast.error(error.message || 'Failed to cast vote. Please try again.');
-      
-      await logVoteCast({ 
-        voter_id: voter.id, 
-        voter_name: voter.name, 
-        ip_address: clientIP, 
-        success: false, 
-        error: error.message 
-      });
-    } finally {
-      setSubmitting(false);
+
+const sendVoteConfirmationEmail = async (voterEmail, voterName, electionTitle, votesSummary) => {
+  try {
+    const response = await fetch('/api/send-vote-confirmation', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: voterEmail,
+        name: voterName,
+        electionTitle: electionTitle,
+        votesSummary: votesSummary,
+        transactionId: `${Date.now()}-${Math.random().toString(36).substr(2, 8)}`
+      })
+    });
+
+    const result = await response.json();
+    if (result.success) {
+      console.log('Confirmation email sent successfully to:', voterEmail);
+    } else {
+      console.error('Failed to send confirmation email:', result.error);
     }
-  };
+  } catch (error) {
+    console.error('Error sending confirmation email:', error);
+    // Don't show error to user - this is a background task
+  }
+};
+
+  const handleSubmitVote = async () => {
+  setShowConfirmModal(false);
+  setSubmitting(true);
+  
+  try {
+    // Prepare votes with position title
+    const votesToInsert = positions.map(position => ({ 
+      voter_id: voter.id, 
+      candidate_id: selectedCandidates[position.id],
+      position_id: position.id,
+      position: position.title,
+      election_id: election.id, 
+      voting_period_id: votingPeriod.id, 
+      ip_address: clientIP || 'unknown', 
+      created_at: new Date().toISOString() 
+    }));
+    
+    // Insert all votes
+    const { error: voteError } = await supabase
+      .from('votes')
+      .insert(votesToInsert);
+    
+    if (voteError) throw new Error(voteError.message || 'Failed to cast vote');
+    
+    // Update voter table - Set has_voted to true and voted_at to current time
+    const { error: updateError } = await supabase
+      .from('voters')
+      .update({ 
+        has_voted: true, 
+        voted_at: new Date().toISOString()
+      })
+      .eq('id', voter.id);
+    
+    if (updateError) {
+      console.error('Error updating voter status:', updateError);
+      toast.warning('Votes recorded but status update failed. Please contact admin.');
+    }
+    
+    // Log successful vote
+    await logVoteCast({ 
+      voter_id: voter.id, 
+      voter_name: voter.name, 
+      ip_address: clientIP, 
+      success: true,
+      votes_count: votesToInsert.length
+    });
+    
+    // ========== SEND CONFIRMATION EMAIL ==========
+    // Prepare votes summary for email
+    const votesSummary = positions.map(position => {
+      const selectedCandidate = position.candidates?.find(c => c.id === selectedCandidates[position.id]);
+      return {
+        position: position.title,
+        candidate: selectedCandidate?.name || 'Unknown'
+      };
+    }).filter(v => v.candidate !== 'Unknown');
+    
+    // Send confirmation email (don't await to not block the response)
+    sendVoteConfirmationEmail(
+      voter.email,
+      voter.name,
+      election.title,
+      votesSummary
+    );
+    // ============================================
+    
+    setHasVoted(true);
+    
+    // Update local storage
+    const updatedVoterData = { 
+      ...voter, 
+      has_voted: true, 
+      voted_at: new Date().toISOString() 
+    };
+    localStorage.setItem('voter_data', JSON.stringify(updatedVoterData));
+    localStorage.setItem('has_voted', 'true');
+    localStorage.setItem('voted_voter_id', voter.id);
+    localStorage.setItem('voted_election_id', election.id);
+    
+    toast.success('Your vote has been cast successfully! A confirmation email has been sent to your inbox. Redirecting...');
+    
+    setTimeout(() => {
+      router.push('/');
+    }, 4000);
+    
+  } catch (error) {
+    console.error('Submit vote error:', error);
+    toast.error(error.message || 'Failed to cast vote. Please try again.');
+    
+    await logVoteCast({ 
+      voter_id: voter.id, 
+      voter_name: voter.name, 
+      ip_address: clientIP, 
+      success: false, 
+      error: error.message 
+    });
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   const getSelectedCount = () => Object.values(selectedCandidates).filter(Boolean).length;
 

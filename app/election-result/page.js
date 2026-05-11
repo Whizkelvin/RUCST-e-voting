@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Toaster, toast } from 'sonner';
@@ -11,7 +11,7 @@ import {
   FaChartBar, FaVoteYea, FaUserCheck, FaSpinner, FaTrophy, 
   FaMedal, FaCheckCircle, FaUsers, FaCalendarAlt, FaPercentage,
   FaClock, FaInfoCircle, FaDownload, FaSun, FaMoon, FaShieldAlt,
-  FaHome, FaEye, FaEyeSlash, FaChartLine
+  FaHome, FaEye, FaEyeSlash, FaChartLine, FaLock
 } from 'react-icons/fa';
 import { useElectionData } from '@/hooks/useElectionData';
 
@@ -21,7 +21,9 @@ export default function ElectionResults() {
   const [totalVotes, setTotalVotes] = useState(0);
   const [theme, setTheme] = useState('dark');
   const [mounted, setMounted] = useState(false);
-  const [showStatistics, setShowStatistics] = useState(true); 
+  const [showStatistics, setShowStatistics] = useState(true);
+  const [canViewResults, setCanViewResults] = useState(false);
+  const [timeUntilResults, setTimeUntilResults] = useState(null);
   const router = useRouter();
   
   const { 
@@ -46,12 +48,99 @@ export default function ElectionResults() {
     setTheme(savedTheme);
     document.documentElement.setAttribute('data-theme', savedTheme);
     
-    // Load saved preference for showing statistics
     const savedShowStats = localStorage.getItem('show_election_statistics');
     if (savedShowStats !== null) {
       setShowStatistics(savedShowStats === 'true');
     }
   }, []);
+
+  // Function to calculate if results can be viewed - using same logic as CountdownTimer
+  const calculateResultsAvailability = useCallback(() => {
+    // If voting period doesn't exist
+    if (!votingPeriod || !votingPeriod.start_time || !votingPeriod.end_time) {
+      return {
+        canView: false,
+        timeRemaining: null,
+        message: 'Voting schedule not configured'
+      };
+    }
+
+    const now = new Date();
+    const start = new Date(votingPeriod.start_time);
+    const end = new Date(votingPeriod.end_time);
+
+    // Check if dates are valid
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return {
+        canView: false,
+        timeRemaining: null,
+        message: 'Invalid date format'
+      };
+    }
+
+    // Results can only be viewed AFTER voting has ended
+    if (now > end) {
+      // Voting has ended - show results
+      return {
+        canView: true,
+        timeRemaining: null,
+        message: 'Results Available'
+      };
+    } else if (now >= start && now <= end) {
+      // Voting is active - show lock screen
+      const timeRemaining = end - now;
+      const hours = Math.floor(timeRemaining / (1000 * 60 * 60));
+      const minutes = Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((timeRemaining % (1000 * 60)) / 1000);
+      
+      return {
+        canView: false,
+        timeRemaining: { hours, minutes, seconds, endDate: end },
+        message: 'Voting in progress'
+      };
+    } else if (now < start) {
+      // Voting hasn't started yet - show lock screen with countdown to start
+      const timeToStart = start - now;
+      const days = Math.floor(timeToStart / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((timeToStart % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((timeToStart % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((timeToStart % (1000 * 60)) / 1000);
+      
+      return {
+        canView: false,
+        timeRemaining: { days, hours, minutes, seconds, startDate: start },
+        message: 'Voting not yet started'
+      };
+    } else {
+      return {
+        canView: false,
+        timeRemaining: null,
+        message: 'Results unavailable'
+      };
+    }
+  }, [votingPeriod]);
+
+  // Check results availability on mount and when votingPeriod changes
+  useEffect(() => {
+    if (!votingPeriod) return;
+
+    const checkAvailability = () => {
+      const availability = calculateResultsAvailability();
+      setCanViewResults(availability.canView);
+      
+      if (!availability.canView && availability.timeRemaining) {
+        setTimeUntilResults(availability.timeRemaining);
+      } else {
+        setTimeUntilResults(null);
+      }
+    };
+
+    checkAvailability();
+    
+    // Update every second like the CountdownTimer
+    const timer = setInterval(checkAvailability, 1000);
+    return () => clearInterval(timer);
+  }, [votingPeriod, calculateResultsAvailability]);
 
   const toggleTheme = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
@@ -61,7 +150,6 @@ export default function ElectionResults() {
     toast.success(`${newTheme === 'dark' ? 'Dark' : 'Light'} mode activated`);
   };
 
-  // Toggle statistics visibility
   const toggleStatistics = () => {
     const newValue = !showStatistics;
     setShowStatistics(newValue);
@@ -120,22 +208,22 @@ export default function ElectionResults() {
     });
   }, []);
 
+  // Process results only when viewing is allowed
   useEffect(() => {
-    // Process votingProgress into results format
+    if (!canViewResults) return;
+    
     if (votingProgress && votingProgress.length > 0) {
       const results = {};
       let total = 0;
       
       votingProgress.forEach(position => {
         if (position.candidates && position.candidates.length > 0) {
-          // Sort candidates by vote count
           const sortedCandidates = [...position.candidates].sort((a, b) => 
             (b.vote_count || 0) - (a.vote_count || 0)
           );
           
           results[position.name] = sortedCandidates;
           
-          // Calculate total votes across all positions
           position.candidates.forEach(candidate => {
             total += (candidate.vote_count || 0);
           });
@@ -145,67 +233,63 @@ export default function ElectionResults() {
       setResultsData(results);
       setTotalVotes(total);
     }
-  }, [votingProgress]);
-
-  const getPositions = () => {
-    return ['all', ...Object.keys(resultsData)];
-  };
-
-  const getFilteredResults = () => {
-    if (selectedPosition === 'all') {
-      return resultsData;
-    }
-    return { [selectedPosition]: resultsData[selectedPosition] || [] };
-  };
-
-  const getPercentage = (voteCount) => {
-    if (totalVotes === 0) return 0;
-    return ((voteCount / totalVotes) * 100).toFixed(1);
-  };
-
-  const getVoterTurnout = () => {
-    if (totalStats.totalVoters === 0) return 0;
-    return ((totalStats.totalVotersWhoVoted / totalStats.totalVoters) * 100).toFixed(1);
-  };
+  }, [votingProgress, canViewResults]);
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Invalid date';
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return 'N/A';
+    }
   };
 
   const exportResults = () => {
-    // Create CSV data
-    const headers = ['Position', 'Candidate Name', 'Department', 'Year', 'Votes', 'Percentage'];
-    const rows = [];
+    if (!canViewResults) {
+      toast.error('Results are not yet available for export');
+      return;
+    }
     
-    Object.entries(resultsData).forEach(([position, candidates]) => {
-      candidates.forEach(candidate => {
-        rows.push([
-          position,
-          candidate.name,
-          candidate.department || 'N/A',
-          candidate.year_of_study || 'N/A',
-          candidate.vote_count || 0,
-          `${getPercentage(candidate.vote_count || 0)}%`
-        ]);
+    try {
+      const headers = ['Position', 'Candidate Name', 'Department', 'Year', 'Votes', 'Percentage'];
+      const rows = [];
+      const total = totalVotes;
+      
+      Object.entries(resultsData).forEach(([position, candidates]) => {
+        candidates.forEach(candidate => {
+          const percentage = total > 0 ? ((candidate.vote_count || 0) / total * 100).toFixed(1) : 0;
+          rows.push([
+            position,
+            candidate.name,
+            candidate.department || 'N/A',
+            candidate.year_of_study || 'N/A',
+            candidate.vote_count || 0,
+            `${percentage}%`
+          ]);
+        });
       });
-    });
-    
-    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `election_results_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('Results exported successfully');
+      
+      const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `election_results_${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Results exported successfully');
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export results');
+    }
   };
 
   if (!mounted) {
@@ -247,41 +331,152 @@ export default function ElectionResults() {
     );
   }
 
-  const filteredResults = getFilteredResults();
-  const positions = getPositions();
+  // ========== RESULTS NOT AVAILABLE YET - SHOW LOCK SCREEN ==========
+  if (!canViewResults) {
+    return (
+      <>
+        <Toaster position="top-center" richColors closeButton />
+        
+        <button
+          onClick={toggleTheme}
+          className="fixed top-4 right-4 z-50 p-3 rounded-full bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-110 transition-all duration-300"
+          aria-label="Toggle theme"
+        >
+          {theme === 'dark' ? (
+            <FaSun className="text-yellow-400 text-xl" />
+          ) : (
+            <FaMoon className="text-gray-700 text-xl" />
+          )}
+        </button>
+
+        <Link
+          href="/"
+          className="fixed top-4 left-4 z-50 p-3 rounded-full bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-110 transition-all duration-300 group"
+          aria-label="Go to Home"
+        >
+          <FaHome className={`text-xl ${getIconColor()} transition`} />
+        </Link>
+        
+        <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} pt-20 sm:pt-24 pb-8 sm:pb-12 transition-all duration-300 flex items-center justify-center`}>
+          <div className="max-w-md mx-auto px-4">
+            <div data-aos="fade-up" className={`${currentTheme.cardBg} rounded-2xl p-6 sm:p-8 text-center border ${currentTheme.cardBorder}`}>
+              
+              
+              <h2 className={`text-xl sm:text-2xl font-bold ${currentTheme.textPrimary} mb-3`}>
+                Results Not Yet Available
+              </h2>
+              
+              <p className={`${currentTheme.textMuted} text-sm mb-4`}>
+                Election results will be displayed here after the voting period has ended.
+              </p>
+              
+              {timeUntilResults && (
+                <div className={`${currentTheme.modalBg} rounded-xl p-4 mb-6`}>
+                  <p className={`${currentTheme.textLight} text-xs mb-2`}>
+                    Results will be available in:
+                  </p>
+                  <div className="flex justify-center gap-3 sm:gap-4">
+                    {/* Show days if available (for voting not started yet) */}
+                    {timeUntilResults.days !== undefined && (
+                      <>
+                        <div className="text-center">
+                          <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary}`}>
+                            {String(Math.max(0, timeUntilResults.days)).padStart(2, '0')}
+                          </p>
+                          <p className={`${currentTheme.textLight} text-xs`}>Days</p>
+                        </div>
+                        <div className="text-2xl text-gray-500">:</div>
+                      </>
+                    )}
+                    
+                    <div className="text-center">
+                      <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary}`}>
+                        {String(Math.max(0, timeUntilResults.hours || 0)).padStart(2, '0')}
+                      </p>
+                      <p className={`${currentTheme.textLight} text-xs`}>Hours</p>
+                    </div>
+                    <div className="text-2xl text-gray-500">:</div>
+                    <div className="text-center">
+                      <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary}`}>
+                        {String(Math.max(0, timeUntilResults.minutes || 0)).padStart(2, '0')}
+                      </p>
+                      <p className={`${currentTheme.textLight} text-xs`}>Minutes</p>
+                    </div>
+                    <div className="text-2xl text-gray-500">:</div>
+                    <div className="text-center">
+                      <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary}`}>
+                        {String(Math.max(0, timeUntilResults.seconds || 0)).padStart(2, '0')}
+                      </p>
+                      <p className={`${currentTheme.textLight} text-xs`}>Seconds</p>
+                    </div>
+                  </div>
+                  
+                  {timeUntilResults.endDate && (
+                    <p className={`${currentTheme.textLight} text-xs mt-3`}>
+                      Voting ends on: {formatDate(timeUntilResults.endDate)}
+                    </p>
+                  )}
+                  {timeUntilResults.startDate && (
+                    <p className={`${currentTheme.textLight} text-xs mt-3`}>
+                      Voting starts on: {formatDate(timeUntilResults.startDate)}
+                    </p>
+                  )}
+                </div>
+              )}
+              
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => router.push('/')}
+                  className="px-6 py-3 bg-gray-600 hover:bg-gray-500 rounded-xl text-white font-semibold transition"
+                >
+                  Return to Home
+                </button>
+                
+                {isVotingActive && (
+                  <button
+                    onClick={() => router.push('/login')}
+                    className="px-6 py-3 bg-green-800 hover:bg-green-700 rounded-xl text-white font-semibold transition"
+                  >
+                    Cast Your Vote
+                  </button>
+                )}
+              </div>
+              
+              <p className={`${currentTheme.textLight} text-xs mt-6`}>
+                The Electoral Commission is committed to fair and transparent elections.
+              </p>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // ========== RESULTS AVAILABLE - SHOW FULL RESULTS ==========
   const hasResults = Object.keys(resultsData).length > 0;
+  const getPercentage = (voteCount) => {
+    if (totalVotes === 0) return 0;
+    return ((voteCount / totalVotes) * 100).toFixed(1);
+  };
+
+  const getVoterTurnout = () => {
+    if (totalStats.totalVoters === 0) return 0;
+    return ((totalStats.totalVotersWhoVoted / totalStats.totalVoters) * 100).toFixed(1);
+  };
 
   return (
     <>
-      <Toaster 
-        position="top-center" 
-        richColors 
-        closeButton
-        toastOptions={{
-          duration: 3000,
-          className: 'text-sm font-medium',
-        }}
-      />
+      <Toaster position="top-center" richColors closeButton />
       
-      {/* Theme Toggle Button */}
       <button
         onClick={toggleTheme}
         className="fixed top-4 right-4 z-50 p-3 rounded-full bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-110 transition-all duration-300"
         aria-label="Toggle theme"
       >
-        {theme === 'dark' ? (
-          <FaSun className="text-yellow-400 text-xl" />
-        ) : (
-          <FaMoon className="text-gray-700 text-xl" />
-        )}
+        {theme === 'dark' ? <FaSun className="text-yellow-400 text-xl" /> : <FaMoon className="text-gray-700 text-xl" />}
       </button>
 
-      {/* Home Button - Top Left */}
-      <Link
-        href="/"
-        className="fixed top-4 left-4 z-50 p-3 rounded-full bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-110 transition-all duration-300 group"
-        aria-label="Go to Home"
-      >
+      <Link href="/" className="fixed top-4 left-4 z-50 p-3 rounded-full bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-110 transition-all duration-300">
         <FaHome className={`text-xl ${getIconColor()} transition`} />
       </Link>
       
@@ -289,7 +484,7 @@ export default function ElectionResults() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           {/* Header Section */}
-          <div data-aos="fade-down" data-aos-duration="1000" className="text-center mb-8 sm:mb-12">
+          <div data-aos="fade-down" className="text-center mb-8 sm:mb-12">
             <div className="flex justify-center gap-4 mb-4">
               <Image 
                 src="https://res.cloudinary.com/dnkk72bpt/image/upload/v1762440313/RUCST_logo-removebg-preview_hwdial.png"
@@ -307,279 +502,160 @@ export default function ElectionResults() {
               />
             </div>
             <h1 className={`text-3xl sm:text-4xl md:text-5xl font-bold ${currentTheme.textPrimary} mb-3 sm:mb-4`}>
-              Election Results
+              Official Election Results
             </h1>
             <p className={`text-base sm:text-lg md:text-xl ${currentTheme.textSecondary} max-w-2xl mx-auto`}>
-              Official results of the Regent University Student Elections
+              Results of the Regent University Student Elections
             </p>
             
             {votingPeriod && (
-              <div data-aos="fade-up" data-aos-delay="100" className="mt-6">
+              <div data-aos="fade-up" className="mt-6">
                 <div className={`${currentTheme.cardBg} rounded-2xl p-4 inline-block border ${currentTheme.cardBorder}`}>
-                  <div className={`${currentTheme.textSecondary}`}>
-                    <div className="font-semibold text-base sm:text-lg mb-2">
-                      {votingPeriod.name || 'Student Elections'}
-                      {votingPeriod.year && ` ${votingPeriod.year}`}
-                    </div>
-                    <div className="text-xs sm:text-sm flex flex-col gap-1">
-                      <div className="flex items-center justify-center gap-2">
-                        <FaCalendarAlt className={getIconColor()} />
-                        <span>Started: {formatDate(votingPeriod.start_time)}</span>
-                      </div>
-                      <div className="flex items-center justify-center gap-2">
-                        <FaClock className={getIconColor()} />
-                        <span>Ends: {formatDate(votingPeriod.end_time)}</span>
-                      </div>
-                      {isVotingActive && (
-                        <div className="mt-2 px-3 py-1 bg-gray-500/20 text-gray-300 rounded-full text-xs inline-block animate-pulse">
-                          Voting In Progress
-                        </div>
-                      )}
-                    </div>
+                  <div className="flex items-center gap-2 text-green-500">
+                    <FaCheckCircle />
+                    <span className={`${currentTheme.textPrimary} text-sm`}>
+                      Voting has concluded - Official Results
+                    </span>
                   </div>
+                  {votingPeriod.end_time && (
+                    <p className={`${currentTheme.textLight} text-xs mt-2`}>
+                      Results finalized on: {formatDate(votingPeriod.end_time)}
+                    </p>
+                  )}
                 </div>
               </div>
             )}
           </div>
-
-          {/* Action Buttons Row - Export & Toggle Statistics */}
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
-            {/* Export Button */}
-            {hasResults && (
-              <button
-                onClick={exportResults}
-                className={`flex items-center gap-2 px-4 py-2 ${currentTheme.statBg} ${currentTheme.buttonHover} rounded-lg ${currentTheme.textPrimary} transition text-sm sm:text-base`}
-              >
-                <FaDownload className={getIconColor()} />
-                Export Results as CSV
-              </button>
-            )}
-          </div>
-
-          {/* Position Filter */}
-          {hasResults && (
-            <div data-aos="fade-up" data-aos-delay="150" className="mb-8">
-              <div className="flex flex-wrap gap-2 sm:gap-3 justify-center">
-                {positions.map((position, idx) => (
-                  <button
-                    key={position}
-                    onClick={() => setSelectedPosition(position)}
-                    data-aos="zoom-in"
-                    data-aos-delay={500 + idx * 50}
-                    className={`px-4 sm:px-6 py-1.5 sm:py-2 rounded-full font-semibold transition-all duration-300 text-xs sm:text-sm ${
-                      selectedPosition === position
-                        ? 'bg-gradient-to-r from-gray-700 to-gray-600 text-white shadow-lg'
-                        : `${currentTheme.statBg} ${currentTheme.textMuted} ${currentTheme.buttonHover}`
-                    }`}
-                  >
-                    {position === 'all' ? 'All Positions' : position}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Results Display */}
           {!hasResults ? (
             <div data-aos="fade-up" className="text-center py-12">
               <div className={`${currentTheme.cardBg} rounded-2xl p-8 border ${currentTheme.cardBorder}`}>
                 <FaChartBar className="text-5xl sm:text-6xl text-white/30 mx-auto mb-4" />
-                <p className={`${currentTheme.textMuted} text-base sm:text-lg`}>No results available yet.</p>
-                <p className={`${currentTheme.textLight} text-xs sm:text-sm mt-2`}>
-                  {isVotingActive 
-                    ? 'Voting is in progress. Results will appear here as votes are cast.' 
-                    : 'Results will be displayed after the election concludes.'}
-                </p>
+                <p className={`${currentTheme.textMuted} text-base sm:text-lg`}>No results available for this election.</p>
               </div>
             </div>
           ) : (
-            Object.entries(filteredResults).map(([position, candidates], idx) => (
-              <div key={position} data-aos="fade-up" data-aos-delay={200 + idx * 100} className="mb-10 sm:mb-12">
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
-                  <h2 className={`text-xl sm:text-2xl font-bold ${currentTheme.textPrimary}`}>{position}</h2>
-                  <div className="flex-1 h-px bg-gradient-to-r from-white/20 to-transparent"></div>
-                  <span className={`${currentTheme.textLight} text-xs sm:text-sm`}>{candidates.length} candidates</span>
+            <>
+              {/* Position Filter */}
+              <div data-aos="fade-up" className="mb-8">
+                <div className="flex flex-wrap gap-2 sm:gap-3 justify-center">
+                  <button
+                    onClick={() => setSelectedPosition('all')}
+                    className={`px-4 sm:px-6 py-1.5 sm:py-2 rounded-full font-semibold transition text-xs sm:text-sm ${
+                      selectedPosition === 'all'
+                        ? 'bg-gradient-to-r from-gray-700 to-gray-600 text-white shadow-lg'
+                        : `${currentTheme.statBg} ${currentTheme.textMuted} ${currentTheme.buttonHover}`
+                    }`}
+                  >
+                    All Positions
+                  </button>
+                  {Object.keys(resultsData).map((position) => (
+                    <button
+                      key={position}
+                      onClick={() => setSelectedPosition(position)}
+                      className={`px-4 sm:px-6 py-1.5 sm:py-2 rounded-full font-semibold transition text-xs sm:text-sm ${
+                        selectedPosition === position
+                          ? 'bg-gradient-to-r from-gray-700 to-gray-600 text-white shadow-lg'
+                          : `${currentTheme.statBg} ${currentTheme.textMuted} ${currentTheme.buttonHover}`
+                      }`}
+                    >
+                      {position}
+                    </button>
+                  ))}
                 </div>
+              </div>
 
-                <div className="space-y-3 sm:space-y-4">
-                  {candidates.map((candidate, index) => {
-                    const isWinner = index === 0;
-                    const voteCount = candidate.vote_count || 0;
-                    const percentage = getPercentage(voteCount);
-                    const barWidth = totalVotes > 0 ? (voteCount / totalVotes) * 100 : 0;
-                    
-                    return (
-                      <div 
-                        key={candidate.id}
-                        data-aos="fade-right"
-                        data-aos-delay={200 + idx * 100 + index * 50}
-                        className={`${currentTheme.cardBg} rounded-xl sm:rounded-2xl p-4 sm:p-6 border transition-all duration-300 hover:scale-[1.01] sm:hover:scale-[1.02] ${
-                          isWinner 
-                            ? `${currentTheme.winnerBorder} ${currentTheme.winnerBg}`
-                            : currentTheme.cardBorder
-                        }`}
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-                          <div className="flex items-center gap-3 sm:gap-4 flex-1">
-                            {/* Candidate Image */}
-                            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden bg-gray-700 flex-shrink-0">
-                              {candidate.image_url ? (
-                                <Image 
-                                  src={candidate.image_url}
-                                  alt={candidate.name}
-                                  width={64}
-                                  height={64}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center text-white/50">
-                                  <FaUserCheck size={24} className="sm:text-3xl" />
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Candidate Info */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <h3 className={`text-base sm:text-xl font-semibold ${currentTheme.textPrimary} truncate`}>{candidate.name}</h3>
-                                {isWinner && (
-                                  <span className="px-2 py-0.5 sm:py-1 bg-gray-600 text-white text-[10px] sm:text-xs rounded-full flex items-center gap-1 whitespace-nowrap">
-                                    <FaCheckCircle className="text-[8px] sm:text-xs" />
-                                    Winner
-                                  </span>
+              {/* Results List */}
+              {Object.entries(selectedPosition === 'all' ? resultsData : { [selectedPosition]: resultsData[selectedPosition] || [] }).map(([position, candidates], idx) => (
+                <div key={position} data-aos="fade-up" data-aos-delay={idx * 100} className="mb-10 sm:mb-12">
+                  <h2 className={`text-xl sm:text-2xl font-bold ${currentTheme.textPrimary} mb-4 sm:mb-6`}>{position}</h2>
+                  <div className="space-y-3 sm:space-y-4">
+                    {candidates.map((candidate, index) => {
+                      const isWinner = index === 0;
+                      const voteCount = candidate.vote_count || 0;
+                      const percentage = getPercentage(voteCount);
+                      const barWidth = totalVotes > 0 ? (voteCount / totalVotes) * 100 : 0;
+                      
+                      return (
+                        <div key={candidate.id} className={`${currentTheme.cardBg} rounded-xl sm:rounded-2xl p-4 sm:p-6 border transition-all duration-300 ${
+                          isWinner ? `${currentTheme.winnerBorder} ${currentTheme.winnerBg}` : currentTheme.cardBorder
+                        }`}>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 sm:gap-4 flex-1">
+                              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden bg-gray-700 flex-shrink-0">
+                                {candidate.image_url ? (
+                                  <Image src={candidate.image_url} alt={candidate.name} width={64} height={64} className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center">
+                                    <FaUserCheck size={24} className="text-white/50" />
+                                  </div>
                                 )}
                               </div>
-                              <p className={`${currentTheme.textLight} text-xs sm:text-sm truncate`}>
-                                {candidate.department || 'Department not specified'} 
-                                {candidate.year_of_study && ` • Level ${candidate.year_of_study}`}
-                              </p>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h3 className={`text-base sm:text-xl font-semibold ${currentTheme.textPrimary}`}>{candidate.name}</h3>
+                                  {isWinner && (
+                                    <span className="px-2 py-0.5 bg-gray-600 text-white text-[10px] rounded-full flex items-center gap-1">
+                                      <FaTrophy className="text-[8px]" /> Winner
+                                    </span>
+                                  )}
+                                </div>
+                                <p className={`${currentTheme.textLight} text-xs`}>
+                                  {candidate.department || 'Department not specified'}
+                                  {candidate.year_of_study && ` • Level ${candidate.year_of_study}`}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-left sm:text-right">
+                              <p className={`text-xl sm:text-2xl font-bold ${currentTheme.textPrimary}`}>{voteCount}</p>
+                              <p className={`${currentTheme.textLight} text-xs`}>votes ({percentage}%)</p>
                             </div>
                           </div>
-
-                          {/* Vote Count */}
-                          <div className="text-left sm:text-right">
-                            <p className={`text-xl sm:text-2xl font-bold ${currentTheme.textPrimary}`}>{voteCount}</p>
-                            <p className={`${currentTheme.textLight} text-xs sm:text-sm`}>votes ({percentage}%)</p>
+                          <div className="mt-3">
+                            <div className={`h-1.5 sm:h-2 ${currentTheme.progressBg} rounded-full overflow-hidden`}>
+                              <div className={`h-full transition-all duration-1000 ${isWinner ? currentTheme.progressWinner : currentTheme.progressNormal}`} style={{ width: `${barWidth}%` }} />
+                            </div>
                           </div>
                         </div>
-
-                        {/* Progress Bar */}
-                        <div className="mt-3 sm:mt-4">
-                          <div className={`h-1.5 sm:h-2 ${currentTheme.progressBg} rounded-full overflow-hidden`}>
-                            <div 
-                              className={`h-full transition-all duration-1000 ${
-                                isWinner ? currentTheme.progressWinner : currentTheme.progressNormal
-                              }`}
-                              style={{ width: `${barWidth}%` }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Manifesto Preview (for winner) */}
-                        {isWinner && candidate.manifesto && (
-                          <div className={`mt-3 sm:mt-4 p-3 sm:p-4 ${currentTheme.modalBg} rounded-lg`}>
-                            <p className={`${currentTheme.textLight} text-xs sm:text-sm italic line-clamp-2`}>
-                              "{candidate.manifesto.substring(0, 150)}..."
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))
-          )}
-
-          {/* Toggle Statistics Button */}
-          {hasResults && (
-            <div className="flex justify-center mb-6">
-              <button
-                onClick={toggleStatistics}
-                className={`flex items-center gap-2 px-4 py-2 ${currentTheme.toggleButton} rounded-lg ${currentTheme.textPrimary} transition-all duration-300 hover:scale-105 text-sm sm:text-base`}
-              >
-                {showStatistics ? (
-                  <>
-                    <FaEyeSlash className={getIconColor()} />
-                    Hide Statistics Summary
-                  </>
-                ) : (
-                  <>
-                    <FaEye className={getIconColor()} />
-                    Show Statistics Summary
-                  </>
-                )}
-              </button>
-            </div>
-          )}
-
-          {/* Statistics Summary - Optional Toggle */}
-          {showStatistics && hasResults && (
-            <div data-aos="fade-up" data-aos-delay="300" className="mt-10 sm:mt-12">
-              <div className="text-center mb-6">
-                <div className="flex items-center justify-center gap-3 mb-2">
-                  <FaChartLine className={`text-2xl ${getIconColor()}`} />
-                  <h2 className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary}`}>
-                    Election Statistics Summary
-                  </h2>
-                </div>
-                <div className="w-20 h-1 bg-gradient-to-r from-gray-500 to-gray-400 mx-auto rounded-full"></div>
-                <p className={`${currentTheme.textLight} text-xs mt-2`}>
-                  Click the "Hide Statistics" button above to collapse this section
-                </p>
-              </div>
-
-              {/* Statistics Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
-                <div data-aos="fade-up" data-aos-delay="350" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder} transition-all duration-300 hover:scale-105`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Total Votes Cast</p>
-                      <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVotes.toLocaleString()}</p>
-                    </div>
-                    <FaVoteYea className={`text-3xl sm:text-4xl ${getIconColor()}`} />
+                      );
+                    })}
                   </div>
                 </div>
+              ))}
 
-                <div data-aos="fade-up" data-aos-delay="400" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder} transition-all duration-300 hover:scale-105`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Registered Voters</p>
-                      <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{totalStats.totalVoters.toLocaleString()}</p>
-                    </div>
-                    <FaUsers className={`text-3xl sm:text-4xl ${getIconColor()}`} />
+              {/* Export Button */}
+              <div className="flex justify-center mb-6">
+                <button onClick={exportResults} className={`flex items-center gap-2 px-4 py-2 ${currentTheme.toggleButton} rounded-lg ${currentTheme.textPrimary} transition text-sm`}>
+                  <FaDownload /> Download Results as CSV
+                </button>
+              </div>
+
+              {/* Statistics Summary */}
+              <div data-aos="fade-up" className="mt-10">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className={`${currentTheme.statBg} rounded-2xl p-4 text-center border ${currentTheme.cardBorder}`}>
+                    <p className={`${currentTheme.textMuted} text-xs`}>Total Votes Cast</p>
+                    <p className={`text-2xl font-bold ${currentTheme.textPrimary}`}>{totalStats.totalVotes.toLocaleString()}</p>
                   </div>
-                </div>
-
-                <div data-aos="fade-up" data-aos-delay="500" className={`${currentTheme.statBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder} transition-all duration-300 hover:scale-105`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className={`${currentTheme.textMuted} text-xs sm:text-sm`}>Voter Turnout</p>
-                      <p className={`text-2xl sm:text-3xl font-bold ${currentTheme.textPrimary} mt-2`}>{getVoterTurnout()}%</p>
-                    </div>
-                    <FaPercentage className={`text-3xl sm:text-4xl ${getIconColor()}`} />
+                  <div className={`${currentTheme.statBg} rounded-2xl p-4 text-center border ${currentTheme.cardBorder}`}>
+                    <p className={`${currentTheme.textMuted} text-xs`}>Registered Voters</p>
+                    <p className={`text-2xl font-bold ${currentTheme.textPrimary}`}>{totalStats.totalVoters.toLocaleString()}</p>
+                  </div>
+                  <div className={`${currentTheme.statBg} rounded-2xl p-4 text-center border ${currentTheme.cardBorder}`}>
+                    <p className={`${currentTheme.textMuted} text-xs`}>Voter Turnout</p>
+                    <p className={`text-2xl font-bold ${currentTheme.textPrimary}`}>{getVoterTurnout()}%</p>
                   </div>
                 </div>
               </div>
-            </div>
+            </>
           )}
 
-          {/* Footer Info */}
-          <div data-aos="fade-up" className="mt-6 sm:mt-8 text-center">
-            <div className={`${currentTheme.cardBg} rounded-2xl p-4 sm:p-6 border ${currentTheme.cardBorder}`}>
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <FaShieldAlt className={`text-sm sm:text-base ${getIconColor()}`} />
-                <p className={`${currentTheme.textLight} text-xs sm:text-sm`}>
-                  These results are final and certified by the Electoral Commission of Regent University.
-                </p>
-              </div>
-              <p className={`${currentTheme.textLight} text-xs sm:text-sm`}>
-                Last updated: {lastUpdated?.toLocaleTimeString() || 'Just now'}
-                {isVotingActive && (
-                  <span className="block mt-2 text-gray-400 text-[10px] sm:text-xs animate-pulse">
-                    Live updates are active
-                  </span>
-                )}
+          {/* Footer */}
+          <div data-aos="fade-up" className="mt-8 text-center">
+            <div className={`${currentTheme.cardBg} rounded-2xl p-4 border ${currentTheme.cardBorder}`}>
+              <p className={`${currentTheme.textLight} text-xs`}>
+                These results are final and certified by the Electoral Commission of Regent University.
               </p>
             </div>
           </div>
