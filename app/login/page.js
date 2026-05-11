@@ -1164,16 +1164,16 @@ function LoginContent() {
             {loginStatus === 'admin' && !isDetectingRole && (
               <div className={`mb-4 p-3 rounded-xl ${getAdminStatusClass()}`}>
                 <div className="flex items-center gap-2">
-                  {getRoleIcon()}
+                  
                   <p className={`text-sm font-medium ${getAdminTextColor()}`}>
                     {getRoleName()} Detected
                   </p>
                 </div>
                 <p className={`text-xs mt-1 flex items-center gap-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                  <FaShieldAlt className="text-xs" /> Please enter your password (School ID) to login.
+                   Please enter your password (School ID) to login.
                 </p>
                 <p className={`text-xs mt-1 flex items-center gap-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                  <FaShieldAlt className="text-xs" /> Admin access is always available regardless of voting period.
+                   Admin access is always available regardless of voting period.
                 </p>
               </div>
             )}

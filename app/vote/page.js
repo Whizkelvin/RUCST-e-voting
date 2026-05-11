@@ -46,44 +46,69 @@ export default function VotePage() {
   }, []);
 
   const calculateTimeLeft = useCallback((startTime, endTime) => {
-    const now = new Date();
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-    if (now < start) {
-      const diff = start - now;
-      return {
-        days: Math.floor(diff / (1000*60*60*24)),
-        hours: Math.floor((diff % (1000*60*60*24)) / (1000*60*60)),
-        minutes: Math.floor((diff % (1000*60*60)) / (1000*60)),
-        seconds: Math.floor((diff % (1000*60)) / 1000),
-        status: 'starts_in'
-      };
-    } else if (now >= start && now <= end) {
-      const diff = end - now;
-      const minutesLeft = Math.floor(diff / (1000*60));
-      if (minutesLeft <= 5 && !timeWarningShown && diff > 0) {
-        setTimeWarningShown(true);
-        toast.warning('⚠️ Less than 5 minutes remaining to cast your vote!', {
-          duration: 10000,
-        });
-      }
-      return {
-        hours: Math.floor(diff / (1000*60*60)),
-        minutes: minutesLeft,
-        seconds: Math.floor((diff % (1000*60)) / 1000),
-        status: 'active'
-      };
-    } else {
-      return null;
+  if (!startTime || !endTime) return null;
+  
+  const now = new Date();
+  const start = new Date(startTime);
+  const end = new Date(endTime);
+  
+  // Check if dates are valid
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    return null;
+  }
+  
+  if (now < start) {
+    const diff = start - now;
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    return {
+      days: isNaN(days) ? 0 : days,
+      hours: isNaN(hours) ? 0 : hours,
+      minutes: isNaN(minutes) ? 0 : minutes,
+      seconds: isNaN(seconds) ? 0 : seconds,
+      status: 'starts_in'
+    };
+  } else if (now >= start && now <= end) {
+    const diff = end - now;
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    
+    // Warning for less than 5 minutes
+    if (minutes <= 5 && diff > 0 && !timeWarningShown) {
+      setTimeWarningShown(true);
+      toast.warning('Less than 5 minutes remaining to cast your vote!', {
+        duration: 10000,
+      });
     }
-  }, [timeWarningShown]);
+    
+    return {
+      days: 0,
+      hours: isNaN(hours) ? 0 : hours,
+      minutes: isNaN(minutes) ? 0 : minutes,
+      seconds: isNaN(seconds) ? 0 : seconds,
+      status: 'active'
+    };
+  } else {
+    return null;
+  }
+}, [timeWarningShown]);
 
-  const formatTimeLeft = () => {
-    if (!timeLeft) return 'Voting ended';
-    if (timeLeft.status === 'starts_in') return `Starts in ${timeLeft.days}d ${timeLeft.hours}h ${timeLeft.minutes}m`;
-    const timeString = `${String(timeLeft.hours).padStart(2,'0')}:${String(timeLeft.minutes).padStart(2,'0')}:${String(timeLeft.seconds).padStart(2,'0')}`;
-    return timeString;
-  };
+ const formatTimeLeft = () => {
+  if (!timeLeft) return 'Voting ended';
+  if (timeLeft.status === 'starts_in') {
+    return `Starts in ${timeLeft.days}d ${timeLeft.hours}h ${timeLeft.minutes}m`;
+  }
+  if (timeLeft.status === 'active') {
+    const hours = String(Math.max(0, timeLeft.hours || 0)).padStart(2, '0');
+    const minutes = String(Math.max(0, timeLeft.minutes || 0)).padStart(2, '0');
+    const seconds = String(Math.max(0, timeLeft.seconds || 0)).padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
+  }
+  return 'Voting ended';
+};
 
   const getTimeColor = () => {
     if (!timeLeft || timeLeft.status !== 'active') return 'text-green-600';

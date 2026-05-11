@@ -262,8 +262,7 @@ This email confirms that your vote has been successfully recorded in the ${elect
 
 Date and Time: ${new Date().toLocaleString()}
 
-WHAT YOU VOTED FOR:
-${votesSummary.map(vote => `- ${vote.position}: ${vote.candidate}`).join('\n')}
+
 
 IMPORTANT INFORMATION:
 - Your vote has been stored securely and cannot be changed once submitted.
@@ -274,7 +273,6 @@ Thank you for taking part in this election and exercising your right to vote.
 
 Regent University Electoral Commission
 
-Reference ID: ${transactionId || 'N/A'}
 
 This is an automated confirmation. Please do not reply to this email.
         `

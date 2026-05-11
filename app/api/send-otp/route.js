@@ -1,4 +1,5 @@
 // app/api/send-Voter-otp/route.js
+
 export async function POST(request) {
   try {
     const { email, otp, name, role, expiresIn } = await request.json();
@@ -36,7 +37,7 @@ export async function POST(request) {
           email: process.env.BREVO_FROM_EMAIL || 'noreply@regent.edu.gh'
         },
         to: [{ email: email, name: name || 'Administrator' }],
-        subject: '🔐 Voter Verification OTP - E-Voting Portal',
+        subject: 'Voter Verification OTP - E-Voting Portal',
         htmlContent: `
           <!DOCTYPE html>
           <html>
@@ -47,7 +48,7 @@ export async function POST(request) {
               body {
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
                 line-height: 1.6;
-                color: #333;
+                color: #333333;
                 margin: 0;
                 padding: 0;
               }
@@ -55,10 +56,10 @@ export async function POST(request) {
                 max-width: 600px;
                 margin: 0 auto;
                 padding: 20px;
-                background: #f9f9f9;
+                background: #f9fafb;
               }
               .header {
-                background: linear-gradient(135deg, #6b46c0 0%, #4c1d95 100%);
+                background: #064e3b;
                 color: white;
                 padding: 30px 20px;
                 text-align: center;
@@ -67,77 +68,115 @@ export async function POST(request) {
               .header h1 {
                 margin: 0;
                 font-size: 24px;
+                font-weight: 600;
               }
               .header p {
-                margin: 5px 0 0;
+                margin: 8px 0 0;
                 opacity: 0.9;
+                font-size: 14px;
               }
               .content {
                 background: white;
                 padding: 30px;
                 border-radius: 0 0 10px 10px;
-                box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+                box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+              }
+              .greeting {
+                font-size: 16px;
+                color: #1f2937;
+                margin-bottom: 8px;
+              }
+              .greeting strong {
+                color: #064e3b;
               }
               .role-badge {
                 display: inline-block;
-                background: #6b46c0;
+                background: #064e3b;
                 color: white;
-                padding: 5px 12px;
+                padding: 6px 14px;
                 border-radius: 20px;
                 font-size: 12px;
-                font-weight: bold;
+                font-weight: 600;
                 margin: 10px 0;
               }
               .otp-code {
-                font-size: 42px;
+                font-size: 44px;
                 font-weight: bold;
-                color: #6b46c0;
+                color: #064e3b;
                 text-align: center;
                 padding: 20px;
-                background: #f3e8ff;
+                background: #ecfdf5;
                 border-radius: 8px;
                 letter-spacing: 8px;
                 margin: 20px 0;
                 font-family: monospace;
+                border: 1px solid #d1fae5;
               }
-              .warning {
-                background: #fff3e0;
-                border-left: 4px solid #ff9800;
-                padding: 12px;
+              .warning-box {
+                background: #fffbeb;
+                border-left: 4px solid #d97706;
+                padding: 12px 16px;
                 margin: 20px 0;
                 font-size: 14px;
+                border-radius: 6px;
               }
-              .security-tip {
-                background: #e8f5e9;
-                border-left: 4px solid #4caf50;
-                padding: 12px;
+              .warning-box strong {
+                color: #92400e;
+              }
+              .security-box {
+                background: #f0fdf4;
+                border-left: 4px solid #059669;
+                padding: 12px 16px;
                 margin: 20px 0;
                 font-size: 14px;
+                border-radius: 6px;
+              }
+              .security-box strong {
+                color: #065f46;
+              }
+              ul {
+                margin: 8px 0 0 20px;
+                padding: 0;
+              }
+              li {
+                margin: 4px 0;
+              }
+              .signature {
+                margin-top: 25px;
+                padding-top: 20px;
+                border-top: 1px solid #e5e7eb;
+                font-size: 13px;
+                color: #4b5563;
+              }
+              .signature strong {
+                color: #064e3b;
               }
               .footer {
                 text-align: center;
                 margin-top: 20px;
-                font-size: 12px;
-                color: #666;
+                font-size: 11px;
+                color: #9ca3af;
                 padding-top: 20px;
-                border-top: 1px solid #eee;
+                border-top: 1px solid #e5e7eb;
               }
             </style>
           </head>
           <body>
             <div class="container">
               <div class="header">
-                <h1>🔐 Voter Verification Required</h1>
+                <h1>Voter Verification Required</h1>
                 <p>Regent University E-Voting Portal</p>
               </div>
               <div class="content">
-                <h2>Dear ${name || 'Voteristrator'},</h2>
-                
-                <div class="role-badge">
-                  Role: ${role || 'Voteristrator'}
+                <div class="greeting">
+                  Dear <strong>${name || 'Administrator'}</strong>,
                 </div>
                 
-                <p>You are attempting to access the <strong>Voter Dashboard</strong> of the Regent University E-Voting System.</p>
+                <div class="role-badge">
+                  Role: ${role || 'Administrator'}
+                </div>
+                
+                <p>You are attempting to access the Voter Dashboard of the Regent University E-Voting System.</p>
                 
                 <p>Please use the following One-Time Password (OTP) to complete your login:</p>
                 
@@ -145,60 +184,66 @@ export async function POST(request) {
                   ${otp}
                 </div>
                 
-                <div class="warning">
-                  <strong>⚠️ Important Security Notice:</strong> 
-                  <ul style="margin: 5px 0 0 20px;">
+                <div class="warning-box">
+                  <strong>Important Security Notice:</strong>
+                  <ul>
                     <li>This OTP is valid for <strong>${expiresIn || 5} minutes</strong></li>
                     <li>This OTP can only be used once</li>
                     <li>Never share this OTP with anyone</li>
                   </ul>
                 </div>
                 
-                <div class="security-tip">
-                  <strong>🔒 Security Tip:</strong> If you didn't request this login, please:
-                  <ul style="margin: 5px 0 0 20px;">
-                    <li>Contact IT Security immediately</li>
-                    <li>Change your password</li>
-                    <li>Review recent account activity</li>
+                <div class="security-box">
+                  <strong>Security Recommendation:</strong>
+                  <ul>
+                    <li>Contact IT Security if you did not request this</li>
+                    <li>Change your password immediately if suspicious</li>
+                    <li>Review your recent account activity</li>
                   </ul>
                 </div>
                 
                 <p>This is an automated security measure to protect the integrity of the voting system.</p>
                 
-                <p>Best regards,<br>
-                <strong>Regent University Electoral Commission</strong><br>
-                <span style="font-size: 12px;">IT Security Team</span></p>
+                <div class="signature">
+                  Best regards,<br>
+                  <strong>Regent University Electoral Commission</strong><br>
+                  <span style="font-size: 12px;">IT Security Team</span>
+                </div>
               </div>
               <div class="footer">
-                <p>This is an automated security notification. Please do not reply to this email.</p>
-                <p>If you need assistance, contact the IT Help Desk.</p>
-                <p>&copy; ${new Date().getFullYear()} Regent University. All rights reserved.</p>
+                This is an automated security notification. Please do not reply to this email.<br>
+                For assistance, contact the IT Help Desk.<br>
+                &copy; ${new Date().getFullYear()} Regent University College of Science and Technology. All rights reserved.
               </div>
             </div>
           </body>
           </html>
         `,
         textContent: `
-          Voter Verification OTP - Regent University E-Voting Portal
+VOTER VERIFICATION OTP - REGENT UNIVERSITY E-VOTING PORTAL
 
-          Dear ${name || 'Voteristrator'},
+Dear ${name || 'Administrator'},
 
-          Role: ${role || 'Voteristrator'}
+Role: ${role || 'Administrator'}
 
-          You are attempting to access the Voter Dashboard.
+You are attempting to access the Voter Dashboard.
 
-          Your OTP verification code is: ${otp}
+Your OTP verification code is: ${otp}
 
-          Security Notice:
-          - This OTP is valid for ${expiresIn || 5} minutes
-          - This OTP can only be used once
-          - Never share this OTP with anyone
+SECURITY NOTICE:
+- This OTP is valid for ${expiresIn || 5} minutes
+- This OTP can only be used once
+- Never share this OTP with anyone
 
-          If you didn't request this login, please contact IT Security immediately.
+If you did not request this login, please contact IT Security immediately, change your password, and review recent account activity.
 
-          Best regards,
-          Regent University Electoral Commission
-          IT Security Team
+This is an automated security measure.
+
+Best regards,
+Regent University Electoral Commission
+IT Security Team
+
+This is an automated notification. Please do not reply.
         `
       }),
     });
