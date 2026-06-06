@@ -1,5 +1,5 @@
-// hooks/useElectionData.js - Updated with voting stopped/paused handling
-import { useState, useEffect, useCallback } from 'react';
+// hooks/useElectionData.js - Complete updated version
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 export const useElectionData = () => {
@@ -14,7 +14,7 @@ export const useElectionData = () => {
   });
   const [votingProgress, setVotingProgress] = useState([]);
   const [isVotingActive, setIsVotingActive] = useState(false);
-  const [isVotingStopped, setIsVotingStopped] = useState(false);  // NEW: Add this
+  const [isVotingStopped, setIsVotingStopped] = useState(false);
   const [votingPeriod, setVotingPeriod] = useState(null);
   const [votingStartsIn, setVotingStartsIn] = useState(null);
   const [timeLeft, setTimeLeft] = useState({
@@ -25,26 +25,20 @@ export const useElectionData = () => {
     status: 'Loading...'
   });
   const [lastUpdated, setLastUpdated] = useState(new Date());
+  const lastElectionIdRef = useRef(null);
 
-  // Helper function to get public URL for candidate image
   const getCandidateImageUrl = (imagePath) => {
     if (!imagePath) return null;
-    
-    // If it's already a full URL, return as is
     if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
       return imagePath;
     }
-    
-    // Get public URL from Supabase storage bucket
     const { data } = supabase.storage
       .from('candidate-photos')
       .getPublicUrl(imagePath);
-    
     return data.publicUrl;
   };
 
   const calculateTimeLeft = useCallback((startTime, endTime, isStopped = false) => {
-    // If voting is stopped, return stopped status
     if (isStopped) {
       return {
         days: 0,
@@ -124,86 +118,32 @@ export const useElectionData = () => {
       setLoading(true);
       setError(null);
       
-      // 1. Fetch voting period from voting_periods table
+      console.log('=== Fetching Election Data ===');
+      
+      // 1. Get ACTIVE voting period
       const { data: votingPeriodData, error: votingPeriodError } = await supabase
         .from('voting_periods')
         .select('*')
-        .order('created_at', { ascending: false })
-        .limit(1)
+        .eq('is_active', true)
         .maybeSingle();
       
-      let startTime = null;
-      let endTime = null;
-      let isActive = false;
-      let currentVotingPeriodId = null;
-      let isStopped = false;  // NEW: Track stopped status
+      if (votingPeriodError) {
+        console.error('Error fetching voting period:', votingPeriodError);
+      }
       
-      if (votingPeriodData) {
-        startTime = votingPeriodData.start_date || votingPeriodData.start_time;
-        endTime = votingPeriodData.end_date || votingPeriodData.end_time;
-        currentVotingPeriodId = votingPeriodData.id;
-        
-        // NEW: Check if voting is manually stopped
-        isStopped = votingPeriodData.is_stopped === true;
-        setIsVotingStopped(isStopped);
-        
-        if (startTime && endTime && !isStopped) {
-          const now = new Date();
-          const start = new Date(startTime);
-          const end = new Date(endTime);
-          isActive = now >= start && now <= end;
-          
-          setVotingPeriod({
-            start_time: startTime,
-            end_time: endTime,
-            id: votingPeriodData.id,
-            name: votingPeriodData.title || 'Voting Period'
-          });
-          
-          const timeData = calculateTimeLeft(startTime, endTime, false);
-          setTimeLeft(timeData);
-          setIsVotingActive(isActive);
-          setVotingStartsIn(!isActive && now < start);
-        } else if (isStopped) {
-          // If voting is stopped, override status
-          setVotingPeriod({
-            start_time: startTime,
-            end_time: endTime,
-            id: votingPeriodData.id,
-            name: votingPeriodData.title || 'Voting Period'
-          });
-          
-          const stoppedTimeData = calculateTimeLeft(startTime, endTime, true);
-          setTimeLeft(stoppedTimeData);
-          setIsVotingActive(false);
-          setVotingStartsIn(false);
-        } else {
-          setTimeLeft({
-            days: 0,
-            hours: 0,
-            minutes: 0,
-            seconds: 0,
-            status: 'Voting dates not configured'
-          });
-          setIsVotingActive(false);
-          setVotingStartsIn(false);
-          setIsVotingStopped(false);
-        }
-      } else {
+      if (!votingPeriodData) {
+        console.log('No active voting period found');
         setTimeLeft({
           days: 0,
           hours: 0,
           minutes: 0,
           seconds: 0,
-          status: 'No voting period configured'
+          status: 'No active voting period'
         });
         setIsVotingActive(false);
         setVotingStartsIn(false);
         setIsVotingStopped(false);
-      }
-      
-      // If voting is stopped, return early with empty progress
-      if (isStopped) {
+        setVotingPeriod(null);
         setVotingProgress([]);
         setTotalStats({
           totalVoters: 0,
@@ -216,166 +156,196 @@ export const useElectionData = () => {
         return;
       }
       
-      // 2. Fetch candidates based on voting_period_id
+      console.log('Active Voting Period:', votingPeriodData.title);
+      
+      const startTime = votingPeriodData.start_date || votingPeriodData.start_time;
+      const endTime = votingPeriodData.end_date || votingPeriodData.end_time;
+      const isStopped = votingPeriodData.is_stopped === true;
+      setIsVotingStopped(isStopped);
+      
+      // Set voting period info
+      setVotingPeriod({
+        start_time: startTime,
+        end_time: endTime,
+        id: votingPeriodData.id,
+        name: votingPeriodData.title || 'Voting Period'
+      });
+      
+      // Calculate time left
+      const timeData = calculateTimeLeft(startTime, endTime, isStopped);
+      setTimeLeft(timeData);
+      
+      const now = new Date();
+      const start = new Date(startTime);
+      const end = new Date(endTime);
+      const isActive = now >= start && now <= end && !isStopped;
+      setIsVotingActive(isActive);
+      setVotingStartsIn(!isActive && now < start && !isStopped);
+      
+      // If voting is stopped, return early
+      if (isStopped) {
+        console.log('Voting is stopped');
+        setVotingProgress([]);
+        setTotalStats({
+          totalVoters: 0,
+          totalVotes: 0,
+          participationRate: 0,
+          totalVotersWhoVoted: 0,
+          remainingVoters: 0
+        });
+        setLoading(false);
+        return;
+      }
+      
+      // 2. Get ACTIVE election for this voting period
+      const { data: activeElection, error: electionError } = await supabase
+        .from('elections')
+        .select('*')
+        .eq('voting_period_id', votingPeriodData.id)
+        .eq('is_active', true)
+        .maybeSingle();
+      
+      if (electionError) {
+        console.error('Error fetching active election:', electionError);
+      }
+      
+      if (!activeElection) {
+        console.log('No active election found for this voting period');
+        setVotingProgress([]);
+        setTotalStats({
+          totalVoters: 0,
+          totalVotes: 0,
+          participationRate: 0,
+          totalVotersWhoVoted: 0,
+          remainingVoters: 0
+        });
+        setLoading(false);
+        return;
+      }
+      
+      console.log('Active Election:', activeElection.title);
+      console.log('Election ID:', activeElection.id);
+      
+      // Check if election has changed - reset data if needed
+      if (lastElectionIdRef.current !== activeElection.id) {
+        console.log('Election changed, resetting data');
+        lastElectionIdRef.current = activeElection.id;
+        setVotingProgress([]);
+      }
+      
+      // 3. Get positions for this election
+      const { data: positions, error: positionsError } = await supabase
+        .from('positions')
+        .select('*')
+        .eq('election_id', activeElection.id)
+        .order('order_number', { ascending: true });
+      
+      if (positionsError) {
+        console.error('Error fetching positions:', positionsError);
+      }
+      
+      console.log('Positions found:', positions?.length || 0);
+      
+      // 4. Get candidates for each position
       let allCandidates = [];
-      if (currentVotingPeriodId) {
+      for (const position of positions || []) {
         const { data: candidates, error: candidatesError } = await supabase
           .from('candidates')
           .select('*')
-          .eq('voting_period_id', currentVotingPeriodId);
+          .eq('position_id', position.id);
         
-        if (!candidatesError && candidates) {
-          allCandidates = candidates;
-          
-          // Process each candidate to add image URL
-          allCandidates = allCandidates.map(candidate => ({
-            ...candidate,
-            image_url: getCandidateImageUrl(candidate.image_url)
+        if (!candidatesError && candidates && candidates.length > 0) {
+          // Get vote counts for each candidate
+          const candidatesWithVotes = await Promise.all(candidates.map(async (candidate) => {
+            const { count: voteCount } = await supabase
+              .from('votes')
+              .select('*', { count: 'exact', head: true })
+              .eq('candidate_id', candidate.id);
+            
+            return {
+              ...candidate,
+              image_url: getCandidateImageUrl(candidate.image_url),
+              vote_count: voteCount || 0
+            };
           }));
+          allCandidates.push(...candidatesWithVotes);
         }
       }
       
-      // 3. Group candidates by position
-      const candidatesByPosition = {};
-      if (allCandidates && allCandidates.length > 0) {
-        allCandidates.forEach(candidate => {
-          const positionName = candidate.position || 'General';
-          if (!candidatesByPosition[positionName]) {
-            candidatesByPosition[positionName] = [];
-          }
-          candidatesByPosition[positionName].push(candidate);
-        });
+      console.log('Total candidates found:', allCandidates.length);
+      
+      // 5. Get VOTERS for THIS SPECIFIC election only (CRITICAL FIX)
+      const { count: eligibleVoters, error: eligibleError } = await supabase
+        .from('election_voters')
+        .select('*', { count: 'exact', head: true })
+        .eq('election_id', activeElection.id)
+        .eq('status', 'active');
+      
+      if (eligibleError) {
+        console.error('Error fetching eligible voters:', eligibleError);
       }
       
-      // 4. Fetch total voters count
-      let totalVoters = 0;
-      try {
-        const { count, error: votersError } = await supabase
-          .from('voters')
-          .select('*', { count: 'exact', head: true });
-        
-        if (!votersError) {
-          totalVoters = count || 0;
-        }
-      } catch (err) {
-        // Ignore error
+      const { count: votersWhoVoted, error: votedError } = await supabase
+        .from('election_voters')
+        .select('*', { count: 'exact', head: true })
+        .eq('election_id', activeElection.id)
+        .eq('has_voted', true)
+        .eq('status', 'active');
+      
+      if (votedError) {
+        console.error('Error fetching voters who voted:', votedError);
       }
       
-      // 5. Fetch total votes count
-      let totalVotes = 0;
-      try {
-        const { count, error: votesError } = await supabase
-          .from('votes')
-          .select('*', { count: 'exact', head: true });
-        
-        if (!votesError) {
-          totalVotes = count || 0;
-        }
-      } catch (err) {
-        // Ignore error
-      }
+      console.log(`Eligible voters for "${activeElection.title}": ${eligibleVoters || 0}`);
+      console.log(`Voters who have voted: ${votersWhoVoted || 0}`);
       
-      // 6. Fetch unique voters who voted
-      let totalVotersWhoVoted = 0;
-      try {
-        const { data: uniqueVoters, error: uniqueError } = await supabase
-          .from('votes')
-          .select('voter_id')
-          .not('voter_id', 'is', null);
-        
-        if (!uniqueError && uniqueVoters) {
-          const uniqueVoterIds = [...new Set(uniqueVoters.map(v => v.voter_id))];
-          totalVotersWhoVoted = uniqueVoterIds.length;
-        }
-      } catch (err) {
-        // Ignore error
-      }
+      // 6. Calculate total votes cast for this election
+      const { data: votesData, error: votesError } = await supabase
+        .from('votes')
+        .select('id')
+        .eq('election_id', activeElection.id);
+      
+      const totalVotesCast = votesData?.length || 0;
       
       // 7. Calculate participation rate
-      const participationRate = totalVoters > 0 
-        ? (totalVotersWhoVoted / totalVoters) * 100 
-        : 0;
+      const participationRate = eligibleVoters > 0 ? ((votersWhoVoted || 0) / eligibleVoters) * 100 : 0;
       
+      // 8. Update total stats with ONLY this election's data
       setTotalStats({
-        totalVoters: totalVoters,
-        totalVotes: totalVotes,
+        totalVoters: eligibleVoters || 0,
+        totalVotes: totalVotesCast,
         participationRate,
-        totalVotersWhoVoted,
-        remainingVoters: Math.max(0, totalVoters - totalVotersWhoVoted)
+        totalVotersWhoVoted: votersWhoVoted || 0,
+        remainingVoters: (eligibleVoters || 0) - (votersWhoVoted || 0)
       });
       
-      // 8. Build progress data for each position
-      let progressData = [];
+      // 9. Build progress data for the election card
+      const totalVotesForElection = allCandidates.reduce((sum, c) => sum + (c.vote_count || 0), 0);
       
-      if (Object.keys(candidatesByPosition).length > 0) {
-        // Create an election card for each position
-        for (const [positionName, positionCandidates] of Object.entries(candidatesByPosition)) {
-          // Calculate total votes for this position
-          let positionVoteCount = 0;
-          
-          for (const candidate of positionCandidates) {
-            // Fetch vote count for each candidate
-            try {
-              const { count, error: voteCountError } = await supabase
-                .from('votes')
-                .select('*', { count: 'exact', head: true })
-                .eq('candidate_id', candidate.id);
-              
-              if (!voteCountError) {
-                positionVoteCount += count || 0;
-                candidate.vote_count = count || 0;
-              } else {
-                candidate.vote_count = 0;
-              }
-            } catch (err) {
-              candidate.vote_count = 0;
-            }
-          }
-          
-          progressData.push({
-            id: positionName.toLowerCase().replace(/\s+/g, '_'),
-            name: positionName,
-            description: `Cast your vote for ${positionName}`,
-            candidates: positionCandidates,
-            voteCount: positionVoteCount,
-            candidatesCount: positionCandidates.length,
-            maxVotes: 1,
-            status: isActive ? 'active' : 'closed',
-            start_date: startTime,
-            end_date: endTime,
-            voting_period_title: votingPeriodData?.title || 'Election',
-            voting_period_year: votingPeriodData?.year
-          });
-        }
-      } else {
-        // Show a message if no candidates
-        progressData = [{
-          id: 'no-candidates',
-          name: 'No Candidates Available',
-          description: 'Candidates will be added soon for this election',
-          candidates: [],
-          voteCount: 0,
-          candidatesCount: 0,
-          maxVotes: 0,
-          status: 'closed',
-          start_date: startTime,
-          end_date: endTime
-        }];
-      }
+      const progressData = [{
+        id: activeElection.id,
+        name: activeElection.title,
+        description: activeElection.description || `Cast your vote for ${activeElection.title}`,
+        candidates: allCandidates,
+        voteCount: totalVotesForElection,
+        candidatesCount: allCandidates.length,
+        maxVotes: 1,
+        status: activeElection.is_active && isActive ? 'active' : 'closed',
+        start_date: activeElection.start_time,
+        end_date: activeElection.end_time,
+        voting_period_title: votingPeriodData?.title || 'Election',
+        voting_period_year: votingPeriodData?.year,
+        eligibleVoters: eligibleVoters || 0,
+        votedCount: votersWhoVoted || 0
+      }];
       
+      console.log('Progress data built with 1 election');
       setVotingProgress(progressData);
       setLastUpdated(new Date());
       
     } catch (err) {
+      console.error('Error fetching election data:', err);
       setError(err.message || 'Failed to load election data');
-      
-      setTotalStats({
-        totalVoters: 0,
-        totalVotes: 0,
-        participationRate: 0,
-        totalVotersWhoVoted: 0,
-        remainingVoters: 0
-      });
       setVotingProgress([]);
       setIsVotingActive(false);
       setTimeLeft({
@@ -392,7 +362,8 @@ export const useElectionData = () => {
   
   useEffect(() => {
     fetchElectionData();
-    const interval = setInterval(fetchElectionData, 360000);
+    // Refresh every 10 seconds for real-time updates
+    const interval = setInterval(fetchElectionData, 10000);
     return () => clearInterval(interval);
   }, [fetchElectionData]);
   
@@ -402,7 +373,7 @@ export const useElectionData = () => {
     totalStats,
     votingProgress,
     isVotingActive,
-    isVotingStopped,  // NEW: Return this
+    isVotingStopped,
     votingPeriod,
     votingStartsIn,
     timeLeft,

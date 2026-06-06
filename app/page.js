@@ -10,6 +10,7 @@ import ElectionCard from '@/components/home/ElectionCard';
 import VotingStatusBanner from '@/components/home/VotingStatusBanner';
 import Footer from '@/components/footer';
 import { useElectionData } from '@/hooks/useElectionData';
+import PublicElectionResults from '@/components/PublicElectionResults';
 import {
   FaSync,
   FaExclamationCircle,
@@ -24,6 +25,8 @@ import {
   FaUserGraduate,
   FaEye,
   FaTimes,
+  FaCheckCircle,
+  FaHistory,
 } from 'react-icons/fa';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -31,15 +34,11 @@ export default function Home() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState('light');
   const [showVoterList, setShowVoterList] = useState(false);
-  const [voters, setVoters] = useState([]);
-  const [filteredVoters, setFilteredVoters] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResult, setSearchResult] = useState(null);
-  const [searchBy, setSearchBy] = useState('name'); 
+  const [searchBy, setSearchBy] = useState('name');
   const [isSearching, setIsSearching] = useState(false);
-
-  const [voterLoading, setVoterLoading] = useState(false);
-  const [voterStats, setVoterStats] = useState({ total: 0, voted: 0, notVoted: 0, turnout: 0 });
+  const [currentElectionId, setCurrentElectionId] = useState(null);
 
   const modalRef = useRef(null);
 
@@ -55,6 +54,13 @@ export default function Home() {
     fetchElectionData,
     lastUpdated,
   } = useElectionData();
+
+  // Get current election ID from votingProgress
+  useEffect(() => {
+    if (votingProgress && votingProgress.length > 0 && votingProgress[0].id) {
+      setCurrentElectionId(votingProgress[0].id);
+    }
+  }, [votingProgress]);
 
   // ── Theme ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -93,54 +99,102 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleKey);
   }, [showVoterList]);
 
-  // ── Voter list ────────────────────────────────────────────────────────────
-  const fetchVoters = useCallback(async () => {
-    setVoterLoading(true);
-    try {
-      const { data, error: fetchError } = await supabase
-        .from('voters')
-        .select('*')
-        .order('name', { ascending: true });
-
-      if (fetchError) throw fetchError;
-
-      const list = data || [];
-      setVoters(list);
-      setFilteredVoters(list);
-
-      const voted    = list.filter((v) => v.has_voted === true).length;
-      const notVoted = list.filter((v) => v.has_voted === false).length;
-      const turnout  = list.length > 0 ? ((voted / list.length) * 100).toFixed(1) : 0;
-      setVoterStats({ total: list.length, voted, notVoted, turnout });
-    } catch (err) {
-      console.error('Error fetching voters:', err);
-      toast.error('Failed to load voters list');
-    } finally {
-      setVoterLoading(false);
+  // ── Search for voter in CURRENT ELECTION only ──────────────────────────────
+  const handleSearchVoter = useCallback(async () => {
+    if (!searchTerm.trim()) {
+      toast.error('Please enter a search term');
+      return;
     }
+
+    if (!currentElectionId) {
+      toast.error('No active election found');
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchResult(null);
+    
+    try {
+      // First, find the voter in the voters table
+      let voterQuery = supabase.from('voters').select('id, name, school_id');
+      
+      if (searchBy === 'name') {
+        voterQuery = voterQuery.ilike('name', `%${searchTerm.trim()}%`);
+      } else if (searchBy === 'school_id') {
+        voterQuery = voterQuery.ilike('school_id', `%${searchTerm.trim()}%`);
+      } else if (searchBy === 'email') {
+        voterQuery = voterQuery.ilike('email', `%${searchTerm.trim()}%`);
+      }
+      
+      const { data: matchedVoters, error: searchError } = await voterQuery.limit(10);
+      
+      if (searchError) throw searchError;
+      
+      if (!matchedVoters || matchedVoters.length === 0) {
+        setSearchResult([]);
+        toast.info('No voters found matching your search');
+        setIsSearching(false);
+        return;
+      }
+      
+      // Get the voter IDs
+      const voterIds = matchedVoters.map(v => v.id);
+      
+      // Check which of these voters are eligible for the CURRENT election
+      const { data: eligibleVoters, error: eligibleError } = await supabase
+        .from('election_voters')
+        .select('voter_id, has_voted')
+        .eq('election_id', currentElectionId)
+        .eq('status', 'active')
+        .in('voter_id', voterIds);
+      
+      if (eligibleError) throw eligibleError;
+      
+      const eligibleVoterIds = new Set(eligibleVoters?.map(ev => ev.voter_id) || []);
+      const votedStatus = new Map(eligibleVoters?.map(ev => [ev.voter_id, ev.has_voted]) || []);
+      
+      // Filter and combine results
+      const results = matchedVoters
+        .filter(voter => eligibleVoterIds.has(voter.id))
+        .map(voter => ({
+          id: voter.id,
+          name: voter.name,
+          school_id: voter.school_id,
+          has_voted: votedStatus.get(voter.id) || false
+        }));
+      
+      if (results.length > 0) {
+        setSearchResult(results);
+        toast.success(`Found ${results.length} eligible voter(s)`);
+      } else {
+        setSearchResult([]);
+        toast.info('You are not registered for this election. Please contact the electoral commission.');
+      }
+    } catch (err) {
+      console.error('Error searching voters:', err);
+      toast.error('Failed to search voters');
+      setSearchResult([]);
+    } finally {
+      setIsSearching(false);
+    }
+  }, [searchTerm, searchBy, currentElectionId]);
+
+  // Clear search
+  const handleClearSearch = useCallback(() => {
+    setSearchTerm('');
+    setSearchResult(null);
   }, []);
 
   const handleOpenVoterList = useCallback(() => {
     setShowVoterList(true);
-    fetchVoters();
-  }, [fetchVoters]);
+    setSearchResult(null);
+    setSearchTerm('');
+  }, []);
 
-  // Filter voters by search term
-  useEffect(() => {
-    if (!searchTerm.trim()) {
-      setFilteredVoters(voters);
-    } else {
-      const q = searchTerm.toLowerCase();
-      setFilteredVoters(
-        voters.filter(
-          (v) =>
-            v.name?.toLowerCase().includes(q) ||
-            v.email?.toLowerCase().includes(q) ||
-            v.school_id?.toLowerCase().includes(q)
-        )
-      );
-    }
-  }, [searchTerm, voters]);
+  // Get icon color based on theme
+  const getIconColor = () => {
+    return theme === 'light' ? 'text-gray-700' : 'text-gray-300';
+  };
 
   // ── Stats (memoised) ──────────────────────────────────────────────────────
   const stats = useMemo(() => [
@@ -174,11 +228,6 @@ export default function Home() {
     toast.info('Retrying…', { duration: 2000 });
   }, [fetchElectionData]);
 
-  // Get icon color based on theme
-  const getIconColor = () => {
-    return theme === 'light' ? 'text-black' : 'text-white';
-  };
-
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div
@@ -194,7 +243,7 @@ export default function Home() {
         theme={theme === 'light' ? 'light' : 'dark'}
       />
 
-      {/* ── Voter List Modal ──────────────────────────────────────────────── */}
+      {/* ── Voter Search Modal (Search Only, No Full List) ─────────────────── */}
       {showVoterList && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
@@ -205,7 +254,7 @@ export default function Home() {
         >
           <div
             ref={modalRef}
-            className={`rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden shadow-2xl ${
+            className={`rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl ${
               theme === 'light' ? 'bg-white' : 'bg-gray-800'
             }`}
           >
@@ -220,9 +269,11 @@ export default function Home() {
                   id="voter-modal-title"
                   className={`text-2xl font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}
                 >
-                  Registered Voters
+                  Verify Voter Eligibility
                 </h2>
-               
+                <p className={`text-sm mt-1 ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>
+                  Search by name or school ID to check if you're registered for this election
+                </p>
               </div>
               <button
                 onClick={() => setShowVoterList(false)}
@@ -235,102 +286,153 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Search Bar */}
-            <div
-              className={`p-6 border-b ${
-                theme === 'light' ? 'border-gray-200' : 'border-gray-700'
-              }`}
-            >
-              <label htmlFor="voter-search" className="sr-only">
-                Search voters
-              </label>
-              <div className="relative">
-                <FaSearch
-                  className={`absolute left-3 top-1/2 -translate-y-1/2 text-sm ${getIconColor()}`}
-                  aria-hidden="true"
-                />
-                <input
-                  id="voter-search"
-                  type="text"
-                  placeholder="Search by name or school ID..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className={`w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-500 ${
-                    theme === 'light'
-                      ? 'bg-white border-gray-300 text-gray-900'
-                      : 'bg-gray-700 border-gray-600 text-white'
-                  }`}
-                />
+            {/* Search Controls */}
+            <div className={`p-6 border-b ${theme === 'light' ? 'border-gray-200' : 'border-gray-700'}`}>
+              {/* Search Type Selection */}
+              <div className="flex gap-2 mb-4">
+                {['name', 'school_id'].map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setSearchBy(type)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      searchBy === type
+                        ? 'bg-emerald-600 text-white'
+                        : theme === 'light'
+                        ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    {type === 'name' ? 'Name' : 'School ID'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Search Input */}
+              <div className="flex gap-3">
+                <div className="flex-1 relative">
+                  <FaSearch
+                    className={`absolute left-3 top-1/2 -translate-y-1/2 text-sm ${getIconColor()}`}
+                    aria-hidden="true"
+                  />
+                  <input
+                    type="text"
+                    placeholder={`Search by ${searchBy === 'name' ? 'name' : 'school ID'}...`}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSearchVoter()}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900'
+                        : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
+                  />
+                </div>
+                <button
+                  onClick={handleSearchVoter}
+                  disabled={isSearching}
+                  className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSearching ? <FaSync className="animate-spin" /> : 'Search'}
+                </button>
+                {searchResult && (
+                  <button
+                    onClick={handleClearSearch}
+                    className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-medium transition"
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Voters Table */}
-            <div className="overflow-y-auto max-h-[60vh]">
-              {voterLoading ? (
+            {/* Search Results - Only shows name and school ID */}
+            <div className="overflow-y-auto max-h-[60vh] p-6">
+              {isSearching ? (
                 <div className="flex justify-center py-12">
                   <FaSync className={`animate-spin text-3xl ${getIconColor()}`} aria-label="Loading" />
                 </div>
-              ) : filteredVoters.length === 0 ? (
-                <p className={`text-center py-12 ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>No voters found</p>
+              ) : searchResult === null ? (
+                <div className="text-center py-12">
+                  <FaUserGraduate className={`text-4xl mx-auto mb-3 ${getIconColor()} opacity-50`} />
+                  <p className={`${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>
+                    Enter your name or school ID to check your voter registration status
+                  </p>
+                </div>
+              ) : searchResult.length === 0 ? (
+                <div className="text-center py-12">
+                  <FaTimes className={`text-4xl mx-auto mb-3 ${getIconColor()} opacity-50`} />
+                  <p className={`${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>
+                    No registered voter found matching "{searchTerm}"
+                  </p>
+                  <p className={`text-sm mt-2 ${theme === 'light' ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Please contact the electoral commission if you believe this is an error.
+                  </p>
+                </div>
               ) : (
-                <table className="w-full">
-                  <thead
-                    className={`sticky top-0 ${theme === 'light' ? 'bg-gray-50' : 'bg-gray-700'}`}
-                  >
-                    <tr>
-                      <th
-                        scope="col"
-                        className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${
-                          theme === 'light' ? 'text-gray-500' : 'text-gray-400'
-                        }`}
-                      >
-                        Name
-                      </th>
-                      
-                    </tr>
-                  </thead>
-                  <tbody
-                    className={`divide-y ${
-                      theme === 'light' ? 'divide-gray-200' : 'divide-gray-700'
-                    }`}
-                  >
-                    {filteredVoters.map((voter) => (
-                      <tr
-                        key={voter.id}
-                        className={`transition-colors ${
-                          theme === 'light' ? 'hover:bg-gray-50' : 'hover:bg-gray-700'
-                        }`}
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <FaUserGraduate className={getIconColor()} aria-hidden="true" />
-                            <span className={`text-sm font-medium ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+                <div className="space-y-3">
+                  <p className={`text-sm mb-3 ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+                    Found {searchResult.length} voter(s)
+                  </p>
+                  {searchResult.map((voter) => (
+                    <div
+                      key={voter.id}
+                      className={`p-4 rounded-lg border ${
+                        theme === 'light'
+                          ? 'bg-gray-50 border-gray-200'
+                          : 'bg-gray-700/50 border-gray-600'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <FaUserGraduate className={getIconColor()} />
+                            <span className={`font-semibold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
                               {voter.name}
                             </span>
                           </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                         
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <div className="space-y-1 text-sm">
+                            <p className={theme === 'light' ? 'text-gray-600' : 'text-gray-400'}>
+                              <span className="font-medium">School ID:</span> {voter.school_id}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="ml-4">
+                          {voter.has_voted ? (
+                            <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                              <FaCheckCircle />
+                              <span className="text-sm font-medium">Voted</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                              <FaCheckCircle />
+                              <span className="text-sm font-medium">Eligible to Vote</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 
-           
+            {/* Modal Footer */}
+            <div className={`p-6 border-t ${theme === 'light' ? 'border-gray-200 bg-gray-50' : 'border-gray-700 bg-gray-900'}`}>
+              <p className={`text-xs text-center ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>
+                Only registered voters for the current election will appear. Contact your election administrator if you need assistance.
+              </p>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Page top accent bar - Black/White */}
+      {/* Page top accent bar */}
       <div
         className={`fixed top-0 left-0 right-0 h-0.5 z-50 bg-gradient-to-r from-gray-900 via-gray-600 to-gray-900`}
         aria-hidden="true"
       />
 
-      {/* Ambient background blobs - Subtle grayscale */}
+      {/* Ambient background blobs */}
       <div
         className={`fixed -top-32 -right-20 w-96 h-96 rounded-full blur-3xl pointer-events-none z-0 hidden sm:block ${
           theme === 'light' ? 'bg-gray-400/10' : 'bg-gray-500/5'
@@ -521,7 +623,7 @@ export default function Home() {
             </div>
           </section>
 
-          {/* ── VIEW VOTERS BUTTON ── */}
+          {/* ── VIEW VOTERS BUTTON (Search Only) ── */}
           <div data-aos="fade-up" className="mb-8">
             <button
               onClick={handleOpenVoterList}
@@ -537,14 +639,14 @@ export default function Home() {
                     theme === 'light' ? 'bg-gray-200 text-gray-800' : 'bg-gray-700 text-gray-300'
                   }`}
                 >
-                  <FaUsers size={16} aria-hidden="true" className={getIconColor()} />
+                  <FaSearch size={16} aria-hidden="true" className={getIconColor()} />
                 </div>
                 <div className="text-left">
                   <h3 className={`font-semibold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
-                    View Registered Voters
+                    Verify Voter Registration
                   </h3>
                   <p className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>
-                    Search by name or school ID to check for eligibility.
+                    Search by name or school ID to check your voter status for this election
                   </p>
                 </div>
               </div>
@@ -574,7 +676,7 @@ export default function Home() {
             <button
               onClick={handleRefresh}
               disabled={loading}
-              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-1.5 sm:py-2.5 bg-green-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-md shadow-gray-800/25 hover:-translate-y-0.5 hover:shadow-gray-800/35 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transition-all duration-200"
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-1.5 sm:py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-md shadow-gray-800/25 hover:-translate-y-0.5 hover:shadow-gray-800/35 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transition-all duration-200"
             >
               <FaSync
                 size={11}
@@ -667,7 +769,7 @@ export default function Home() {
                 >
                   <span
                     className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${
-                      isVotingActive ? 'bg-green-700 animate-pulse' : 'bg-gray-600'
+                      isVotingActive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-600'
                     }`}
                     aria-hidden="true"
                   />
@@ -690,7 +792,7 @@ export default function Home() {
                     }`}
                   >
                     <div
-                      className="h-0.5 sm:h-1 bg-gradient-to-r from-gray-700 via-gray-500 to-gray-800 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-500"
+                      className="h-0.5 sm:h-1 bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-600 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-500"
                       aria-hidden="true"
                     />
                     <ElectionCard
@@ -750,6 +852,43 @@ export default function Home() {
             aria-hidden="true"
           />
 
+          {/* ── PAST ELECTION RESULTS SECTION (Public View) ── */}
+          <section className="mb-8" aria-labelledby="past-results-heading">
+            <div data-aos="fade-up" className="mb-6">
+              <div className="flex items-center gap-2 mb-2">
+                <FaHistory className={`text-xl ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`} />
+                <p className={`text-xs sm:text-sm font-semibold uppercase tracking-widest ${
+                  theme === 'light' ? 'text-gray-600' : 'text-gray-400'
+                }`}>
+                  Historical Data
+                </p>
+              </div>
+              <h2
+                id="past-results-heading"
+                className={`text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight leading-tight ${
+                  theme === 'light' ? 'text-gray-900' : 'text-white'
+                }`}
+              >
+                Past Election Results
+              </h2>
+              <p className={`mt-1 sm:mt-2 text-xs sm:text-sm ${
+                theme === 'light' ? 'text-gray-600' : 'text-gray-400'
+              }`}>
+                View historical election statistics and past winners
+              </p>
+            </div>
+
+            <PublicElectionResults theme={theme} />
+          </section>
+
+          {/* Divider */}
+          <div
+            className={`h-px bg-gradient-to-r from-transparent via-gray-500/15 to-transparent my-6 sm:my-10 ${
+              theme === 'dark' ? 'opacity-30' : ''
+            }`}
+            aria-hidden="true"
+          />
+
           {/* ── SUMMARY STATS ── */}
           <section className="mb-8" aria-labelledby="summary-heading">
             <div data-aos="fade-up" className="mb-4 sm:mb-6 lg:mb-8">
@@ -783,7 +922,7 @@ export default function Home() {
                     }`}
                   >
                     <div
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-gray-600 to-gray-500 scale-x-0 group-hover:scale-x-100 transition-transform duration-400 origin-left"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-600 to-emerald-500 scale-x-0 group-hover:scale-x-100 transition-transform duration-400 origin-left"
                       aria-hidden="true"
                     />
                     <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center mx-auto mb-2 sm:mb-3 group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300">

@@ -572,7 +572,7 @@ export default function ManageVoters() {
       }`}>
         <Toaster position="top-center" richColors />
         <div className="text-center">
-          <FaSpinner className="animate-spin text-4xl text-teal-500 mx-auto mb-4" />
+          <FaSpinner className="animate-spin text-4xl text-green-600 mx-auto mb-4" />
           <p className={theme === 'light' ? 'text-gray-600' : 'text-white'}>Loading voters...</p>
         </div>
       </div>
@@ -591,7 +591,7 @@ export default function ManageVoters() {
         onClick={toggleTheme}
         className="fixed bottom-6 right-6 z-50 p-3 rounded-full shadow-lg transition-all duration-300 hover:scale-110"
         style={{
-          backgroundColor: theme === 'light' ? '#0f766e' : '#fbbf24',
+          backgroundColor: theme === 'light' ? '#166534' : '#fbbf24',
           color: theme === 'light' ? '#ffffff' : '#1f2937',
         }}
       >
@@ -608,7 +608,7 @@ export default function ManageVoters() {
           <p className={`mt-2 ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>
             Add, edit, or remove voters from the election database
           </p>
-          <p className="text-teal-600 dark:text-teal-400 text-sm mt-1">
+          <p className="text-green-700 dark:text-green-400 text-sm mt-1">
             Logged in as: {admin?.email}
           </p>
         </div>
@@ -623,7 +623,7 @@ export default function ManageVoters() {
                 <p className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-white/70'}`}>Total Voters</p>
                 <p className={`text-2xl font-bold mt-1 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{stats.total}</p>
               </div>
-              <FaUsers className="text-2xl text-teal-500" />
+              <FaUsers className="text-2xl text-green-600" />
             </div>
           </div>
           
@@ -633,9 +633,9 @@ export default function ManageVoters() {
             <div className="flex items-center justify-between">
               <div>
                 <p className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-white/70'}`}>Have Voted</p>
-                <p className="text-2xl font-bold mt-1 text-teal-600 dark:text-teal-400">{stats.voted}</p>
+                <p className="text-2xl font-bold mt-1 text-green-700 dark:text-green-400">{stats.voted}</p>
               </div>
-              <FaCheckCircle className="text-2xl text-teal-500" />
+              <FaCheckCircle className="text-2xl text-green-600" />
             </div>
           </div>
           
@@ -645,9 +645,9 @@ export default function ManageVoters() {
             <div className="flex items-center justify-between">
               <div>
                 <p className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-white/70'}`}>Not Voted</p>
-                <p className="text-2xl font-bold mt-1 text-teal-600 dark:text-teal-400">{stats.notVoted}</p>
+                <p className="text-2xl font-bold mt-1 text-green-700 dark:text-green-400">{stats.notVoted}</p>
               </div>
-              <FaTimesCircle className="text-2xl text-teal-500" />
+              <FaTimesCircle className="text-2xl text-green-600" />
             </div>
           </div>
 
@@ -657,9 +657,9 @@ export default function ManageVoters() {
             <div className="flex items-center justify-between">
               <div>
                 <p className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-white/70'}`}>Turnout</p>
-                <p className="text-2xl font-bold mt-1 text-teal-600 dark:text-teal-400">{stats.turnout}%</p>
+                <p className="text-2xl font-bold mt-1 text-green-700 dark:text-green-400">{stats.turnout}%</p>
               </div>
-              <FaChartLine className="text-2xl text-teal-500" />
+              <FaChartLine className="text-2xl text-green-600" />
             </div>
           </div>
         </div>
@@ -671,13 +671,13 @@ export default function ManageVoters() {
           <div className="flex flex-col sm:flex-row gap-4 justify-between items-stretch sm:items-center">
             <div className="flex-1 min-w-[200px]">
               <div className="relative">
-                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
+                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-green-600" />
                 <input
                   type="text"
                   placeholder="Search by name, email, or school ID..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                  className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                     theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-white/5 border-white/20 text-white'
                   }`}
                 />
@@ -685,17 +685,17 @@ export default function ManageVoters() {
             </div>
             
             <div className="flex gap-3 flex-wrap">
-              <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition">
+              <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition">
                 <FaUserPlus /> Add Voter
               </button>
-              <button onClick={downloadTemplate} className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white transition">
+              <button onClick={downloadTemplate} className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition">
                 <FaFileExcel /> Download Template
               </button>
-              <label className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition cursor-pointer">
+              <label className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition cursor-pointer">
                 <FaUpload /> Bulk Upload
                 <input type="file" accept=".xlsx,.xls,.csv" onChange={handleBulkUpload} className="hidden" />
               </label>
-              <button onClick={exportToExcel} className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition">
+              <button onClick={exportToExcel} className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition">
                 <FaDownload /> Export
               </button>
             </div>
@@ -710,14 +710,14 @@ export default function ManageVoters() {
             <table className="w-full min-w-[800px]">
               <thead className={`border-b ${theme === 'light' ? 'bg-gray-50 border-gray-200' : 'bg-white/5 border-white/10'}`}>
                 <tr>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Name</th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Email</th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">School ID</th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider hidden md:table-cell">Department</th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider hidden lg:table-cell">Program</th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider hidden sm:table-cell">Year</th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Name</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Email</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">School ID</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 hidden md:table-cell">Department</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 hidden lg:table-cell">Program</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 hidden sm:table-cell">Year</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Status</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Actions</th>
                 </tr>
               </thead>
               <tbody className={`divide-y ${theme === 'light' ? 'divide-gray-100' : 'divide-white/10'}`}>
@@ -730,68 +730,68 @@ export default function ManageVoters() {
                     <tr key={voter.id} className={`transition ${theme === 'light' ? 'hover:bg-gray-50' : 'hover:bg-white/5'}`}>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <FaUserGraduate className="text-teal-500 text-sm" />
+                          <FaUserGraduate className="text-green-600 text-sm" />
                           <div className={`font-medium ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{voter.name}</div>
                         </div>
-                      </td>
+                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <FaEnvelope className="text-teal-500 text-xs" />
+                          <FaEnvelope className="text-green-600 text-xs" />
                           <div className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>{voter.email}</div>
                         </div>
-                      </td>
+                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <FaIdCard className="text-teal-500 text-xs" />
-                          <code className={`text-sm font-mono ${theme === 'light' ? 'text-teal-600' : 'text-teal-400'}`}>{voter.school_id}</code>
+                          <FaIdCard className="text-green-600 text-xs" />
+                          <code className={`text-sm font-mono ${theme === 'light' ? 'text-green-700' : 'text-green-400'}`}>{voter.school_id}</code>
                         </div>
-                      </td>
+                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap hidden md:table-cell">
                         <div className="flex items-center gap-2">
-                          <FaBuilding className="text-teal-500 text-xs" />
+                          <FaBuilding className="text-green-600 text-xs" />
                           <div className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>
                             {voter.department || 'N/A'}
                           </div>
                         </div>
-                      </td>
+                       </td>
                       <td className="px-4 sm:px-6 py-4 hidden lg:table-cell">
                         <div className="flex items-center gap-2">
-                          <FaUniversity className="text-teal-500 text-xs" />
+                          <FaUniversity className="text-green-600 text-xs" />
                           <div className={`text-sm truncate max-w-xs ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>
                             {voter.program || 'N/A'}
                           </div>
                         </div>
-                      </td>
+                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap hidden sm:table-cell">
                         <div className="flex items-center gap-2">
-                          <FaGraduationCap className="text-teal-500 text-xs" />
+                          <FaGraduationCap className="text-green-600 text-xs" />
                           <div className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>
                             Level {voter.year_of_study}
                           </div>
                         </div>
-                      </td>
+                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         {voter.has_voted ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-teal-500/20 text-teal-600 dark:text-teal-400 text-xs rounded-full">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-500/20 text-green-700 dark:text-green-400 text-xs rounded-full">
                             <FaCheckCircle size={10} /> Voted
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-500/20 text-amber-600 dark:text-amber-400 text-xs rounded-full">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 text-xs rounded-full">
                             <FaClock size={10} /> Not Voted
                           </span>
                         )}
-                      </td>
+                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <button onClick={() => openEditModal(voter)} className="text-teal-600 dark:text-teal-400 hover:text-teal-500 transition" title="Edit voter">
+                          <button onClick={() => openEditModal(voter)} className="text-green-700 dark:text-green-400 hover:text-green-600 transition" title="Edit voter">
                             <FaEdit />
                           </button>
                           <button onClick={() => setShowDeleteConfirm(voter.id)} disabled={voter.has_voted} className={`text-red-500 transition ${voter.has_voted ? 'opacity-50 cursor-not-allowed' : 'hover:text-red-600'}`} title={voter.has_voted ? 'Cannot delete voters who have already voted' : 'Delete voter'}>
                             <FaTrash />
                           </button>
                         </div>
-                      </td>
-                    </tr>
+                       </td>
+                     </tr>
                   ))
                 )}
               </tbody>
@@ -807,16 +807,15 @@ export default function ManageVoters() {
             <h2 className={`text-2xl font-bold mb-4 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>Add New Voter</h2>
             
             <form onSubmit={handleAddVoter} className="space-y-4">
-              {/* Name Field with Capitalization */}
               <div>
                 <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Full Name *</label>
                 <div className="relative">
-                  <FaUserPlus className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
+                  <FaUserPlus className="absolute left-3 top-1/2 -translate-y-1/2 text-green-600" />
                   <input
                     type="text"
                     value={formData.name}
                     onChange={handleNameChange}
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 capitalize ${
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 capitalize ${
                       theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
                     placeholder="John Doe"
@@ -825,16 +824,15 @@ export default function ManageVoters() {
                 {formErrors.name && <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>}
               </div>
               
-              {/* Email Field */}
               <div>
                 <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Email *</label>
                 <div className="relative">
-                  <FaEnvelope className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
+                  <FaEnvelope className="absolute left-3 top-1/2 -translate-y-1/2 text-green-600" />
                   <input
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({...formData, email: e.target.value})}
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                       theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
                     placeholder="john.doe@regent.edu.gh"
@@ -843,16 +841,15 @@ export default function ManageVoters() {
                 {formErrors.email && <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>}
               </div>
               
-              {/* School ID Field */}
               <div>
                 <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>School ID *</label>
                 <div className="relative">
-                  <FaIdCard className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
+                  <FaIdCard className="absolute left-3 top-1/2 -translate-y-1/2 text-green-600" />
                   <input
                     type="text"
                     value={formData.school_id}
                     onChange={(e) => setFormData({...formData, school_id: e.target.value})}
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                       theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
                     placeholder="12345678"
@@ -862,15 +859,14 @@ export default function ManageVoters() {
                 {formErrors.school_id && <p className="text-red-500 text-xs mt-1">{formErrors.school_id}</p>}
               </div>
               
-              {/* Department Dropdown */}
               <div>
                 <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Department *</label>
                 <div className="relative">
-                  <FaBuilding className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
+                  <FaBuilding className="absolute left-3 top-1/2 -translate-y-1/2 text-green-600" />
                   <select
                     value={formData.department}
                     onChange={(e) => handleDepartmentChange(e.target.value)}
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                       theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
                   >
@@ -883,16 +879,15 @@ export default function ManageVoters() {
                 {formErrors.department && <p className="text-red-500 text-xs mt-1">{formErrors.department}</p>}
               </div>
               
-              {/* Program Dropdown - Populated based on Department */}
               <div>
                 <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Program of Study *</label>
                 <div className="relative">
-                  <FaUniversity className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
+                  <FaUniversity className="absolute left-3 top-1/2 -translate-y-1/2 text-green-600" />
                   <select
                     value={formData.program}
                     onChange={(e) => setFormData({...formData, program: e.target.value})}
                     disabled={!formData.department}
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                       !formData.department ? 'opacity-50 cursor-not-allowed' : ''
                     } ${
                       theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
@@ -907,15 +902,14 @@ export default function ManageVoters() {
                 {formErrors.program && <p className="text-red-500 text-xs mt-1">{formErrors.program}</p>}
               </div>
               
-              {/* Year of Study Dropdown */}
               <div>
                 <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Year of Study *</label>
                 <div className="relative">
-                  <FaGraduationCap className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
+                  <FaGraduationCap className="absolute left-3 top-1/2 -translate-y-1/2 text-green-600" />
                   <select
                     value={formData.year_of_study}
                     onChange={(e) => setFormData({...formData, year_of_study: e.target.value})}
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                       theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
                   >
@@ -933,7 +927,7 @@ export default function ManageVoters() {
                 <button type="button" onClick={() => { setShowAddModal(false); resetForm(); }} className={`flex-1 px-4 py-2 rounded-lg transition ${
                   theme === 'light' ? 'bg-gray-200 hover:bg-gray-300 text-gray-700' : 'bg-gray-700 hover:bg-gray-600 text-white'
                 }`}>Cancel</button>
-                <button type="submit" disabled={submitting} className="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition disabled:opacity-50">
+                <button type="submit" disabled={submitting} className="flex-1 px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition disabled:opacity-50">
                   {submitting ? <FaSpinner className="animate-spin mx-auto" /> : 'Add Voter'}
                 </button>
               </div>
@@ -942,7 +936,7 @@ export default function ManageVoters() {
         </div>
       )}
 
-      {/* Edit Voter Modal - Similar structure */}
+      {/* Edit Voter Modal */}
       {showEditModal && editingVoter && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className={`rounded-xl max-w-md w-full p-6 my-8 ${theme === 'light' ? 'bg-white' : 'bg-gray-800'}`}>
@@ -952,12 +946,12 @@ export default function ManageVoters() {
               <div>
                 <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Full Name *</label>
                 <div className="relative">
-                  <FaUserPlus className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
+                  <FaUserPlus className="absolute left-3 top-1/2 -translate-y-1/2 text-green-600" />
                   <input
                     type="text"
                     value={formData.name}
                     onChange={handleNameChange}
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 capitalize ${
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 capitalize ${
                       theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
                   />
@@ -968,12 +962,12 @@ export default function ManageVoters() {
               <div>
                 <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Email *</label>
                 <div className="relative">
-                  <FaEnvelope className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
+                  <FaEnvelope className="absolute left-3 top-1/2 -translate-y-1/2 text-green-600" />
                   <input
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({...formData, email: e.target.value})}
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                       theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
                   />
@@ -984,12 +978,12 @@ export default function ManageVoters() {
               <div>
                 <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>School ID *</label>
                 <div className="relative">
-                  <FaIdCard className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
+                  <FaIdCard className="absolute left-3 top-1/2 -translate-y-1/2 text-green-600" />
                   <input
                     type="text"
                     value={formData.school_id}
                     onChange={(e) => setFormData({...formData, school_id: e.target.value})}
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                       theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
                     maxLength="8"
@@ -1001,11 +995,11 @@ export default function ManageVoters() {
               <div>
                 <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Department *</label>
                 <div className="relative">
-                  <FaBuilding className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
+                  <FaBuilding className="absolute left-3 top-1/2 -translate-y-1/2 text-green-600" />
                   <select
                     value={formData.department}
                     onChange={(e) => handleDepartmentChange(e.target.value)}
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                       theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
                   >
@@ -1021,12 +1015,12 @@ export default function ManageVoters() {
               <div>
                 <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Program of Study *</label>
                 <div className="relative">
-                  <FaUniversity className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
+                  <FaUniversity className="absolute left-3 top-1/2 -translate-y-1/2 text-green-600" />
                   <select
                     value={formData.program}
                     onChange={(e) => setFormData({...formData, program: e.target.value})}
                     disabled={!formData.department}
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                       !formData.department ? 'opacity-50 cursor-not-allowed' : ''
                     } ${
                       theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
@@ -1044,11 +1038,11 @@ export default function ManageVoters() {
               <div>
                 <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Year of Study *</label>
                 <div className="relative">
-                  <FaGraduationCap className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
+                  <FaGraduationCap className="absolute left-3 top-1/2 -translate-y-1/2 text-green-600" />
                   <select
                     value={formData.year_of_study}
                     onChange={(e) => setFormData({...formData, year_of_study: e.target.value})}
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                       theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
                     }`}
                   >
@@ -1066,7 +1060,7 @@ export default function ManageVoters() {
                 <button type="button" onClick={() => { setShowEditModal(false); setEditingVoter(null); resetForm(); }} className={`flex-1 px-4 py-2 rounded-lg transition ${
                   theme === 'light' ? 'bg-gray-200 hover:bg-gray-300 text-gray-700' : 'bg-gray-700 hover:bg-gray-600 text-white'
                 }`}>Cancel</button>
-                <button type="submit" disabled={submitting} className="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition disabled:opacity-50">
+                <button type="submit" disabled={submitting} className="flex-1 px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition disabled:opacity-50">
                   {submitting ? <FaSpinner className="animate-spin mx-auto" /> : 'Update Voter'}
                 </button>
               </div>

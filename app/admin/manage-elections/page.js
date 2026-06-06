@@ -119,6 +119,41 @@ export default function ManageElections() {
     }
   }, [authLoading, isAuthenticated, router]);
 
+  // Recalculate stats when elections change
+  useEffect(() => {
+    const now = new Date();
+    
+    let active = 0;
+    let completed = 0;
+    let upcoming = 0;
+    let expired = 0;
+
+    elections.forEach((e) => {
+      const start = new Date(e.start_time);
+      const end = new Date(e.end_time);
+      
+      if (e.is_active === true) {
+        active++;
+      } else if (end < now) {
+        completed++;
+      } else if (start > now) {
+        upcoming++;
+      }
+      
+      if (end < now && e.is_active === true) {
+        expired++;
+      }
+    });
+
+    setStats({ 
+      total: elections.length, 
+      active, 
+      completed, 
+      upcoming,
+      expired 
+    });
+  }, [elections]);
+
   const fetchVotingPeriods = async () => {
     try {
       const { data, error } = await supabase
@@ -161,38 +196,6 @@ export default function ManageElections() {
 
       setElections(validElections);
       setFilteredElections(validElections);
-
-      const now = new Date();
-      
-      let active = 0;
-      let completed = 0;
-      let upcoming = 0;
-      let expired = 0;
-
-      validElections.forEach((e) => {
-        const start = new Date(e.start_time);
-        const end = new Date(e.end_time);
-        
-        if (e.is_active === true) {
-          active++;
-        } else if (end < now) {
-          completed++;
-        } else if (start > now) {
-          upcoming++;
-        }
-        
-        if (end < now && e.is_active === true) {
-          expired++;
-        }
-      });
-
-      setStats({ 
-        total: validElections.length, 
-        active, 
-        completed, 
-        upcoming,
-        expired 
-      });
     } catch (error) {
       console.error("Error fetching elections:", error);
       toast.error("Failed to load elections");
@@ -334,10 +337,18 @@ export default function ManageElections() {
       
       if (error) throw error;
       
-      await supabase
+      // Update total_eligible_voters if column exists
+      const { error: updateError } = await supabase
         .from("elections")
-        .update({ total_eligible_voters: count })
+        .update({ 
+          total_eligible_voters: count || 0,
+          updated_at: new Date().toISOString()
+        })
         .eq("id", selectedElectionForVoters.id);
+      
+      if (updateError) {
+        console.warn("Could not update total_eligible_voters:", updateError.message);
+      }
     } catch (error) {
       console.error("Error updating voter count:", error);
     }
@@ -764,11 +775,13 @@ export default function ManageElections() {
         return;
       }
 
+      // Deactivate all other elections
       await supabase
         .from("elections")
         .update({ is_active: false })
         .neq("id", election.id);
 
+      // Activate selected election
       const { error } = await supabase
         .from("elections")
         .update({ is_active: true })
@@ -987,7 +1000,7 @@ export default function ManageElections() {
       }`}>
         <Toaster position="top-center" richColors />
         <div className="text-center">
-          <FaSpinner className="animate-spin text-4xl text-teal-500 mx-auto mb-4" />
+          <FaSpinner className="animate-spin text-4xl text-green-700 mx-auto mb-4" />
           <p className={theme === "light" ? "text-gray-600" : "text-white"}>
             Loading elections...
           </p>
@@ -1009,7 +1022,7 @@ export default function ManageElections() {
         onClick={toggleTheme}
         className="fixed bottom-6 right-6 z-50 p-3 rounded-full shadow-lg transition-all duration-300 hover:scale-110"
         style={{
-          backgroundColor: theme === "light" ? "#0f766e" : "#fbbf24",
+          backgroundColor: theme === "light" ? "#166534" : "#fbbf24",
           color: theme === "light" ? "#ffffff" : "#1f2937",
         }}
       >
@@ -1029,7 +1042,7 @@ export default function ManageElections() {
           }`}>
             Create elections, manage positions, assign voters, and oversee voting periods
           </p>
-          <p className="text-teal-600 dark:text-teal-400 text-sm mt-1">
+          <p className="text-green-700 dark:text-green-400 text-sm mt-1">
             Logged in as: {admin?.email}
           </p>
         </div>
@@ -1050,9 +1063,7 @@ export default function ManageElections() {
                   theme === "light" ? "text-gray-900" : "text-white"
                 }`}>{stats.total}</p>
               </div>
-              <FaUniversity className={`text-2xl ${
-                theme === "light" ? "text-teal-500" : "text-blue-400"
-              }`} />
+              <FaUniversity className="text-2xl text-green-700" />
             </div>
           </div>
           
@@ -1070,7 +1081,7 @@ export default function ManageElections() {
                   {stats.active}
                 </p>
               </div>
-              <FaPlay className="text-2xl text-green-500" />
+              <FaPlay className="text-2xl text-green-600" />
             </div>
           </div>
           
@@ -1146,7 +1157,7 @@ export default function ManageElections() {
                   placeholder="Search by title or year..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                  className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                     theme === "light"
                       ? "bg-white border-gray-300 text-gray-900 placeholder-gray-400"
                       : "bg-white/5 border-white/20 text-white placeholder-gray-400"
@@ -1158,7 +1169,7 @@ export default function ManageElections() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className={`px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                className={`px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                   theme === "light"
                     ? "bg-white border-gray-300 text-gray-900"
                     : "bg-white/5 border-white/20 text-white"
@@ -1176,13 +1187,13 @@ export default function ManageElections() {
                   setEditingElection(null);
                   setShowAddModal(true);
                 }}
-                className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition"
+                className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition"
               >
                 <FaPlus /> Create Election
               </button>
               <button
                 onClick={exportToExcel}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white transition"
+                className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition"
               >
                 <FaFileExcel /> Export
               </button>
@@ -1202,28 +1213,28 @@ export default function ManageElections() {
                 theme === "light" ? "bg-gray-50 border-gray-200" : "bg-white/5 border-white/10"
               }`}>
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Election Title
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Voting Period
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Year
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Positions
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Voters
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Date Range
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Actions
                   </th>
                 </tr>
@@ -1287,7 +1298,7 @@ export default function ManageElections() {
                         <td className="px-6 py-4">
                           <button
                             onClick={() => handleManagePositions(election)}
-                            className="flex items-center gap-2 text-teal-600 dark:text-teal-400 hover:text-teal-500 transition text-sm"
+                            className="flex items-center gap-2 text-green-700 dark:text-green-400 hover:text-green-600 transition text-sm"
                           >
                             <FaLayerGroup /> {positionsCount} Positions
                           </button>
@@ -1295,7 +1306,7 @@ export default function ManageElections() {
                         <td className="px-6 py-4">
                           <button
                             onClick={() => handleManageVoters(election)}
-                            className="flex items-center gap-2 text-green-600 dark:text-green-400 hover:text-green-500 transition text-sm"
+                            className="flex items-center gap-2 text-green-700 dark:text-green-400 hover:text-green-600 transition text-sm"
                           >
                             <FaUsers /> Manage Voters
                           </button>
@@ -1329,7 +1340,7 @@ export default function ManageElections() {
                             </button>
                             <button
                               onClick={() => handleManageVoters(election)}
-                              className="text-green-600 dark:text-green-400 hover:text-green-500 transition"
+                              className="text-green-700 dark:text-green-400 hover:text-green-600 transition"
                               title="Manage Voters"
                             >
                               <FaUsers />
@@ -1337,7 +1348,7 @@ export default function ManageElections() {
                             {!election.is_active && !expired && (
                               <button
                                 onClick={() => handleActivateElection(election)}
-                                className="text-green-600 dark:text-green-400 hover:text-green-500 transition"
+                                className="text-green-700 dark:text-green-400 hover:text-green-600 transition"
                                 title="Activate election"
                               >
                                 <FaPlay />
@@ -1419,7 +1430,7 @@ export default function ManageElections() {
                   type="text"
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                     theme === "light"
                       ? "bg-white border-gray-300 text-gray-900"
                       : "bg-gray-700 border-gray-600 text-white"
@@ -1441,7 +1452,7 @@ export default function ManageElections() {
                 <select
                   value={formData.voting_period_id}
                   onChange={(e) => setFormData({ ...formData, voting_period_id: e.target.value })}
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                     theme === "light"
                       ? "bg-white border-gray-300 text-gray-900"
                       : "bg-gray-700 border-gray-600 text-white"
@@ -1472,7 +1483,7 @@ export default function ManageElections() {
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={3}
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                     theme === "light"
                       ? "bg-white border-gray-300 text-gray-900"
                       : "bg-gray-700 border-gray-600 text-white"
@@ -1495,7 +1506,7 @@ export default function ManageElections() {
                     type="number"
                     value={formData.election_year}
                     onChange={(e) => setFormData({ ...formData, election_year: e.target.value })}
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                       theme === "light"
                         ? "bg-white border-gray-300 text-gray-900"
                         : "bg-gray-700 border-gray-600 text-white"
@@ -1519,7 +1530,7 @@ export default function ManageElections() {
                     type="date"
                     value={formData.start_date}
                     onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                       theme === "light"
                         ? "bg-white border-gray-300 text-gray-900"
                         : "bg-gray-700 border-gray-600 text-white"
@@ -1537,7 +1548,7 @@ export default function ManageElections() {
                     type="time"
                     value={formData.start_time}
                     onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
-                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                       theme === "light"
                         ? "bg-white border-gray-300 text-gray-900"
                         : "bg-gray-700 border-gray-600 text-white"
@@ -1558,7 +1569,7 @@ export default function ManageElections() {
                     type="date"
                     value={formData.end_date}
                     onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                       theme === "light"
                         ? "bg-white border-gray-300 text-gray-900"
                         : "bg-gray-700 border-gray-600 text-white"
@@ -1579,7 +1590,7 @@ export default function ManageElections() {
                     type="time"
                     value={formData.end_time}
                     onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
-                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                       theme === "light"
                         ? "bg-white border-gray-300 text-gray-900"
                         : "bg-gray-700 border-gray-600 text-white"
@@ -1595,7 +1606,7 @@ export default function ManageElections() {
                   id="is_active"
                   checked={formData.is_active}
                   onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                  className="w-4 h-4 text-teal-600"
+                  className="w-4 h-4 text-green-700 rounded"
                 />
                 <label htmlFor="is_active" className={theme === "light" ? "text-gray-700" : "text-gray-300"}>
                   Activate this election immediately
@@ -1629,7 +1640,7 @@ export default function ManageElections() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition disabled:opacity-50"
                 >
                   {submitting ? <FaSpinner className="animate-spin mx-auto" /> : editingElection ? "Update" : "Create"}
                 </button>
@@ -1695,7 +1706,7 @@ export default function ManageElections() {
                       type="text"
                       value={positionForm.title}
                       onChange={(e) => setPositionForm({ ...positionForm, title: e.target.value })}
-                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                         theme === "light"
                           ? "bg-white border-gray-300 text-gray-900"
                           : "bg-gray-700 border-gray-600 text-white"
@@ -1713,7 +1724,7 @@ export default function ManageElections() {
                       type="number"
                       value={positionForm.order_number}
                       onChange={(e) => setPositionForm({ ...positionForm, order_number: parseInt(e.target.value) })}
-                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                         theme === "light"
                           ? "bg-white border-gray-300 text-gray-900"
                           : "bg-gray-700 border-gray-600 text-white"
@@ -1731,7 +1742,7 @@ export default function ManageElections() {
                       value={positionForm.description}
                       onChange={(e) => setPositionForm({ ...positionForm, description: e.target.value })}
                       rows={2}
-                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                         theme === "light"
                           ? "bg-white border-gray-300 text-gray-900"
                           : "bg-gray-700 border-gray-600 text-white"
@@ -1759,7 +1770,7 @@ export default function ManageElections() {
                   <button
                     onClick={editingPosition ? handleUpdatePosition : handleAddPosition}
                     disabled={submitting}
-                    className="px-6 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition disabled:opacity-50"
+                    className="px-6 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition disabled:opacity-50"
                   >
                     {submitting ? <FaSpinner className="animate-spin" /> : editingPosition ? "Update" : "Add"}
                   </button>
@@ -1836,7 +1847,7 @@ export default function ManageElections() {
                     setShowPositionsModal(false);
                     fetchElections();
                   }}
-                  className="w-full px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition"
+                  className="w-full px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition"
                 >
                   Done
                 </button>
@@ -1931,7 +1942,7 @@ export default function ManageElections() {
                   <select
                     value={voterFilter}
                     onChange={(e) => setVoterFilter(e.target.value)}
-                    className={`px-3 py-2 border rounded-lg text-sm ${
+                    className={`px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 ${
                       theme === "light"
                         ? "bg-white border-gray-300 text-gray-900"
                         : "bg-gray-700 border-gray-600 text-white"
@@ -1951,7 +1962,7 @@ export default function ManageElections() {
                   </button>
                   <button
                     onClick={exportVotersToExcel}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white transition"
+                    className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition"
                   >
                     <FaFileExcel /> Export List
                   </button>
@@ -1968,7 +1979,7 @@ export default function ManageElections() {
                       placeholder="Search voters by name, email, or school ID..."
                       value={voterSearchTerm}
                       onChange={(e) => setVoterSearchTerm(e.target.value)}
-                      className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                         theme === "light"
                           ? "bg-white border-gray-300 text-gray-900"
                           : "bg-gray-700 border-gray-600 text-white"
@@ -1978,7 +1989,7 @@ export default function ManageElections() {
                   <select
                     value={selectedVoterId}
                     onChange={(e) => setSelectedVoterId(e.target.value)}
-                    className={`flex-1 px-3 py-2 border rounded-lg ${
+                    className={`flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
                       theme === "light"
                         ? "bg-white border-gray-300 text-gray-900"
                         : "bg-gray-700 border-gray-600 text-white"
@@ -1994,7 +2005,7 @@ export default function ManageElections() {
                   <button
                     onClick={addVoterToElection}
                     disabled={addingVoter || !selectedVoterId}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white transition disabled:opacity-50"
+                    className="px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition disabled:opacity-50"
                   >
                     {addingVoter ? <FaSpinner className="animate-spin" /> : <FaPlus />} Add
                   </button>
@@ -2014,12 +2025,12 @@ export default function ManageElections() {
                       theme === "light" ? "bg-gray-50 border-gray-200" : "bg-white/5 border-white/10"
                     }`}>
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Name</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Email</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">School ID</th>
-                        <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Status</th>
-                        <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Voted</th>
-                        <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Actions</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Name</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Email</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">School ID</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Status</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Voted</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Actions</th>
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${
@@ -2029,8 +2040,8 @@ export default function ManageElections() {
                         <tr>
                           <td colSpan="6" className="px-4 py-8 text-center text-gray-400">
                             No voters added to this election yet
-                          </td>
-                        </tr>
+                           </td>
+                         </tr>
                       ) : (
                         electionVoters.map((ev) => (
                           <tr key={ev.id} className={`transition ${
@@ -2099,7 +2110,7 @@ export default function ManageElections() {
                     setShowVotersModal(false);
                     fetchElections();
                   }}
-                  className="w-full px-4 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition"
+                  className="w-full px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition"
                 >
                   Done
                 </button>
