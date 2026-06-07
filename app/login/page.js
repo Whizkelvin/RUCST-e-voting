@@ -1183,7 +1183,7 @@ function LoginContent() {
                 <div className="flex items-center gap-2">
                   <FaTimesCircle className={theme === 'dark' ? 'text-red-300' : 'text-red-600'} />
                   <p className={`text-sm ${theme === 'dark' ? 'text-red-200' : 'text-red-700'}`}>
-                    Invalid credentials. Please try again.
+                    Student voter not found in the voter list. Please check your email and school ID.
                   </p>
                 </div>
               </div>
