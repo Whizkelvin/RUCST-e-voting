@@ -140,12 +140,7 @@ export default function AdminLayout({ children }) {
     ];
     
     const adminNav = [
-      { name: "Manage Voters", href: "/admin/manage-voters", icon: FaUsers },
-      { name: "Manage Candidates", href: "/admin/manage-candidates", icon: FaUserGraduate },
-      { name: "Manage Elections", href: "/admin/manage-elections", icon: FaUniversity },
-      { name: "Voting Period", href: "/admin/voting-period", icon: FaClock },
-      { name: "Election Results", href: "/admin/election-results", icon: FaChartBar },
-      { name: "Nomination Codes", href: "/admin/generate-nomination-codes", icon: FaKey },
+     
       { name: "Manage Roles", href: "/admin/manage-roles", icon: FaUserTag },
       { name: "Audit Report", href: "/admin/audit-report", icon: FaChartLine },
     ];

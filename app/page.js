@@ -29,6 +29,7 @@ import {
   FaHistory,
 } from 'react-icons/fa';
 import { supabase } from '@/lib/supabaseClient';
+import Link from 'next/link';
 
 export default function Home() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -852,34 +853,65 @@ export default function Home() {
             aria-hidden="true"
           />
 
-          {/* ── PAST ELECTION RESULTS SECTION (Public View) ── */}
-          <section className="mb-8" aria-labelledby="past-results-heading">
-            <div data-aos="fade-up" className="mb-6">
-              <div className="flex items-center gap-2 mb-2">
-                <FaHistory className={`text-xl ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`} />
-                <p className={`text-xs sm:text-sm font-semibold uppercase tracking-widest ${
-                  theme === 'light' ? 'text-gray-600' : 'text-gray-400'
-                }`}>
-                  Historical Data
-                </p>
-              </div>
-              <h2
-                id="past-results-heading"
-                className={`text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight leading-tight ${
-                  theme === 'light' ? 'text-gray-900' : 'text-white'
-                }`}
-              >
-                Past Election Results
-              </h2>
-              <p className={`mt-1 sm:mt-2 text-xs sm:text-sm ${
-                theme === 'light' ? 'text-gray-600' : 'text-gray-400'
-              }`}>
-                View historical election statistics and past winners
-              </p>
-            </div>
+          {/* ── PAST ELECTION RESULTS SECTION (Button to navigate) ── */}
+<section className="mb-8" aria-labelledby="past-results-heading">
+  <div data-aos="fade-up" className="mb-6">
+    <div className="flex items-center gap-2 mb-2">
+      <FaHistory className={`text-xl ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`} />
+      <p className={`text-xs sm:text-sm font-semibold uppercase tracking-widest ${
+        theme === 'light' ? 'text-gray-600' : 'text-gray-400'
+      }`}>
+        Historical Data
+      </p>
+    </div>
+    <h2
+      id="past-results-heading"
+      className={`text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight leading-tight ${
+        theme === 'light' ? 'text-gray-900' : 'text-white'
+      }`}
+    >
+      Past Election Results
+    </h2>
+    <p className={`mt-1 sm:mt-2 text-xs sm:text-sm ${
+      theme === 'light' ? 'text-gray-600' : 'text-gray-400'
+    }`}>
+      View historical election statistics and past winners
+    </p>
+  </div>
 
-            <PublicElectionResults theme={theme} />
-          </section>
+  {/* Button to navigate to past results page */}
+  <Link href="/past-results">
+    <button
+      className={`w-full flex items-center justify-between p-6 rounded-xl border transition-all duration-300 group ${
+        theme === 'light'
+          ? 'bg-white border-gray-200 hover:shadow-md hover:border-gray-300'
+          : 'bg-gray-800 border-gray-700 hover:shadow-lg hover:border-gray-600'
+      }`}
+    >
+      <div className="flex items-center gap-4">
+        <div className={`p-3 rounded-full ${
+          theme === 'light' ? 'bg-gray-100' : 'bg-gray-700'
+        }`}>
+          <FaHistory className={`text-xl ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`} />
+        </div>
+        <div className="text-left">
+          <h3 className={`font-semibold text-lg ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+            View All Past Elections
+          </h3>
+          <p className={`text-sm ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>
+            Browse through completed elections, see winners, and analyze voting trends
+          </p>
+        </div>
+      </div>
+      <div className={`flex items-center gap-2 ${
+        theme === 'light' ? 'text-gray-400' : 'text-gray-500'
+      } group-hover:translate-x-1 transition-transform`}>
+        <span className="text-sm">View Results</span>
+        <FaEye />
+      </div>
+    </button>
+  </Link>
+</section>
 
           {/* Divider */}
           <div

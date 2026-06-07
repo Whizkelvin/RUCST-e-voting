@@ -128,11 +128,6 @@ export default function AdminDashboard() {
   };
 
   const quickActions = [
-    { name: "Manage Voters", href: "/admin/manage-voters", icon: FaUsers, color: "emerald", description: "Add, edit, or remove voters" },
-    { name: "Manage Candidates", href: "/admin/manage-candidates", icon: FaUserGraduate, color: "blue", description: "Manage election aspirants" },
-    { name: "Manage Elections", href: "/admin/manage-elections", icon: FaUniversity, color: "purple", description: "Create and configure elections" },
-    { name: "Set Voting Period", href: "/admin/voting-period", icon: FaClock, color: "orange", description: "Configure voting dates and times" },
-    { name: "View Results", href: "/admin/election-results", icon: FaChartBar, color: "teal", description: "Monitor election results" },
     { name: "Manage Admins", href: "/admin/manage-roles", icon: FaShieldAlt, color: "red", description: "Add or remove admin users" },
   ];
 
@@ -255,55 +250,8 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Recent Activity */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Voting Activity</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-700/50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Voter</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Candidate</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Position</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Time</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {recentActivity.length === 0 ? (
-                <tr>
-                  <td colSpan="4" className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
-                    No recent voting activity
-                  </td>
-                </tr>
-              ) : (
-                recentActivity.map((vote) => (
-                  <tr key={vote.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                    <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        {vote.voters?.name || 'Unknown'}
-                      </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {vote.voters?.email || ''}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                      {vote.candidates?.name || 'Unknown'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                      {vote.candidates?.positions?.title || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                      {new Date(vote.created_at).toLocaleString()}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+    
+      
     </div>
   );
 }

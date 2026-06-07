@@ -174,7 +174,7 @@ const completeLogin = useCallback(async () => {
 
   // Force a hard navigation to ensure cookies are read
   setTimeout(() => {
-    window.location.href = '/admin/manage-voters';
+    window.location.href = '/admin/dashboard';
   }, 1500);
 }, [redirecting]);
 
