@@ -140,11 +140,8 @@ export default function AdminElectionResults() {
         await Promise.all([
           fetchResults(validElections[0].id),
           fetchVotersList(validElections[0].id),
-          fetchAllVoters()
+          fetchAllVoters(validElections[0].id)  // FIX: pass electionId
         ]);
-      } else {
-        await fetchAllCandidates();
-        await fetchAllVoters();
       }
       
     } catch (error) {
@@ -155,114 +152,80 @@ export default function AdminElectionResults() {
     }
   };
 
-  const fetchAllCandidates = async () => {
+  // FIX: fetchAllVoters now scoped to the election and uses votes table as ground truth
+  const fetchAllVoters = async (electionId) => {
     try {
-      const { data: candidates, error: candidatesError } = await supabase
-        .from('candidates')
-        .select('*');
+      // Get all voters registered for this election via election_voters
+      const { data: electionVoters, error: evError } = await supabase
+        .from('election_voters')
+        .select(`
+          voter_id,
+          voted_at,
+          voters (
+            id,
+            name,
+            email,
+            school_id,
+            department,
+            year_of_study
+          )
+        `)
+        .eq('election_id', electionId)
+        .eq('status', 'active');
 
-      if (candidatesError) throw candidatesError;
+      if (evError) throw evError;
 
-      if (candidates && candidates.length > 0) {
-        const candidatesWithVotes = await Promise.all(
-          candidates.map(async (candidate) => {
-            const { count, error: voteError } = await supabase
-              .from('votes')
-              .select('*', { count: 'exact', head: true })
-              .eq('candidate_id', candidate.id);
-            
-            return {
-              ...candidate,
-              voteCount: count || 0
-            };
-          })
-        );
+      // Get actual votes from votes table — source of truth
+      const { data: actualVotes, error: votesError } = await supabase
+        .from('votes')
+        .select('voter_id')
+        .eq('election_id', electionId)
+        .not('voter_id', 'is', null);
 
-        const resultsByPosition = {};
-        let totalVotes = 0;
-        
-        candidatesWithVotes.forEach(candidate => {
-          totalVotes += candidate.voteCount;
-          const position = candidate.position || 'General';
-          if (!resultsByPosition[position]) {
-            resultsByPosition[position] = [];
-          }
-          resultsByPosition[position].push(candidate);
-        });
-        
-        Object.keys(resultsByPosition).forEach(position => {
-          resultsByPosition[position].sort((a, b) => b.voteCount - a.voteCount);
-        });
-        
-        setResults(resultsByPosition);
-        
-        const { count: votesCast, error: votesError } = await supabase
-          .from('votes')
-          .select('*', { count: 'exact', head: true });
-        
-        const { data: uniqueVoters, error: uniqueError } = await supabase
-          .from('votes')
-          .select('voter_id')
-          .not('voter_id', 'is', null);
-        
-        const uniqueVoterIds = [...new Set((uniqueVoters || []).map(v => v.voter_id))];
-        const votersWhoVoted = uniqueVoterIds.length;
-        
-        const { count: totalVotersCount, error: voterError } = await supabase
-          .from('voters')
-          .select('*', { count: 'exact', head: true });
-        
-        setTotalStats({
-          totalVoters: totalVotersCount || 0,
-          totalVotes: votesCast || 0,
-          votersWhoVoted: votersWhoVoted,
-          remainingVoters: (totalVotersCount || 0) - votersWhoVoted,
-          participationRate: totalVotersCount > 0 ? (votersWhoVoted / totalVotersCount) * 100 : 0
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching all candidates:', error);
-    }
-  };
+      if (votesError) console.error('Error fetching actual votes:', votesError);
 
-  const fetchAllVoters = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('voters')
-        .select('id, name, email, school_id, department, year_of_study, has_voted, voted_at')
-        .order('name', { ascending: true });
+      const actualVoterIds = new Set((actualVotes || []).map(v => v.voter_id));
 
-      if (error) throw error;
-      setAllVoters(data || []);
+      const transformed = (electionVoters || []).map(ev => ({
+        ...ev.voters,
+        // FIX: derive has_voted from votes table, not the stale boolean flag
+        has_voted: actualVoterIds.has(ev.voter_id),
+        voted_at: ev.voted_at
+      }));
+
+      setAllVoters(transformed);
     } catch (error) {
       console.error('Error fetching all voters:', error);
     }
   };
 
+  // FIX: fetchResults — correct totalVoters count + removed dangerous fallback
   const fetchResults = async (electionId) => {
     try {
       setLoading(true);
-      
-      let { data: candidates, error: candidatesError } = await supabase
+
+      // FIX: removed the dangerous fallback that loaded ALL candidates when
+      // none were found for the election — now we just show empty state
+      const { data: candidates, error: candidatesError } = await supabase
         .from('candidates')
         .select('*')
-        .eq('election_id', electionId);
+        .eq('election_id', electionId)
+        .eq('status', 'approved');
 
-      if (!candidates || candidates.length === 0) {
-        const { data: allCandidates, error: allError } = await supabase
-          .from('candidates')
-          .select('*');
-        
-        if (!allError && allCandidates) {
-          candidates = allCandidates;
-        }
-      }
+      if (candidatesError) throw candidatesError;
 
       if (!candidates || candidates.length === 0) {
         setResults({});
         setLoading(false);
         return;
       }
+
+      // Fetch positions to resolve position titles
+      const { data: positions } = await supabase
+        .from('positions')
+        .select('*')
+        .eq('election_id', electionId)
+        .order('order_number', { ascending: true });
 
       const candidatesWithVotes = await Promise.all(
         candidates.map(async (candidate) => {
@@ -279,15 +242,17 @@ export default function AdminElectionResults() {
       );
 
       const resultsByPosition = {};
-      let totalVotes = 0;
       
       candidatesWithVotes.forEach(candidate => {
-        totalVotes += candidate.voteCount;
-        const position = candidate.position || 'General';
-        if (!resultsByPosition[position]) {
-          resultsByPosition[position] = [];
+        // Resolve position title from positions table or fallback
+        const positionTitle = positions?.find(p => p.id === candidate.position_id)?.title ||
+                              candidate.position ||
+                              'General Position';
+
+        if (!resultsByPosition[positionTitle]) {
+          resultsByPosition[positionTitle] = [];
         }
-        resultsByPosition[position].push(candidate);
+        resultsByPosition[positionTitle].push(candidate);
       });
       
       Object.keys(resultsByPosition).forEach(position => {
@@ -295,13 +260,15 @@ export default function AdminElectionResults() {
       });
       
       setResults(resultsByPosition);
-      
-      const { count: votesCast, error: votesError } = await supabase
+
+      // FIX: count votes scoped to this election
+      const { count: votesCast } = await supabase
         .from('votes')
         .select('*', { count: 'exact', head: true })
         .eq('election_id', electionId);
       
-      const { data: uniqueVoters, error: uniqueError } = await supabase
+      // FIX: unique voters from votes table (ground truth)
+      const { data: uniqueVoters } = await supabase
         .from('votes')
         .select('voter_id')
         .eq('election_id', electionId)
@@ -310,16 +277,22 @@ export default function AdminElectionResults() {
       const uniqueVoterIds = [...new Set((uniqueVoters || []).map(v => v.voter_id))];
       const votersWhoVoted = uniqueVoterIds.length;
       
-      const { count: totalVotersCount, error: voterError } = await supabase
-        .from('voters')
-        .select('*', { count: 'exact', head: true });
-      
+      // FIX: count registered voters from election_voters for THIS election,
+      // not from the global voters table
+      const { count: totalVotersCount } = await supabase
+        .from('election_voters')
+        .select('*', { count: 'exact', head: true })
+        .eq('election_id', electionId)
+        .eq('status', 'active');
+
+      const total = totalVotersCount || 0;
+
       setTotalStats({
-        totalVoters: totalVotersCount || 0,
+        totalVoters: total,
         totalVotes: votesCast || 0,
-        votersWhoVoted: votersWhoVoted,
-        remainingVoters: (totalVotersCount || 0) - votersWhoVoted,
-        participationRate: totalVotersCount > 0 ? (votersWhoVoted / totalVotersCount) * 100 : 0
+        votersWhoVoted,
+        remainingVoters: total - votersWhoVoted,
+        participationRate: total > 0 ? (votersWhoVoted / total) * 100 : 0
       });
       
     } catch (error) {
@@ -330,6 +303,7 @@ export default function AdminElectionResults() {
     }
   };
 
+  // fetchVotersList: builds the "who voted" list from votes table (already correct)
   const fetchVotersList = async (electionId) => {
     try {
       const { data: votes, error: votesError } = await supabase
@@ -349,7 +323,7 @@ export default function AdminElectionResults() {
       
       const { data: voters, error: votersError } = await supabase
         .from('voters')
-        .select('id, name, email, school_id, department, year_of_study, has_voted, voted_at')
+        .select('id, name, email, school_id, department, year_of_study, voted_at')
         .in('id', voterIds)
         .order('name', { ascending: true });
 
@@ -368,8 +342,17 @@ export default function AdminElectionResults() {
     setSelectedElection(election);
     await Promise.all([
       fetchResults(electionId),
-      fetchVotersList(electionId)
+      fetchVotersList(electionId),
+      fetchAllVoters(electionId)  // FIX: pass electionId
     ]);
+  };
+
+  // Helper: per-position percentage (used in all download functions)
+  const calcPositionPercentage = (voteCount, positionCandidates, decimals = 2) => {
+    const positionTotal = positionCandidates.reduce((sum, c) => sum + c.voteCount, 0);
+    return positionTotal > 0
+      ? ((voteCount / positionTotal) * 100).toFixed(decimals)
+      : '0';
   };
 
   const downloadFullReport = () => {
@@ -379,7 +362,7 @@ export default function AdminElectionResults() {
       const summaryData = [
         ['ELECTION SUMMARY REPORT'],
         [''],
-        ['Election Title:', selectedElection?.title || 'All Candidates (No Election Selected)'],
+        ['Election Title:', selectedElection?.title || 'N/A'],
         ['Election Year:', selectedElection?.election_year || 'N/A'],
         ['Start Date:', selectedElection?.start_time ? new Date(selectedElection.start_time).toLocaleString() : 'N/A'],
         ['End Date:', selectedElection?.end_time ? new Date(selectedElection.end_time).toLocaleString() : 'N/A'],
@@ -399,14 +382,13 @@ export default function AdminElectionResults() {
       const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
       XLSX.utils.book_append_sheet(workbook, summarySheet, 'Election Summary');
       
+      // FIX: use per-position percentage
       const resultsData = [['Position', 'Candidate Name', 'Department', 'Year', 'Votes Received', 'Percentage', 'Status']];
       
       if (Object.keys(results).length > 0) {
         Object.entries(results).forEach(([position, candidates]) => {
           candidates.forEach((candidate, index) => {
-            const percentage = totalStats.totalVotes > 0 
-              ? ((candidate.voteCount / totalStats.totalVotes) * 100).toFixed(2)
-              : 0;
+            const percentage = calcPositionPercentage(candidate.voteCount, candidates);
             resultsData.push([
               position,
               candidate.name,
@@ -426,8 +408,8 @@ export default function AdminElectionResults() {
       const resultsSheet = XLSX.utils.aoa_to_sheet(resultsData);
       XLSX.utils.book_append_sheet(workbook, resultsSheet, 'Results by Position');
       
+      // FIX: allVoters is now election-scoped; has_voted derived from votes table
       const allVotersData = [['Name', 'Email', 'School ID', 'Department', 'Year', 'Has Voted', 'Voted At']];
-      
       allVoters.forEach(voter => {
         allVotersData.push([
           voter.name,
@@ -444,7 +426,6 @@ export default function AdminElectionResults() {
       XLSX.utils.book_append_sheet(workbook, allVotersSheet, 'All Voters');
       
       const votersWhoVotedData = [['Name', 'Email', 'School ID', 'Department', 'Year', 'Voted At']];
-      
       votersList.forEach(voter => {
         votersWhoVotedData.push([
           voter.name,
@@ -459,9 +440,9 @@ export default function AdminElectionResults() {
       const votersSheet = XLSX.utils.aoa_to_sheet(votersWhoVotedData);
       XLSX.utils.book_append_sheet(workbook, votersSheet, 'Voters Who Voted');
       
-      const votersWhoDidNotVote = allVoters.filter(voter => !votersList.some(v => v.id === voter.id));
+      // FIX: "did not vote" derived from has_voted flag which is now ground-truth accurate
+      const votersWhoDidNotVote = allVoters.filter(v => !v.has_voted);
       const notVotedData = [['Name', 'Email', 'School ID', 'Department', 'Year']];
-      
       votersWhoDidNotVote.forEach(voter => {
         notVotedData.push([
           voter.name,
@@ -475,7 +456,7 @@ export default function AdminElectionResults() {
       const notVotedSheet = XLSX.utils.aoa_to_sheet(notVotedData);
       XLSX.utils.book_append_sheet(workbook, notVotedSheet, 'Voters Who Did Not Vote');
       
-      const fileName = `election_report_${(selectedElection?.title || 'all_candidates').replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const fileName = `election_report_${(selectedElection?.title || 'results').replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
       XLSX.writeFile(workbook, fileName);
       toast.success('Full report downloaded successfully!');
       
@@ -486,11 +467,13 @@ export default function AdminElectionResults() {
   };
 
   const downloadCompleteVotersList = () => {
+    // FIX: allVoters is now election-scoped with accurate has_voted
     const votersData = [
       ['COMPLETE VOTERS LIST'],
       [''],
+      ['Election:', selectedElection?.title || 'N/A'],
       ['Generated:', new Date().toLocaleString()],
-      ['Total Voters:', allVoters.length],
+      ['Total Registered Voters:', allVoters.length],
       [''],
       ['Name', 'Email', 'School ID', 'Department', 'Year', 'Has Voted', 'Voted At']
     ];
@@ -518,7 +501,7 @@ export default function AdminElectionResults() {
     const votersData = [
       ['VOTERS WHO VOTED'],
       [''],
-      ['Election:', selectedElection?.title || 'All Elections'],
+      ['Election:', selectedElection?.title || 'N/A'],
       ['Total Voters Who Voted:', votersList.length],
       ['Generated:', new Date().toLocaleString()],
       [''],
@@ -547,8 +530,7 @@ export default function AdminElectionResults() {
     const resultsData = [
       ['CANDIDATE RESULTS'],
       [''],
-      ['Election:', selectedElection?.title || 'All Elections'],
-      ['Total Votes Cast:', totalStats.totalVotes],
+      ['Election:', selectedElection?.title || 'N/A'],
       ['Generated:', new Date().toLocaleString()],
       [''],
       ['Position', 'Candidate Name', 'Department', 'Year', 'Votes Received', 'Percentage', 'Status']
@@ -556,10 +538,9 @@ export default function AdminElectionResults() {
     
     if (Object.keys(results).length > 0) {
       Object.entries(results).forEach(([position, candidates]) => {
+        // FIX: per-position percentage
         candidates.forEach((candidate, index) => {
-          const percentage = totalStats.totalVotes > 0 
-            ? ((candidate.voteCount / totalStats.totalVotes) * 100).toFixed(2)
-            : 0;
+          const percentage = calcPositionPercentage(candidate.voteCount, candidates);
           resultsData.push([
             position,
             candidate.name,
@@ -588,7 +569,7 @@ export default function AdminElectionResults() {
       ['ELECTION RESULTS SUMMARY'],
       [''],
       ['Election Information'],
-      ['Title:', selectedElection?.title || 'All Elections'],
+      ['Title:', selectedElection?.title || 'N/A'],
       ['Year:', selectedElection?.election_year || 'N/A'],
       ['Period:', selectedElection?.start_time && selectedElection?.end_time 
         ? `${new Date(selectedElection.start_time).toLocaleDateString()} - ${new Date(selectedElection.end_time).toLocaleDateString()}`
@@ -608,12 +589,14 @@ export default function AdminElectionResults() {
       Object.entries(results).forEach(([position, candidates]) => {
         summaryData.push([position]);
         summaryData.push(['Candidate', 'Votes', 'Percentage', 'Result']);
-        candidates.forEach(c => {
+        // FIX: per-position percentage
+        candidates.forEach((c, i) => {
+          const percentage = calcPositionPercentage(c.voteCount, candidates);
           summaryData.push([
             c.name,
             c.voteCount,
-            `${((c.voteCount / totalStats.totalVotes) * 100).toFixed(2)}%`,
-            candidates.indexOf(c) === 0 ? 'WINNER' : ''
+            `${percentage}%`,
+            i === 0 ? 'WINNER' : ''
           ]);
         });
         summaryData.push(['']);
@@ -629,9 +612,7 @@ export default function AdminElectionResults() {
     toast.success('Summary downloaded!');
   };
 
-  if (!mounted) {
-    return null;
-  }
+  if (!mounted) return null;
 
   if (authLoading || loading) {
     return (
@@ -645,9 +626,7 @@ export default function AdminElectionResults() {
     );
   }
 
-  if (!isAuthenticated) {
-    return null;
-  }
+  if (!isAuthenticated) return null;
 
   return (
     <div className={`min-h-screen bg-gradient-to-br ${currentTheme.background} transition-all duration-300`}>
@@ -710,7 +689,7 @@ export default function AdminElectionResults() {
           </div>
         )}
 
-        {/* Statistics Cards - All icons now use consistent emerald color */}
+        {/* Statistics Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <div className={`${currentTheme.cardBg} rounded-xl p-4 border ${currentTheme.cardBorder}`}>
             <div className="flex items-center justify-between">
@@ -726,7 +705,7 @@ export default function AdminElectionResults() {
             <div className="flex items-center justify-between">
               <div>
                 <p className={`${currentTheme.textMuted} text-xs`}>Votes Cast</p>
-                <p className={`text-2xl font-bold text-emerald-400 mt-1`}>{totalStats.totalVotes.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-emerald-400 mt-1">{totalStats.totalVotes.toLocaleString()}</p>
               </div>
               <FaVoteYea className="text-2xl text-emerald-400" />
             </div>
@@ -736,7 +715,7 @@ export default function AdminElectionResults() {
             <div className="flex items-center justify-between">
               <div>
                 <p className={`${currentTheme.textMuted} text-xs`}>Voter Turnout</p>
-                <p className={`text-2xl font-bold text-emerald-400 mt-1`}>{totalStats.participationRate.toFixed(1)}%</p>
+                <p className="text-2xl font-bold text-emerald-400 mt-1">{totalStats.participationRate.toFixed(1)}%</p>
               </div>
               <FaPercentage className="text-2xl text-emerald-400" />
             </div>
@@ -746,14 +725,14 @@ export default function AdminElectionResults() {
             <div className="flex items-center justify-between">
               <div>
                 <p className={`${currentTheme.textMuted} text-xs`}>Voters Who Voted</p>
-                <p className={`text-2xl font-bold text-emerald-400 mt-1`}>{totalStats.votersWhoVoted.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-emerald-400 mt-1">{totalStats.votersWhoVoted.toLocaleString()}</p>
               </div>
               <FaUserCheck className="text-2xl text-emerald-400" />
             </div>
           </div>
         </div>
 
-        {/* Download Buttons Section - All icons consistent */}
+        {/* Download Buttons Section */}
         <div className={`${currentTheme.cardBg} rounded-xl p-6 border ${currentTheme.cardBorder} mb-8`}>
           <h2 className={`text-lg font-semibold ${currentTheme.textPrimary} mb-4`}>Download Reports</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -806,65 +785,78 @@ export default function AdminElectionResults() {
             <p className={currentTheme.textMuted}>No results available for this election</p>
           </div>
         ) : (
-          Object.entries(results).map(([position, candidates]) => (
-            <div key={position} className="mb-8">
-              <div className="flex items-center gap-3 mb-4">
-                <FaTrophy className="text-2xl text-emerald-400" />
-                <h2 className={`text-xl font-bold ${currentTheme.textPrimary}`}>{position}</h2>
-                <div className="flex-1 h-px bg-gradient-to-r from-white/20 to-transparent"></div>
-              </div>
-              
-              <div className="space-y-3">
-                {candidates.map((candidate, index) => {
-                  const percentage = totalStats.totalVotes > 0 
-                    ? ((candidate.voteCount / totalStats.totalVotes) * 100).toFixed(1)
-                    : 0;
-                  const barWidth = totalStats.totalVotes > 0 
-                    ? (candidate.voteCount / totalStats.totalVotes) * 100 
-                    : 0;
-                  
-                  return (
-                    <div 
-                      key={candidate.id}
-                      className={`${currentTheme.cardBg} rounded-xl p-4 border transition ${
-                        index === 0 ? `${currentTheme.winnerBorder} ${currentTheme.winnerBg}` : currentTheme.cardBorder
-                      }`}
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                            index === 0 ? 'bg-emerald-400 text-gray-900' :
-                            index === 1 ? 'bg-gray-400 text-gray-900' :
-                            `${currentTheme.selectBg} ${currentTheme.textPrimary}`
-                          }`}>
-                            {index + 1}
+          Object.entries(results).map(([position, candidates]) => {
+            // FIX: per-position total for accurate percentages in UI
+            const positionTotalVotes = candidates.reduce((sum, c) => sum + c.voteCount, 0);
+
+            return (
+              <div key={position} className="mb-8">
+                <div className="flex items-center gap-3 mb-4">
+                  <FaTrophy className="text-2xl text-emerald-400" />
+                  <h2 className={`text-xl font-bold ${currentTheme.textPrimary}`}>{position}</h2>
+                  <div className="flex-1 h-px bg-gradient-to-r from-white/20 to-transparent"></div>
+                </div>
+                
+                <div className="space-y-3">
+                  {candidates.map((candidate, index) => {
+                    // FIX: percentage relative to this position's total votes
+                    const percentage = positionTotalVotes > 0
+                      ? ((candidate.voteCount / positionTotalVotes) * 100).toFixed(1)
+                      : 0;
+                    const barWidth = positionTotalVotes > 0
+                      ? (candidate.voteCount / positionTotalVotes) * 100
+                      : 0;
+                    
+                    return (
+                      <div 
+                        key={candidate.id}
+                        className={`${currentTheme.cardBg} rounded-xl p-4 border transition ${
+                          index === 0 ? `${currentTheme.winnerBorder} ${currentTheme.winnerBg}` : currentTheme.cardBorder
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+                              index === 0 ? 'bg-emerald-400 text-gray-900' :
+                              index === 1 ? 'bg-gray-400 text-gray-900' :
+                              `${currentTheme.selectBg} ${currentTheme.textPrimary}`
+                            }`}>
+                              {index + 1}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className={`font-medium ${currentTheme.textPrimary}`}>{candidate.name}</p>
+                                {index === 0 && (
+                                  <span className="text-xs bg-emerald-400/20 text-emerald-400 px-2 py-0.5 rounded-full">
+                                    Winner
+                                  </span>
+                                )}
+                              </div>
+                              <p className={`${currentTheme.textMuted} text-sm`}>{candidate.department || 'Department not specified'}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className={`font-medium ${currentTheme.textPrimary}`}>{candidate.name}</p>
-                            <p className={`${currentTheme.textMuted} text-sm`}>{candidate.department || 'Department not specified'}</p>
+                          <div className="text-right">
+                            <p className={`text-xl font-bold ${currentTheme.textPrimary}`}>{candidate.voteCount}</p>
+                            <p className={`${currentTheme.textMuted} text-sm`}>votes ({percentage}%)</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className={`text-xl font-bold ${currentTheme.textPrimary}`}>{candidate.voteCount}</p>
-                          <p className={`${currentTheme.textMuted} text-sm`}>votes ({percentage}%)</p>
+                        <div className="mt-3">
+                          <div className={`h-1.5 ${currentTheme.progressBg} rounded-full overflow-hidden`}>
+                            <div 
+                              className={`h-full transition-all ${
+                                index === 0 ? currentTheme.progressWinner : currentTheme.progressNormal
+                              }`}
+                              style={{ width: `${barWidth}%` }}
+                            />
+                          </div>
                         </div>
                       </div>
-                      <div className="mt-3">
-                        <div className={`h-1.5 ${currentTheme.progressBg} rounded-full overflow-hidden`}>
-                          <div 
-                            className={`h-full transition-all ${
-                              index === 0 ? currentTheme.progressWinner : currentTheme.progressNormal
-                            }`}
-                            style={{ width: `${barWidth}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

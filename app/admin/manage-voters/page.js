@@ -1,4 +1,4 @@
-// app/admin/manage-voters/page.js - Updated for proper schema
+// app/admin/manage-voters/page.js - Complete Updated Version
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -31,8 +31,7 @@ import {
   FaUniversity,
   FaCalendarAlt,
   FaTrashAlt,
-  FaLink,
-  FaUnlink
+  FaLink
 } from 'react-icons/fa';
 import * as XLSX from 'xlsx';
 
@@ -142,70 +141,105 @@ export default function ManageVoters() {
   };
 
   const fetchVoters = async () => {
-    try {
-      setLoading(true);
-      
-      let query = supabase
+  try {
+    setLoading(true);
+
+    if (selectedElection) {
+      const { data: electionVoters, error: evError } = await supabase
+        .from('election_voters')
+        .select(`
+          id,
+          voter_id,
+          has_voted,
+          voted_at,
+          status,
+          created_at,
+          voters (
+            id,
+            name,
+            email,
+            school_id,
+            department,
+            program,
+            year_of_study,
+            created_at
+          )
+        `)
+        .eq('election_id', selectedElection)
+        .eq('status', 'active');
+
+      if (evError) throw evError;
+
+      // Get actual votes cast in this election from votes table (source of truth)
+      const { data: actualVotes, error: votesError } = await supabase
+        .from('votes')
+        .select('voter_id')
+        .eq('election_id', selectedElection)
+        .not('voter_id', 'is', null);
+
+      if (votesError) console.error('Error fetching actual votes:', votesError);
+
+      // Build a Set of voter_ids who actually voted
+      const actualVoterIds = new Set(
+        (actualVotes || []).map(v => v.voter_id)
+      );
+
+      const transformedVoters = (electionVoters || []).map(ev => ({
+        id: ev.voter_id,
+        election_voter_id: ev.id,
+        // Override has_voted with ground truth from votes table
+        has_voted: actualVoterIds.has(ev.voter_id),
+        voted_at: ev.voted_at,
+        name: ev.voters?.name,
+        email: ev.voters?.email,
+        school_id: ev.voters?.school_id,
+        department: ev.voters?.department,
+        program: ev.voters?.program,
+        year_of_study: ev.voters?.year_of_study,
+        voter_created_at: ev.voters?.created_at,
+        election_voter_created: ev.created_at
+      }));
+
+      setVoters(transformedVoters);
+
+      // Stats now based on actual votes table, not the flag
+      const voted = transformedVoters.filter(v => v.has_voted).length;
+      const notVoted = transformedVoters.length - voted;
+      const turnout = transformedVoters.length > 0
+        ? ((voted / transformedVoters.length) * 100).toFixed(1)
+        : 0;
+
+      setStats({
+        total: transformedVoters.length,
+        voted,
+        notVoted,
+        turnout: parseFloat(turnout)
+      });
+
+    } else {
+      // All voters view — no election selected
+      const { data: allVoters, error: votersError } = await supabase
         .from('voters')
         .select('*')
         .order('created_at', { ascending: false });
 
-      const { data: allVoters, error: votersError } = await query;
-
       if (votersError) throw votersError;
 
-      // If an election is selected, get the linked voters from election_voters
-      if (selectedElection) {
-        const { data: linkedVoters, error: linkError } = await supabase
-          .from('election_voters')
-          .select('voter_id, has_voted, voted_at')
-          .eq('election_id', selectedElection)
-          .eq('status', 'active');
-
-        if (linkError) throw linkError;
-
-        const linkedVoterIds = new Set(linkedVoters?.map(lv => lv.voter_id) || []);
-        const votedMap = new Map(linkedVoters?.map(lv => [lv.voter_id, { has_voted: lv.has_voted, voted_at: lv.voted_at }]) || []);
-
-        // Filter voters linked to this election and add voting status
-        const filteredVoters = allVoters
-          .filter(v => linkedVoterIds.has(v.id))
-          .map(v => ({
-            ...v,
-            has_voted: votedMap.get(v.id)?.has_voted || false,
-            voted_at: votedMap.get(v.id)?.voted_at || null
-          }));
-
-        setVoters(filteredVoters);
-        
-        const voted = filteredVoters.filter(v => v.has_voted === true).length;
-        const notVoted = filteredVoters.filter(v => v.has_voted === false).length;
-        const turnout = filteredVoters?.length > 0 ? ((voted / filteredVoters.length) * 100).toFixed(1) : 0;
-        
-        setStats({
-          total: filteredVoters.length,
-          voted,
-          notVoted,
-          turnout
-        });
-      } else {
-        // Show all voters with a flag indicating if they're linked to any election
-        setVoters(allVoters);
-        setStats({
-          total: allVoters.length,
-          voted: 0,
-          notVoted: allVoters.length,
-          turnout: 0
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching voters:', error);
-      toast.error('Failed to load voters');
-    } finally {
-      setLoading(false);
+      setVoters(allVoters || []);
+      setStats({
+        total: allVoters?.length || 0,
+        voted: 0,
+        notVoted: allVoters?.length || 0,
+        turnout: 0
+      });
     }
-  };
-
+  } catch (error) {
+    console.error('Error fetching voters:', error);
+    toast.error('Failed to load voters');
+  } finally {
+    setLoading(false);
+  }
+};
   useEffect(() => {
     if (isAuthenticated) {
       fetchVoters();
@@ -307,7 +341,6 @@ export default function ManageVoters() {
     
     setSubmitting(true);
     try {
-      // First, check if voter already exists in voters table (unique by email)
       let voterId;
       const { data: existingVoter, error: findError } = await supabase
         .from('voters')
@@ -318,7 +351,6 @@ export default function ManageVoters() {
       if (existingVoter) {
         voterId = existingVoter.id;
       } else {
-        // Create new voter in voters table
         const { data: newVoter, error: createError } = await supabase
           .from('voters')
           .insert({
@@ -337,7 +369,6 @@ export default function ManageVoters() {
         voterId = newVoter.id;
       }
       
-      // Now link the voter to the selected election
       const electionId = formData.election_id || selectedElection;
       
       if (!electionId) {
@@ -385,7 +416,6 @@ export default function ManageVoters() {
     
     setSubmitting(true);
     try {
-      // Update the voter in voters table
       const { error } = await supabase
         .from('voters')
         .update({
@@ -417,17 +447,24 @@ export default function ManageVoters() {
   const handleDeleteVoter = async (voterId) => {
     try {
       if (selectedElection) {
-        // Only remove from current election, don't delete the voter entirely
+        // Find the election_voter record for this voter and election
+        const { data: evRecord, error: findError } = await supabase
+          .from('election_voters')
+          .select('id')
+          .eq('election_id', selectedElection)
+          .eq('voter_id', voterId)
+          .single();
+        
+        if (findError) throw findError;
+        
         const { error } = await supabase
           .from('election_voters')
           .delete()
-          .eq('election_id', selectedElection)
-          .eq('voter_id', voterId);
+          .eq('id', evRecord.id);
         
         if (error) throw error;
         toast.success('Voter removed from this election');
       } else {
-        // Delete voter entirely (only if not linked to any election)
         const { error } = await supabase
           .from('voters')
           .delete()
@@ -466,7 +503,6 @@ export default function ManageVoters() {
         if (deleteError) throw deleteError;
         toast.success(`Successfully removed ${selectedVoters.size} voters from this election`);
       } else {
-        // Delete voters entirely
         const { error: deleteError } = await supabase
           .from('voters')
           .delete()
@@ -499,7 +535,6 @@ export default function ManageVoters() {
     try {
       const selectedVotersList = Array.from(selectedVoters);
       let successCount = 0;
-      let errorCount = 0;
 
       for (const voterId of selectedVotersList) {
         const { error } = await supabase
@@ -512,16 +547,12 @@ export default function ManageVoters() {
             created_at: new Date().toISOString()
           });
         
-        if (error) {
-          if (error.code !== '23505') { // Not a duplicate error
-            errorCount++;
-          }
-        } else {
+        if (!error || error.code === '23505') {
           successCount++;
         }
       }
       
-      toast.success(`Linked ${successCount} voters to election. ${errorCount} failed or already linked`);
+      toast.success(`Linked ${successCount} voters to election`);
       setSelectedVoters(new Set());
       setShowBulkLinkConfirm(false);
       fetchVoters();
@@ -666,7 +697,6 @@ export default function ManageVoters() {
               continue;
             }
             
-            // Find or create voter
             let voterId;
             const { data: existingVoter } = await supabase
               .from('voters')
@@ -695,7 +725,6 @@ export default function ManageVoters() {
               voterId = newVoter.id;
             }
             
-            // Link to election
             const { error: linkError } = await supabase
               .from('election_voters')
               .insert({
@@ -975,8 +1004,8 @@ export default function ManageVoters() {
                   <tr>
                     <td colSpan={selectedElection ? 9 : 8} className="px-6 py-12 text-center text-gray-400">
                       {selectedElection ? 'No voters found for this election' : 'No voters found'}
-                    </td>
-                  </tr>
+                     </td>
+                   '</tr>
                 ) : (
                   filteredVoters.map((voter) => (
                     <tr key={voter.id} className={`transition ${theme === 'light' ? 'hover:bg-gray-50' : 'hover:bg-white/5'}`}>
@@ -1032,7 +1061,7 @@ export default function ManageVoters() {
                       </td>
                       {selectedElection && (
                         <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
-                          {voter.has_voted ? (
+                          {voter.has_voted === true ? (
                             <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-500/20 text-green-700 dark:text-green-400 text-xs rounded-full">
                               <FaCheckCircle size={10} /> Voted
                             </span>
@@ -1048,7 +1077,7 @@ export default function ManageVoters() {
                           <button onClick={() => openEditModal(voter)} className="text-green-700 dark:text-green-400 hover:text-green-600 transition" title="Edit voter">
                             <FaEdit />
                           </button>
-                          <button onClick={() => setShowDeleteConfirm(voter.id)} className={`text-red-500 transition hover:text-red-600`} title="Delete voter">
+                          <button onClick={() => setShowDeleteConfirm(voter.id)} className="text-red-500 transition hover:text-red-600" title="Delete voter">
                             <FaTrash />
                           </button>
                         </div>
