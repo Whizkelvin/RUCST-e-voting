@@ -212,19 +212,7 @@ export async function POST(request) {
                   <small>Date and Time: ${new Date().toLocaleString()}</small>
                 </div>
                 
-                <div class="section-title">What You Voted For</div>
                 
-                <table class="votes-table">
-                  <thead>
-                    <tr>
-                      <th>Position</th>
-                      <th>Candidate You Selected</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${votesListHtml}
-                  </tbody>
-                </table>
                 
                 <div class="info-box">
                   <p><strong>Important Information You Should Know</strong></p>

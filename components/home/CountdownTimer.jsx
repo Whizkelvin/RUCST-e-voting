@@ -5,7 +5,15 @@ import { useEffect, useState, useCallback } from 'react';
 
 const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn, totalStats, loading, theme, isVotingStopped = false }) => {
   const [localTimeLeft, setLocalTimeLeft] = useState(timeLeft);
-  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Debug logging - Add this to see what data is being received
+  useEffect(() => {
+    console.log('🔍 CountdownTimer received totalStats:', totalStats);
+    console.log('🔍 CountdownTimer loading state:', loading);
+    console.log('🔍 totalStats.totalVotersWhoVoted:', totalStats?.totalVotersWhoVoted);
+    console.log('🔍 totalStats.remainingVoters:', totalStats?.remainingVoters);
+    console.log('🔍 totalStats.participationRate:', totalStats?.participationRate);
+  }, [totalStats, loading]);
 
   const formatDate = (dateString) => {
     if (!dateString) return "Not set";
@@ -143,7 +151,6 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
       const timer = setInterval(() => {
         const updatedTime = calculateTimeLeft();
         setLocalTimeLeft(updatedTime);
-        setCurrentTime(new Date());
       }, 1000);
 
       return () => clearInterval(timer);
@@ -231,6 +238,12 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
     } else {
       return "Election Results";
     }
+  };
+
+  // Safely format numbers with fallback
+  const formatNumber = (num) => {
+    if (num === undefined || num === null || isNaN(num)) return '0';
+    return num.toLocaleString();
   };
 
   return (
@@ -327,17 +340,27 @@ const CountdownTimer = ({ timeLeft, votingPeriod, isVotingActive, votingStartsIn
             <div className="mt-6">
               <div className="flex justify-between text-sm text-gray-300 mb-2">
                 <span>Voting Progress</span>
-                <span className="font-bold text-gray-200">{loading ? '...' : `${(totalStats?.participationRate || 0).toFixed(1)}%`}</span>
+                <span className="font-bold text-gray-200">
+                  {loading ? '...' : `${(totalStats?.participationRate || 0).toFixed(1)}%`}
+                </span>
               </div>
               <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden">
                 <div 
-                  className="h-3 rounded-full transition-all duration-1000 shadow-inner bg-gradient-to-r from-gray-400 to-gray-500"
+                  className="h-3 rounded-full transition-all duration-1000 shadow-inner bg-gradient-to-r from-emerald-400 to-emerald-500"
                   style={{ width: loading ? '0%' : `${Math.min(100, totalStats?.participationRate || 0)}%` }}
                 ></div>
               </div>
               <div className="flex justify-between text-xs text-gray-400 mt-2">
-                <span>{loading ? '...' : `${(totalStats?.totalVotersWhoVoted || 0).toLocaleString()} voters have completed voting`}</span>
-                <span>{loading ? '...' : `${(totalStats?.remainingVoters || 0).toLocaleString()} voters yet to vote`}</span>
+                <span>
+                  {loading 
+                    ? 'Loading...' 
+                    : `${formatNumber(totalStats?.totalVotersWhoVoted)} ${totalStats?.totalVotersWhoVoted === 1 ? 'voter has' : 'voters have'} completed voting`}
+                </span>
+                <span>
+                  {loading 
+                    ? '...' 
+                    : `${formatNumber(totalStats?.remainingVoters)} ${totalStats?.remainingVoters === 1 ? 'voter' : 'voters'} yet to vote`}
+                </span>
               </div>
             </div>
           )}

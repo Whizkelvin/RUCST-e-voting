@@ -88,7 +88,7 @@ export default function AdminVerifyOTP() {
   const [verificationStatus, setVerificationStatus] = useState(null);
   const [theme, setTheme] = useState('dark');
   const [mounted, setMounted] = useState(false);
-  const [redirecting, setRedirecting] = useState(false); // NEW: Track redirect state
+  const [redirecting, setRedirecting] = useState(false); 
 
   const timerRef = useRef(null);
   const router = useRouter();
@@ -174,7 +174,7 @@ const completeLogin = useCallback(async () => {
 
   // Force a hard navigation to ensure cookies are read
   setTimeout(() => {
-    window.location.href = '/admin/dashboard';
+    window.location.href = '/admin/';
   }, 1500);
 }, [redirecting]);
 
@@ -488,7 +488,7 @@ const completeLogin = useCallback(async () => {
           <div className="text-center mb-5 sm:mb-6">
             <div className="flex justify-center mb-3">
               <div className={`p-3 ${theme === 'dark' ? 'bg-gray-500/20' : 'bg-gray-100'} rounded-full`}>
-                <FaShieldAlt className={`${currentTheme.iconColor} text-2xl sm:text-3xl`} />
+                
               </div>
             </div>
             <h1 className={`text-xl sm:text-2xl font-bold ${currentTheme.textPrimary}`}>
@@ -562,7 +562,7 @@ const completeLogin = useCallback(async () => {
             {verificationStatus === 'success' && (
               <div className="mb-4 p-3 rounded-xl bg-green-500/20 border border-green-400/50 flex items-center gap-2">
                 <FaCheckCircle className="text-green-400 text-sm sm:text-base shrink-0" aria-hidden="true" />
-                <p className="text-green-200 text-xs sm:text-sm">Verification successful. Redirecting...</p>
+                <p className="text-black text-xs sm:text-sm">Verification successful. Redirecting...</p>
               </div>
             )}
             {verificationStatus === 'failed' && (

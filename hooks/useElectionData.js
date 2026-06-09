@@ -1,4 +1,4 @@
-// hooks/useElectionData.js - Complete updated version
+// hooks/useElectionData.js - Updated to match your admin page schema
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -113,12 +113,70 @@ export const useElectionData = () => {
     }
   }, []);
 
+  const fetchVoterStatsForElection = useCallback(async (electionId) => {
+    if (!electionId) {
+      console.log('No election ID provided for voter stats');
+      return null;
+    }
+
+    try {
+      console.log(`🔍 Fetching voter stats for election ID: ${electionId}`);
+      
+      // Query the voters table directly (matching your admin page schema)
+      const { data: voters, error: votersError } = await supabase
+        .from('voters')
+        .select('id, has_voted')
+        .eq('election_id', electionId);
+
+      if (votersError) {
+        console.error('Error fetching voters:', votersError);
+        return null;
+      }
+
+      const totalVoters = voters?.length || 0;
+      const totalVotersWhoVoted = voters?.filter(v => v.has_voted === true).length || 0;
+      const remainingVoters = totalVoters - totalVotersWhoVoted;
+      const participationRate = totalVoters > 0 ? (totalVotersWhoVoted / totalVoters) * 100 : 0;
+
+      // Get total votes cast for this election
+      const { data: votes, error: votesError } = await supabase
+        .from('votes')
+        .select('id')
+        .eq('election_id', electionId);
+
+      if (votesError) {
+        console.error('Error fetching votes:', votesError);
+      }
+
+      const totalVotesCast = votes?.length || 0;
+
+      console.log(`✅ Election ${electionId} stats:`, {
+        totalVoters,
+        totalVotersWhoVoted,
+        remainingVoters,
+        participationRate: participationRate.toFixed(2) + '%',
+        totalVotesCast
+      });
+
+      return {
+        totalVoters,
+        totalVotes: totalVotesCast,
+        participationRate,
+        totalVotersWhoVoted,
+        remainingVoters
+      };
+    } catch (error) {
+      console.error('Error in fetchVoterStatsForElection:', error);
+      return null;
+    }
+  }, []);
+
   const fetchElectionData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       
-      console.log('=== Fetching Election Data ===');
+      console.log('=== 🚀 Fetching Election Data ===');
       
       // 1. Get ACTIVE voting period
       const { data: votingPeriodData, error: votingPeriodError } = await supabase
@@ -252,7 +310,8 @@ export const useElectionData = () => {
         const { data: candidates, error: candidatesError } = await supabase
           .from('candidates')
           .select('*')
-          .eq('position_id', position.id);
+          .eq('position_id', position.id)
+          .eq('status', 'approved');
         
         if (!candidatesError && candidates && candidates.length > 0) {
           // Get vote counts for each candidate
@@ -265,7 +324,9 @@ export const useElectionData = () => {
             return {
               ...candidate,
               image_url: getCandidateImageUrl(candidate.image_url),
-              vote_count: voteCount || 0
+              vote_count: voteCount || 0,
+              position_title: position.title,
+              position_id: position.id
             };
           }));
           allCandidates.push(...candidatesWithVotes);
@@ -274,72 +335,49 @@ export const useElectionData = () => {
       
       console.log('Total candidates found:', allCandidates.length);
       
-      // 5. Get VOTERS for THIS SPECIFIC election only (CRITICAL FIX)
-      const { count: eligibleVoters, error: eligibleError } = await supabase
-        .from('election_voters')
-        .select('*', { count: 'exact', head: true })
-        .eq('election_id', activeElection.id)
-        .eq('status', 'active');
+      // 5. Get VOTER STATS from voters table (matching your admin schema)
+      const voterStats = await fetchVoterStatsForElection(activeElection.id);
       
-      if (eligibleError) {
-        console.error('Error fetching eligible voters:', eligibleError);
+      console.log('🎯 FINAL VOTER STATS TO DISPLAY:', voterStats);
+      
+      if (voterStats) {
+        console.log('✅ Setting totalStats to:', voterStats);
+        setTotalStats(voterStats);
+      } else {
+        console.log('❌ Failed to fetch voter stats, using defaults');
+        setTotalStats({
+          totalVoters: 0,
+          totalVotes: 0,
+          participationRate: 0,
+          totalVotersWhoVoted: 0,
+          remainingVoters: 0
+        });
       }
       
-      const { count: votersWhoVoted, error: votedError } = await supabase
-        .from('election_voters')
-        .select('*', { count: 'exact', head: true })
-        .eq('election_id', activeElection.id)
-        .eq('has_voted', true)
-        .eq('status', 'active');
-      
-      if (votedError) {
-        console.error('Error fetching voters who voted:', votedError);
-      }
-      
-      console.log(`Eligible voters for "${activeElection.title}": ${eligibleVoters || 0}`);
-      console.log(`Voters who have voted: ${votersWhoVoted || 0}`);
-      
-      // 6. Calculate total votes cast for this election
-      const { data: votesData, error: votesError } = await supabase
-        .from('votes')
-        .select('id')
-        .eq('election_id', activeElection.id);
-      
-      const totalVotesCast = votesData?.length || 0;
-      
-      // 7. Calculate participation rate
-      const participationRate = eligibleVoters > 0 ? ((votersWhoVoted || 0) / eligibleVoters) * 100 : 0;
-      
-      // 8. Update total stats with ONLY this election's data
-      setTotalStats({
-        totalVoters: eligibleVoters || 0,
-        totalVotes: totalVotesCast,
-        participationRate,
-        totalVotersWhoVoted: votersWhoVoted || 0,
-        remainingVoters: (eligibleVoters || 0) - (votersWhoVoted || 0)
-      });
-      
-      // 9. Build progress data for the election card
+      // 6. Build progress data for the election card
       const totalVotesForElection = allCandidates.reduce((sum, c) => sum + (c.vote_count || 0), 0);
       
       const progressData = [{
         id: activeElection.id,
         name: activeElection.title,
+        title: activeElection.title,
         description: activeElection.description || `Cast your vote for ${activeElection.title}`,
         candidates: allCandidates,
         voteCount: totalVotesForElection,
         candidatesCount: allCandidates.length,
+        positionsCount: positions?.length || 0,
         maxVotes: 1,
         status: activeElection.is_active && isActive ? 'active' : 'closed',
         start_date: activeElection.start_time,
         end_date: activeElection.end_time,
         voting_period_title: votingPeriodData?.title || 'Election',
         voting_period_year: votingPeriodData?.year,
-        eligibleVoters: eligibleVoters || 0,
-        votedCount: votersWhoVoted || 0
+        eligibleVoters: voterStats?.totalVoters || 0,
+        votedCount: voterStats?.totalVotersWhoVoted || 0
       }];
       
       console.log('Progress data built with 1 election');
+      console.log('📊 TotalStats being passed to CountdownTimer:', voterStats);
       setVotingProgress(progressData);
       setLastUpdated(new Date());
       
@@ -358,12 +396,12 @@ export const useElectionData = () => {
     } finally {
       setLoading(false);
     }
-  }, [calculateTimeLeft]);
+  }, [calculateTimeLeft, fetchVoterStatsForElection]);
   
   useEffect(() => {
     fetchElectionData();
-    // Refresh every 10 seconds for real-time updates
-    const interval = setInterval(fetchElectionData, 10000);
+    // Refresh every 30 seconds for real-time updates
+    const interval = setInterval(fetchElectionData, 30000);
     return () => clearInterval(interval);
   }, [fetchElectionData]);
   

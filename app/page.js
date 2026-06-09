@@ -209,7 +209,7 @@ export default function Home() {
       label: 'Live Participation',
       icon: FaChartBar,
     },
-    { value: '24/7', label: 'System Uptime', icon: FaClock },
+   
   ], [loading, totalStats]);
 
   const summaryStats = useMemo(() => [
@@ -221,12 +221,12 @@ export default function Home() {
   // ── Helpers ───────────────────────────────────────────────────────────────
   const handleRefresh = useCallback(() => {
     fetchElectionData();
-    toast.info('Refreshing election data…', { duration: 2000 });
+    toast.info('Refreshing election data…', { duration: 3000 });
   }, [fetchElectionData]);
 
   const handleRetry = useCallback(() => {
     fetchElectionData();
-    toast.info('Retrying…', { duration: 2000 });
+    toast.info('Retrying…', { duration: 300000 });
   }, [fetchElectionData]);
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -240,7 +240,7 @@ export default function Home() {
         position="top-right"
         richColors
         closeButton
-        toastOptions={{ duration: 4000, className: 'text-sm font-medium' }}
+        toastOptions={{ duration: 300000, className: 'text-sm font-medium' }}
         theme={theme === 'light' ? 'light' : 'dark'}
       />
 
@@ -780,7 +780,7 @@ export default function Home() {
             </div>
 
             {votingProgress.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4 sm:gap-5">
                 {votingProgress.map((election, index) => (
                   <div
                     key={election.id ?? index}
@@ -793,7 +793,7 @@ export default function Home() {
                     }`}
                   >
                     <div
-                      className="h-0.5 sm:h-1 bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-600 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-500"
+                      className="h-0.5 sm:h-1 bg-gradient-to-r from-red-900 via-emerald-500 to-red-900 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-500 "
                       aria-hidden="true"
                     />
                     <ElectionCard

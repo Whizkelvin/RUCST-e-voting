@@ -650,206 +650,234 @@ function LoginContent() {
   };
 
   const handleVoterLogin = useCallback(async (email, schoolId) => {
-    setIsLoading(true);
+  setIsLoading(true);
+  
+  try {
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanSchoolId = schoolId.trim().padStart(8, '0');
     
-    try {
-      const cleanEmail = email.toLowerCase().trim();
-      const cleanSchoolId = schoolId.trim().padStart(8, '0');
-      
-      console.log('Voter login:', { email: cleanEmail, schoolId: cleanSchoolId });
-      
-      const { data: voter, error: voterError } = await supabase
-        .from('voters')
-        .select('id, name, has_voted, voted_at')
-        .eq('email', cleanEmail)
-        .eq('school_id', cleanSchoolId)
-        .maybeSingle();
-      
-      if (!voter) {
-        toast.error('Voter not found. Check your credentials.');
-        setIsLoading(false);
-        return;
-      }
-      
-      console.log('Voter found:', voter.id);
-      
-      if (voter.has_voted) {
-        toast.error('You have already voted. View results.');
-        setTimeout(() => router.push('/election-result'), 2000);
-        setIsLoading(false);
-        return;
-      }
-      
-      const { data: existingVote } = await supabase
-        .from('votes')
-        .select('id')
-        .eq('voter_id', voter.id)
-        .maybeSingle();
-      
-      if (existingVote) {
-        await supabase.from('voters').update({ 
-          has_voted: true, 
-          voted_at: new Date().toISOString() 
-        }).eq('id', voter.id);
-        
-        toast.error('Vote detected. View results.');
-        setTimeout(() => router.push('/election-result'), 2000);
-        setIsLoading(false);
-        return;
-      }
-      
-      const { data: votingSettings, error: settingsError } = await supabase
-        .from('voting_periods')
-        .select('is_active, start_date, end_date')
-        .single();
-      
-      if (settingsError || !votingSettings) {
-        toast.error('Voting system unavailable.');
-        setIsLoading(false);
-        return;
-      }
-      
-      const now = new Date();
-      const startDate = new Date(votingSettings.start_date);
-      const endDate = new Date(votingSettings.end_date);
-      
-      if (now < startDate) {
-        toast.error(`Voting starts: ${startDate.toLocaleString()}`);
-        setIsLoading(false);
-        return;
-      }
-      
-      if (now > endDate) {
-        toast.error('Voting period ended.');
-        setTimeout(() => router.push('/election-result'), 2000);
-        setIsLoading(false);
-        return;
-      }
-      
-      if (!votingSettings.is_active) {
-        toast.error('Voting disabled by admin.');
-        setIsLoading(false);
-        return;
-      }
-      
-      const { data: existingOtp, error: existingOtpError } = await supabase
-        .from('otp_codes')
-        .select('*')
-        .eq('voter_id', voter.id)
-        .eq('used', false)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      
-      if (existingOtp && !existingOtpError) {
-        const expiresAt = new Date(existingOtp.expires_at);
-        const isExpired = expiresAt < now;
-        
-        if (!isExpired) {
-          const remainingMs = expiresAt - now;
-          const remainingMinutes = Math.floor(remainingMs / 60000);
-          const remainingSeconds = Math.floor((remainingMs % 60000) / 1000);
-          
-          console.log('Valid OTP exists, resending same code');
-          
-          toast.info(`You have a valid OTP. Expires in ${remainingMinutes}:${remainingSeconds.toString().padStart(2, '0')}`);
-          
-          localStorage.setItem('temp_voter_id', voter.id.toString());
-          localStorage.setItem('temp_voter_email', cleanEmail);
-          localStorage.setItem('temp_voter_school_id', cleanSchoolId);
-          localStorage.setItem('temp_voter_name', voter.name);
-          localStorage.setItem('temp_voter_expiry', expiresAt.getTime().toString());
-          
-          toast.info('Redirecting to verification page...');
-          setTimeout(() => router.push('/verify-otp'), 1500);
-          setIsLoading(false);
-          return;
-        }
-      }
-      
-      console.log('No valid OTP found, generating new one');
-      
-      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const otpExpiry = new Date(Date.now() + 15 * 60 * 1000);
-      const hashedOtp = await hashCode(otpCode);
-      
-      console.log('Generated NEW OTP:', otpCode);
-      console.log('Will send to email:', cleanEmail);
-      
-      const { error: deleteError } = await supabase
-        .from('otp_codes')
-        .delete()
-        .eq('voter_id', voter.id);
-      
-      console.log('Cleanup:', deleteError ? 'No old OTPs' : 'Old OTPs deleted');
-      
-      const { data: otpRecord, error: insertError } = await supabase
-        .from('otp_codes')
-        .insert({
-          voter_id: voter.id,
-          email: cleanEmail,
-          school_id: cleanSchoolId,
-          code_hash: hashedOtp,
-          expires_at: otpExpiry.toISOString(),
-          used: false,
-          resend_count: 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-      
-      if (insertError) {
-        console.error('OTP Insert Error:', insertError);
-        toast.error('OTP generation failed. Try again.');
-        setIsLoading(false);
-        return;
-      }
-      
-      console.log('New OTP stored:', otpRecord.id);
-      
-      try {
-        const response = await fetch('/api/send-otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: cleanEmail,
-            otp: otpCode,
-            name: voter.name,
-            expiresIn: 15
-          }),
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-          console.log('Email sent OK');
-          toast.success(`OTP sent to ${cleanEmail}`);
-        } else {
-          console.warn('Email API failed:', result);
-          toast.warning('OTP generated but email sending failed');
-        }
-      } catch (emailError) {
-        console.warn('Email failed (OTP still generated):', emailError);
-        toast.warning('OTP generated but email failed. Check email settings.');
-      }
-      
-      localStorage.setItem('temp_voter_id', voter.id.toString());
-      localStorage.setItem('temp_voter_email', cleanEmail);
-      localStorage.setItem('temp_voter_school_id', cleanSchoolId);
-      localStorage.setItem('temp_voter_name', voter.name);
-      localStorage.setItem('temp_voter_expiry', otpExpiry.getTime().toString());
-      
-      toast.info('Redirecting to verification page...');
-      setTimeout(() => router.push('/verify-otp'), 1500);
-      
-    } catch (error) {
-      console.error('Voter login error:', error);
-      toast.error('Login failed. Please try again.');
-    } finally {
+    console.log('Voter login:', { email: cleanEmail, schoolId: cleanSchoolId });
+    
+    // First, find the voter in the voters table
+    const { data: voter, error: voterError } = await supabase
+      .from('voters')
+      .select('id, name, email, school_id')
+      .eq('email', cleanEmail)
+      .eq('school_id', cleanSchoolId)
+      .maybeSingle();
+    
+    if (!voter || voterError) {
+      toast.error('Voter not found. Check your credentials.');
       setIsLoading(false);
+      return;
     }
-  }, [router, hashCode, supabase]);
+    
+    console.log('Voter found:', voter.id);
+    
+    // Get the active election and check if voter is registered for it
+    // First, get active voting period
+    const { data: votingPeriod, error: periodError } = await supabase
+      .from('voting_periods')
+      .select('id')
+      .eq('is_active', true)
+      .maybeSingle();
+    
+    if (periodError || !votingPeriod) {
+      toast.error('No active voting period found');
+      setIsLoading(false);
+      return;
+    }
+    
+    // Get the active election for this voting period
+    const { data: activeElection, error: electionError } = await supabase
+      .from('elections')
+      .select('id, title')
+      .eq('voting_period_id', votingPeriod.id)
+      .eq('is_active', true)
+      .maybeSingle();
+    
+    if (electionError || !activeElection) {
+      toast.error('No active election found');
+      setIsLoading(false);
+      return;
+    }
+    
+    // Check if voter is registered for this election in election_voters
+    const { data: electionVoter, error: regError } = await supabase
+      .from('election_voters')
+      .select('id, has_voted, voted_at')
+      .eq('election_id', activeElection.id)
+      .eq('voter_id', voter.id)
+      .eq('status', 'active')
+      .maybeSingle();
+    
+    if (regError || !electionVoter) {
+      toast.error('You are not registered for the current election');
+      setIsLoading(false);
+      return;
+    }
+    
+    // Check if already voted
+    if (electionVoter.has_voted) {
+      toast.error('You have already voted in this election.');
+      setTimeout(() => router.push('/election-result'), 2000);
+      setIsLoading(false);
+      return;
+    }
+    
+    // Check voting period dates
+    const { data: votingSettings, error: settingsError } = await supabase
+      .from('voting_periods')
+      .select('is_active, start_date, end_date')
+      .eq('id', votingPeriod.id)
+      .maybeSingle();
+    
+    if (settingsError || !votingSettings) {
+      toast.error('Voting system unavailable.');
+      setIsLoading(false);
+      return;
+    }
+    
+    const now = new Date();
+    const startDate = new Date(votingSettings.start_date);
+    const endDate = new Date(votingSettings.end_date);
+    
+    if (now < startDate) {
+      toast.error(`Voting starts on ${startDate.toLocaleString()}`);
+      setIsLoading(false);
+      return;
+    }
+    
+    if (now > endDate) {
+      toast.error('Voting period has ended.');
+      setTimeout(() => router.push('/election-result'), 2000);
+      setIsLoading(false);
+      return;
+    }
+    
+    if (!votingSettings.is_active) {
+      toast.error('Voting is currently disabled.');
+      setIsLoading(false);
+      return;
+    }
+    
+    // Check for existing OTP
+    const { data: existingOtp, error: existingOtpError } = await supabase
+      .from('otp_codes')
+      .select('*')
+      .eq('voter_id', voter.id)
+      .eq('used', false)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    if (existingOtp && !existingOtpError) {
+      const expiresAt = new Date(existingOtp.expires_at);
+      const isExpired = expiresAt < now;
+      
+      if (!isExpired) {
+        const remainingMs = expiresAt - now;
+        const remainingMinutes = Math.floor(remainingMs / 60000);
+        const remainingSeconds = Math.floor((remainingMs % 60000) / 1000);
+        
+        console.log('Valid OTP exists, resending same code');
+        
+        toast.info(`You have a valid OTP. Expires in ${remainingMinutes}:${remainingSeconds.toString().padStart(2, '0')}`);
+        
+        localStorage.setItem('temp_voter_id', voter.id.toString());
+        localStorage.setItem('temp_voter_email', cleanEmail);
+        localStorage.setItem('temp_voter_school_id', cleanSchoolId);
+        localStorage.setItem('temp_voter_name', voter.name);
+        localStorage.setItem('temp_election_id', activeElection.id);
+        localStorage.setItem('temp_voter_expiry', expiresAt.getTime().toString());
+        
+        toast.info('Redirecting to verification page...');
+        setTimeout(() => router.push('/verify-otp'), 1500);
+        setIsLoading(false);
+        return;
+      }
+    }
+    
+    // Generate new OTP
+    console.log('No valid OTP found, generating new one');
+    
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = new Date(Date.now() + 15 * 60 * 1000);
+    const hashedOtp = await hashCode(otpCode);
+    
+    // Delete old OTPs
+    await supabase
+      .from('otp_codes')
+      .delete()
+      .eq('voter_id', voter.id);
+    
+    // Store new OTP
+    const { error: insertError } = await supabase
+      .from('otp_codes')
+      .insert({
+        voter_id: voter.id,
+        email: cleanEmail,
+        school_id: cleanSchoolId,
+        code_hash: hashedOtp,
+        expires_at: otpExpiry.toISOString(),
+        used: false,
+        resend_count: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+    
+    if (insertError) {
+      console.error('OTP Insert Error:', insertError);
+      toast.error('OTP generation failed. Try again.');
+      setIsLoading(false);
+      return;
+    }
+    
+    // Send OTP email
+    try {
+      const response = await fetch('/api/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          otp: otpCode,
+          name: voter.name,
+          expiresIn: 15
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('Email sent OK');
+        toast.success(`OTP sent to ${cleanEmail}`);
+      } else {
+        console.warn('Email API failed:', result);
+        toast.warning('OTP generated but email sending failed');
+      }
+    } catch (emailError) {
+      console.warn('Email failed (OTP still generated):', emailError);
+      toast.warning('OTP generated but email failed. Check email settings.');
+    }
+    
+    // Store temp data for OTP verification
+    localStorage.setItem('temp_voter_id', voter.id.toString());
+    localStorage.setItem('temp_voter_email', cleanEmail);
+    localStorage.setItem('temp_voter_school_id', cleanSchoolId);
+    localStorage.setItem('temp_voter_name', voter.name);
+    localStorage.setItem('temp_election_id', activeElection.id);
+    localStorage.setItem('temp_voter_expiry', otpExpiry.getTime().toString());
+    
+    toast.info('Redirecting to verification page...');
+    setTimeout(() => router.push('/verify-otp'), 1500);
+    
+  } catch (error) {
+    console.error('Voter login error:', error);
+    toast.error('Login failed. Please try again.');
+  } finally {
+    setIsLoading(false);
+  }
+}, [router, hashCode, supabase]);
 
   // Check if login button should be disabled for voters
   const isVoterLoginDisabled = useCallback(() => {

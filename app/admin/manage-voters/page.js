@@ -1,4 +1,4 @@
-// app/admin/manage-voters/page.js
+// app/admin/manage-voters/page.js - Updated for proper schema
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -28,7 +28,11 @@ import {
   FaUserGraduate,
   FaChartLine,
   FaFileExcel,
-  FaUniversity
+  FaUniversity,
+  FaCalendarAlt,
+  FaTrashAlt,
+  FaLink,
+  FaUnlink
 } from 'react-icons/fa';
 import * as XLSX from 'xlsx';
 
@@ -62,21 +66,27 @@ const departmentsData = {
 export default function ManageVoters() {
   const { admin, isAuthenticated, loading: authLoading } = useAdminAuth();
   const [voters, setVoters] = useState([]);
+  const [elections, setElections] = useState([]);
+  const [selectedElection, setSelectedElection] = useState('');
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [showBulkLinkConfirm, setShowBulkLinkConfirm] = useState(false);
   const [editingVoter, setEditingVoter] = useState(null);
   const [theme, setTheme] = useState('light');
   const [availablePrograms, setAvailablePrograms] = useState([]);
+  const [selectedVoters, setSelectedVoters] = useState(new Set());
   const [formData, setFormData] = useState({
     email: '',
     name: '',
     school_id: '',
     department: '',
     program: '',
-    year_of_study: ''
+    year_of_study: '',
+    election_id: ''
   });
   const [formErrors, setFormErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -111,32 +121,83 @@ export default function ManageVoters() {
       toast.error('Access denied. Admin privileges required.');
       router.push('/');
     } else if (isAuthenticated) {
+      fetchElections();
       fetchVoters();
     }
   }, [authLoading, isAuthenticated, router]);
 
+  const fetchElections = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('elections')
+        .select('id, title, status, is_active')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setElections(data || []);
+    } catch (error) {
+      console.error('Error fetching elections:', error);
+      toast.error('Failed to load elections');
+    }
+  };
+
   const fetchVoters = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      
+      let query = supabase
         .from('voters')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      const { data: allVoters, error: votersError } = await query;
 
-      setVoters(data || []);
-      
-      const voted = (data || []).filter(v => v.has_voted === true).length;
-      const notVoted = (data || []).filter(v => v.has_voted === false || !v.has_voted).length;
-      const turnout = data?.length > 0 ? ((voted / data.length) * 100).toFixed(1) : 0;
-      
-      setStats({
-        total: (data || []).length,
-        voted,
-        notVoted,
-        turnout
-      });
+      if (votersError) throw votersError;
+
+      // If an election is selected, get the linked voters from election_voters
+      if (selectedElection) {
+        const { data: linkedVoters, error: linkError } = await supabase
+          .from('election_voters')
+          .select('voter_id, has_voted, voted_at')
+          .eq('election_id', selectedElection)
+          .eq('status', 'active');
+
+        if (linkError) throw linkError;
+
+        const linkedVoterIds = new Set(linkedVoters?.map(lv => lv.voter_id) || []);
+        const votedMap = new Map(linkedVoters?.map(lv => [lv.voter_id, { has_voted: lv.has_voted, voted_at: lv.voted_at }]) || []);
+
+        // Filter voters linked to this election and add voting status
+        const filteredVoters = allVoters
+          .filter(v => linkedVoterIds.has(v.id))
+          .map(v => ({
+            ...v,
+            has_voted: votedMap.get(v.id)?.has_voted || false,
+            voted_at: votedMap.get(v.id)?.voted_at || null
+          }));
+
+        setVoters(filteredVoters);
+        
+        const voted = filteredVoters.filter(v => v.has_voted === true).length;
+        const notVoted = filteredVoters.filter(v => v.has_voted === false).length;
+        const turnout = filteredVoters?.length > 0 ? ((voted / filteredVoters.length) * 100).toFixed(1) : 0;
+        
+        setStats({
+          total: filteredVoters.length,
+          voted,
+          notVoted,
+          turnout
+        });
+      } else {
+        // Show all voters with a flag indicating if they're linked to any election
+        setVoters(allVoters);
+        setStats({
+          total: allVoters.length,
+          voted: 0,
+          notVoted: allVoters.length,
+          turnout: 0
+        });
+      }
     } catch (error) {
       console.error('Error fetching voters:', error);
       toast.error('Failed to load voters');
@@ -145,11 +206,14 @@ export default function ManageVoters() {
     }
   };
 
-  // Capitalize name function - prevents numbers
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchVoters();
+    }
+  }, [selectedElection]);
+
   const capitalizeName = (name) => {
-    // Remove any numbers from the name
     let cleanedName = name.replace(/[0-9]/g, '');
-    // Capitalize first letter of each word
     return cleanedName
       .toLowerCase()
       .split(' ')
@@ -157,7 +221,6 @@ export default function ManageVoters() {
       .join(' ');
   };
 
-  // Validate name has no numbers
   const validateNameNoNumbers = (name) => {
     const hasNumbers = /\d/.test(name);
     if (hasNumbers) {
@@ -166,12 +229,11 @@ export default function ManageVoters() {
     return { isValid: true, error: null };
   };
 
-  // Handle department change - update programs dropdown
   const handleDepartmentChange = (deptKey) => {
     setFormData({ 
       ...formData, 
       department: deptKey,
-      program: '' // Reset program when department changes
+      program: ''
     });
     
     if (deptKey && departmentsData[deptKey]) {
@@ -181,13 +243,11 @@ export default function ManageVoters() {
     }
   };
 
-  // Handle name change with capitalization and validation
   const handleNameChange = (e) => {
     const rawName = e.target.value;
     const capitalized = capitalizeName(rawName);
     setFormData({ ...formData, name: capitalized });
     
-    // Real-time validation
     const validation = validateNameNoNumbers(capitalized);
     if (!validation.isValid && capitalized) {
       setFormErrors({ ...formErrors, name: validation.error });
@@ -232,6 +292,10 @@ export default function ManageVoters() {
       errors.year_of_study = 'Year of study is required';
     }
     
+    if (!formData.election_id && selectedElection) {
+      errors.election_id = 'Please select an election';
+    }
+    
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -243,47 +307,65 @@ export default function ManageVoters() {
     
     setSubmitting(true);
     try {
-      const { data: existing, error: checkError } = await supabase
+      // First, check if voter already exists in voters table (unique by email)
+      let voterId;
+      const { data: existingVoter, error: findError } = await supabase
         .from('voters')
-        .select('email')
+        .select('id')
         .eq('email', formData.email.toLowerCase())
         .maybeSingle();
       
-      if (existing) {
-        toast.error('Voter with this email already exists');
+      if (existingVoter) {
+        voterId = existingVoter.id;
+      } else {
+        // Create new voter in voters table
+        const { data: newVoter, error: createError } = await supabase
+          .from('voters')
+          .insert({
+            email: formData.email.toLowerCase(),
+            name: formData.name,
+            school_id: formData.school_id,
+            department: formData.department,
+            program: formData.program,
+            year_of_study: parseInt(formData.year_of_study),
+            created_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+        
+        if (createError) throw createError;
+        voterId = newVoter.id;
+      }
+      
+      // Now link the voter to the selected election
+      const electionId = formData.election_id || selectedElection;
+      
+      if (!electionId) {
+        toast.error('Please select an election');
         setSubmitting(false);
         return;
       }
       
-      const { data: existingSchoolId, error: schoolIdError } = await supabase
-        .from('voters')
-        .select('school_id')
-        .eq('school_id', formData.school_id)
-        .maybeSingle();
-      
-      if (existingSchoolId) {
-        toast.error('School ID already registered');
-        setSubmitting(false);
-        return;
-      }
-      
-      const { data, error } = await supabase
-        .from('voters')
+      const { error: linkError } = await supabase
+        .from('election_voters')
         .insert({
-          email: formData.email.toLowerCase(),
-          name: formData.name,
-          school_id: formData.school_id,
-          department: formData.department,
-          program: formData.program,
-          year_of_study: parseInt(formData.year_of_study),
+          election_id: electionId,
+          voter_id: voterId,
           has_voted: false,
+          status: 'active',
           created_at: new Date().toISOString()
-        })
-        .select();
+        });
       
-      if (error) throw error;
+      if (linkError) {
+        if (linkError.code === '23505') {
+          toast.error('Voter is already registered for this election');
+        } else {
+          throw linkError;
+        }
+      } else {
+        toast.success('Voter added successfully to election!');
+      }
       
-      toast.success('Voter added successfully!');
       setShowAddModal(false);
       resetForm();
       fetchVoters();
@@ -303,36 +385,10 @@ export default function ManageVoters() {
     
     setSubmitting(true);
     try {
-      const { data: existing, error: checkError } = await supabase
-        .from('voters')
-        .select('email')
-        .eq('email', formData.email.toLowerCase())
-        .neq('id', editingVoter.id)
-        .maybeSingle();
-      
-      if (existing) {
-        toast.error('Email already exists for another voter');
-        setSubmitting(false);
-        return;
-      }
-      
-      const { data: existingSchoolId, error: schoolIdError } = await supabase
-        .from('voters')
-        .select('school_id')
-        .eq('school_id', formData.school_id)
-        .neq('id', editingVoter.id)
-        .maybeSingle();
-      
-      if (existingSchoolId) {
-        toast.error('School ID already registered to another voter');
-        setSubmitting(false);
-        return;
-      }
-      
+      // Update the voter in voters table
       const { error } = await supabase
         .from('voters')
         .update({
-          email: formData.email.toLowerCase(),
           name: formData.name,
           school_id: formData.school_id,
           department: formData.department,
@@ -360,25 +416,27 @@ export default function ManageVoters() {
 
   const handleDeleteVoter = async (voterId) => {
     try {
-      const { data: voter, error: checkError } = await supabase
-        .from('voters')
-        .select('has_voted')
-        .eq('id', voterId)
-        .single();
-      
-      if (voter?.has_voted) {
-        toast.error('Cannot delete a voter who has already voted');
-        return;
+      if (selectedElection) {
+        // Only remove from current election, don't delete the voter entirely
+        const { error } = await supabase
+          .from('election_voters')
+          .delete()
+          .eq('election_id', selectedElection)
+          .eq('voter_id', voterId);
+        
+        if (error) throw error;
+        toast.success('Voter removed from this election');
+      } else {
+        // Delete voter entirely (only if not linked to any election)
+        const { error } = await supabase
+          .from('voters')
+          .delete()
+          .eq('id', voterId);
+        
+        if (error) throw error;
+        toast.success('Voter deleted successfully');
       }
       
-      const { error } = await supabase
-        .from('voters')
-        .delete()
-        .eq('id', voterId);
-      
-      if (error) throw error;
-      
-      toast.success('Voter deleted successfully');
       setShowDeleteConfirm(null);
       fetchVoters();
       
@@ -388,6 +446,113 @@ export default function ManageVoters() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedVoters.size === 0) {
+      toast.error('No voters selected');
+      return;
+    }
+
+    try {
+      const selectedVotersList = Array.from(selectedVoters);
+      
+      if (selectedElection) {
+        // Remove from current election only
+        const { error: deleteError } = await supabase
+          .from('election_voters')
+          .delete()
+          .eq('election_id', selectedElection)
+          .in('voter_id', selectedVotersList);
+
+        if (deleteError) throw deleteError;
+        toast.success(`Successfully removed ${selectedVoters.size} voters from this election`);
+      } else {
+        // Delete voters entirely
+        const { error: deleteError } = await supabase
+          .from('voters')
+          .delete()
+          .in('id', selectedVotersList);
+
+        if (deleteError) throw deleteError;
+        toast.success(`Successfully deleted ${selectedVoters.size} voters`);
+      }
+      
+      setSelectedVoters(new Set());
+      setShowBulkDeleteConfirm(false);
+      fetchVoters();
+    } catch (error) {
+      console.error('Error bulk deleting voters:', error);
+      toast.error('Failed to delete voters');
+    }
+  };
+
+  const handleBulkLink = async () => {
+    if (selectedVoters.size === 0) {
+      toast.error('No voters selected');
+      return;
+    }
+
+    if (!selectedElection) {
+      toast.error('Please select an election first');
+      return;
+    }
+
+    try {
+      const selectedVotersList = Array.from(selectedVoters);
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const voterId of selectedVotersList) {
+        const { error } = await supabase
+          .from('election_voters')
+          .insert({
+            election_id: selectedElection,
+            voter_id: voterId,
+            has_voted: false,
+            status: 'active',
+            created_at: new Date().toISOString()
+          });
+        
+        if (error) {
+          if (error.code !== '23505') { // Not a duplicate error
+            errorCount++;
+          }
+        } else {
+          successCount++;
+        }
+      }
+      
+      toast.success(`Linked ${successCount} voters to election. ${errorCount} failed or already linked`);
+      setSelectedVoters(new Set());
+      setShowBulkLinkConfirm(false);
+      fetchVoters();
+    } catch (error) {
+      console.error('Error bulk linking voters:', error);
+      toast.error('Failed to link voters');
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (selectedVoters.size === filteredVoters.length) {
+      setSelectedVoters(new Set());
+    } else {
+      const newSelected = new Set();
+      filteredVoters.forEach(voter => {
+        newSelected.add(voter.id);
+      });
+      setSelectedVoters(newSelected);
+    }
+  };
+
+  const handleSelectVoter = (voterId) => {
+    const newSelected = new Set(selectedVoters);
+    if (newSelected.has(voterId)) {
+      newSelected.delete(voterId);
+    } else {
+      newSelected.add(voterId);
+    }
+    setSelectedVoters(newSelected);
+  };
+
   const resetForm = () => {
     setFormData({
       email: '',
@@ -395,7 +560,8 @@ export default function ManageVoters() {
       school_id: '',
       department: '',
       program: '',
-      year_of_study: ''
+      year_of_study: '',
+      election_id: selectedElection || ''
     });
     setAvailablePrograms([]);
     setFormErrors({});
@@ -409,7 +575,8 @@ export default function ManageVoters() {
       school_id: voter.school_id,
       department: voter.department || '',
       program: voter.program || '',
-      year_of_study: voter.year_of_study?.toString() || ''
+      year_of_study: voter.year_of_study?.toString() || '',
+      election_id: selectedElection || ''
     });
     
     if (voter.department && departmentsData[voter.department]) {
@@ -419,7 +586,6 @@ export default function ManageVoters() {
     setShowEditModal(true);
   };
 
-  // Download Template Function
   const downloadTemplate = () => {
     const template = [
       {
@@ -434,12 +600,12 @@ export default function ManageVoters() {
     
     const ws = XLSX.utils.json_to_sheet(template);
     ws['!cols'] = [
-      { wch: 25 }, // Name
-      { wch: 30 }, // Email
-      { wch: 15 }, // School ID
-      { wch: 20 }, // Department
-      { wch: 35 }, // Program
-      { wch: 15 }  // Year of Study
+      { wch: 25 },
+      { wch: 30 },
+      { wch: 15 },
+      { wch: 20 },
+      { wch: 35 },
+      { wch: 15 }
     ];
     
     const wb = XLSX.utils.book_new();
@@ -451,6 +617,12 @@ export default function ManageVoters() {
   const handleBulkUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    
+    if (!selectedElection) {
+      toast.error('Please select an election first');
+      e.target.value = '';
+      return;
+    }
     
     const reader = new FileReader();
     reader.onload = async (event) => {
@@ -478,7 +650,6 @@ export default function ManageVoters() {
               continue;
             }
             
-            // Validate name has no numbers
             if (/\d/.test(name)) {
               errorCount++;
               continue;
@@ -495,31 +666,47 @@ export default function ManageVoters() {
               continue;
             }
             
-            const { data: existing } = await supabase
+            // Find or create voter
+            let voterId;
+            const { data: existingVoter } = await supabase
               .from('voters')
               .select('id')
               .eq('email', email.toLowerCase())
               .maybeSingle();
             
-            if (existing) {
-              errorCount++;
-              continue;
+            if (existingVoter) {
+              voterId = existingVoter.id;
+            } else {
+              const { data: newVoter, error: createError } = await supabase
+                .from('voters')
+                .insert({
+                  email: email.toLowerCase(),
+                  name: name,
+                  school_id: schoolIdStr,
+                  department: department,
+                  program: program,
+                  year_of_study: parseInt(year_of_study) || 100,
+                  created_at: new Date().toISOString()
+                })
+                .select()
+                .single();
+              
+              if (createError) throw createError;
+              voterId = newVoter.id;
             }
             
-            const { error } = await supabase
-              .from('voters')
+            // Link to election
+            const { error: linkError } = await supabase
+              .from('election_voters')
               .insert({
-                email: email.toLowerCase(),
-                name: name,
-                school_id: schoolIdStr,
-                department: department,
-                program: program,
-                year_of_study: parseInt(year_of_study) || 100,
+                election_id: selectedElection,
+                voter_id: voterId,
                 has_voted: false,
+                status: 'active',
                 created_at: new Date().toISOString()
               });
             
-            if (error) throw error;
+            if (linkError && linkError.code !== '23505') throw linkError;
             successCount++;
             
           } catch (err) {
@@ -527,7 +714,7 @@ export default function ManageVoters() {
           }
         }
         
-        toast.success(`✅ Added ${successCount} voters. ❌ Failed: ${errorCount}`);
+        toast.success(`✅ Added ${successCount} voters to election. ❌ Failed: ${errorCount}`);
         fetchVoters();
         
       } catch (error) {
@@ -555,14 +742,14 @@ export default function ManageVoters() {
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Voters');
-    XLSX.writeFile(wb, `voters_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(wb, `voters_${selectedElection || 'all'}_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast.success('Export successful!');
   };
 
   const filteredVoters = voters.filter(voter =>
-    voter.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (voter.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     voter.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    voter.school_id?.includes(searchTerm)
+    voter.school_id?.includes(searchTerm))
   );
 
   if (authLoading || loading) {
@@ -600,17 +787,44 @@ export default function ManageVoters() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-24">
         
-        {/* Header */}
         <div className="mb-8">
           <h1 className={`text-3xl font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
             Manage Voters
           </h1>
           <p className={`mt-2 ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>
-            Add, edit, or remove voters from the election database
+            Add, edit, or remove voters from specific elections
           </p>
           <p className="text-green-700 dark:text-green-400 text-sm mt-1">
             Logged in as: {admin?.email}
           </p>
+        </div>
+
+        {/* Election Selector */}
+        <div className={`rounded-xl p-4 border mb-8 ${
+          theme === 'light' ? 'bg-white border-gray-200 shadow-sm' : 'bg-white/10 backdrop-blur-lg border-white/20'
+        }`}>
+          <label className={`block mb-2 font-medium ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>
+            <FaCalendarAlt className="inline mr-2" /> Select Election
+          </label>
+          <select
+            value={selectedElection}
+            onChange={(e) => setSelectedElection(e.target.value)}
+            className={`w-full md:w-96 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
+              theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-white/5 border-white/20 text-white'
+            }`}
+          >
+            <option value="">All Voters (View Only)</option>
+            {elections.map(election => (
+              <option key={election.id} value={election.id}>
+                {election.title} ({election.status}) {election.is_active ? '- Active' : ''}
+              </option>
+            ))}
+          </select>
+          {!selectedElection && (
+            <p className={`text-xs mt-2 ${theme === 'light' ? 'text-amber-600' : 'text-amber-400'}`}>
+              ⚠️ Select an election to add, edit, or remove voters. "All Voters" is view-only.
+            </p>
+          )}
         </div>
 
         {/* Stats Cards */}
@@ -685,7 +899,17 @@ export default function ManageVoters() {
             </div>
             
             <div className="flex gap-3 flex-wrap">
-              <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition">
+              <button 
+                onClick={() => {
+                  if (!selectedElection) {
+                    toast.error('Please select an election first');
+                    return;
+                  }
+                  setShowAddModal(true);
+                  setFormData({...formData, election_id: selectedElection});
+                }} 
+                className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition"
+              >
                 <FaUserPlus /> Add Voter
               </button>
               <button onClick={downloadTemplate} className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition">
@@ -693,8 +917,24 @@ export default function ManageVoters() {
               </button>
               <label className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition cursor-pointer">
                 <FaUpload /> Bulk Upload
-                <input type="file" accept=".xlsx,.xls,.csv" onChange={handleBulkUpload} className="hidden" />
+                <input type="file" accept=".xlsx,.xls,.csv" onChange={handleBulkUpload} className="hidden" disabled={!selectedElection} />
               </label>
+              {selectedVoters.size > 0 && selectedElection && (
+                <button 
+                  onClick={() => setShowBulkLinkConfirm(true)} 
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition"
+                >
+                  <FaLink /> Link Selected ({selectedVoters.size})
+                </button>
+              )}
+              {selectedVoters.size > 0 && (
+                <button 
+                  onClick={() => setShowBulkDeleteConfirm(true)} 
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white transition"
+                >
+                  <FaTrashAlt /> {selectedElection ? 'Remove from Election' : 'Delete'} ({selectedVoters.size})
+                </button>
+              )}
               <button onClick={exportToExcel} className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-800 rounded-lg text-white transition">
                 <FaDownload /> Export
               </button>
@@ -710,42 +950,62 @@ export default function ManageVoters() {
             <table className="w-full min-w-[800px]">
               <thead className={`border-b ${theme === 'light' ? 'bg-gray-50 border-gray-200' : 'bg-white/5 border-white/10'}`}>
                 <tr>
+                  <th className="px-4 sm:px-6 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={selectedVoters.size === filteredVoters.length && filteredVoters.length > 0}
+                      onChange={handleSelectAll}
+                      className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                    />
+                  </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Name</th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Email</th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">School ID</th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 hidden md:table-cell">Department</th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 hidden lg:table-cell">Program</th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 hidden sm:table-cell">Year</th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Status</th>
+                  {selectedElection && (
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Status</th>
+                  )}
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Actions</th>
                 </tr>
               </thead>
               <tbody className={`divide-y ${theme === 'light' ? 'divide-gray-100' : 'divide-white/10'}`}>
                 {filteredVoters.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="px-6 py-12 text-center text-gray-400">No voters found</td>
+                    <td colSpan={selectedElection ? 9 : 8} className="px-6 py-12 text-center text-gray-400">
+                      {selectedElection ? 'No voters found for this election' : 'No voters found'}
+                    </td>
                   </tr>
                 ) : (
                   filteredVoters.map((voter) => (
                     <tr key={voter.id} className={`transition ${theme === 'light' ? 'hover:bg-gray-50' : 'hover:bg-white/5'}`}>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={selectedVoters.has(voter.id)}
+                          onChange={() => handleSelectVoter(voter.id)}
+                          className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                        />
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <FaUserGraduate className="text-green-600 text-sm" />
                           <div className={`font-medium ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{voter.name}</div>
                         </div>
-                       </td>
+                      </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <FaEnvelope className="text-green-600 text-xs" />
                           <div className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>{voter.email}</div>
                         </div>
-                       </td>
+                      </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <FaIdCard className="text-green-600 text-xs" />
                           <code className={`text-sm font-mono ${theme === 'light' ? 'text-green-700' : 'text-green-400'}`}>{voter.school_id}</code>
                         </div>
-                       </td>
+                      </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap hidden md:table-cell">
                         <div className="flex items-center gap-2">
                           <FaBuilding className="text-green-600 text-xs" />
@@ -753,7 +1013,7 @@ export default function ManageVoters() {
                             {voter.department || 'N/A'}
                           </div>
                         </div>
-                       </td>
+                      </td>
                       <td className="px-4 sm:px-6 py-4 hidden lg:table-cell">
                         <div className="flex items-center gap-2">
                           <FaUniversity className="text-green-600 text-xs" />
@@ -761,7 +1021,7 @@ export default function ManageVoters() {
                             {voter.program || 'N/A'}
                           </div>
                         </div>
-                       </td>
+                      </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap hidden sm:table-cell">
                         <div className="flex items-center gap-2">
                           <FaGraduationCap className="text-green-600 text-xs" />
@@ -769,29 +1029,31 @@ export default function ManageVoters() {
                             Level {voter.year_of_study}
                           </div>
                         </div>
-                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
-                        {voter.has_voted ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-500/20 text-green-700 dark:text-green-400 text-xs rounded-full">
-                            <FaCheckCircle size={10} /> Voted
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 text-xs rounded-full">
-                            <FaClock size={10} /> Not Voted
-                          </span>
-                        )}
-                       </td>
+                      </td>
+                      {selectedElection && (
+                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                          {voter.has_voted ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-500/20 text-green-700 dark:text-green-400 text-xs rounded-full">
+                              <FaCheckCircle size={10} /> Voted
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 text-xs rounded-full">
+                              <FaClock size={10} /> Not Voted
+                            </span>
+                          )}
+                        </td>
+                      )}
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <button onClick={() => openEditModal(voter)} className="text-green-700 dark:text-green-400 hover:text-green-600 transition" title="Edit voter">
                             <FaEdit />
                           </button>
-                          <button onClick={() => setShowDeleteConfirm(voter.id)} disabled={voter.has_voted} className={`text-red-500 transition ${voter.has_voted ? 'opacity-50 cursor-not-allowed' : 'hover:text-red-600'}`} title={voter.has_voted ? 'Cannot delete voters who have already voted' : 'Delete voter'}>
+                          <button onClick={() => setShowDeleteConfirm(voter.id)} className={`text-red-500 transition hover:text-red-600`} title="Delete voter">
                             <FaTrash />
                           </button>
                         </div>
-                       </td>
-                     </tr>
+                      </td>
+                    </tr>
                   ))
                 )}
               </tbody>
@@ -807,6 +1069,28 @@ export default function ManageVoters() {
             <h2 className={`text-2xl font-bold mb-4 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>Add New Voter</h2>
             
             <form onSubmit={handleAddVoter} className="space-y-4">
+              <div>
+                <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Election *</label>
+                <div className="relative">
+                  <FaCalendarAlt className="absolute left-3 top-1/2 -translate-y-1/2 text-green-600" />
+                  <select
+                    value={formData.election_id}
+                    onChange={(e) => setFormData({...formData, election_id: e.target.value})}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                      theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-700 border-gray-600 text-white'
+                    }`}
+                  >
+                    <option value="">Select Election</option>
+                    {elections.map(election => (
+                      <option key={election.id} value={election.id}>
+                        {election.title} ({election.status})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {formErrors.election_id && <p className="text-red-500 text-xs mt-1">{formErrors.election_id}</p>}
+              </div>
+              
               <div>
                 <label className={`block mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Full Name *</label>
                 <div className="relative">
@@ -1075,13 +1359,53 @@ export default function ManageVoters() {
           <div className={`rounded-xl max-w-md w-full p-6 ${theme === 'light' ? 'bg-white' : 'bg-gray-800'}`}>
             <h2 className={`text-2xl font-bold mb-4 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>Confirm Delete</h2>
             <p className={`mb-6 ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>
-              Are you sure you want to delete this voter? This action cannot be undone.
+              {selectedElection 
+                ? 'Are you sure you want to remove this voter from the current election?' 
+                : 'Are you sure you want to delete this voter? This action cannot be undone.'}
             </p>
             <div className="flex gap-3">
               <button onClick={() => setShowDeleteConfirm(null)} className={`flex-1 px-4 py-2 rounded-lg transition ${
                 theme === 'light' ? 'bg-gray-200 hover:bg-gray-300 text-gray-700' : 'bg-gray-700 hover:bg-gray-600 text-white'
               }`}>Cancel</button>
-              <button onClick={() => handleDeleteVoter(showDeleteConfirm)} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-white transition">Delete</button>
+              <button onClick={() => handleDeleteVoter(showDeleteConfirm)} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-white transition">Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className={`rounded-xl max-w-md w-full p-6 ${theme === 'light' ? 'bg-white' : 'bg-gray-800'}`}>
+            <h2 className={`text-2xl font-bold mb-4 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>Confirm Bulk Action</h2>
+            <p className={`mb-6 ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>
+              {selectedElection 
+                ? `Are you sure you want to remove ${selectedVoters.size} voters from this election?`
+                : `Are you sure you want to delete ${selectedVoters.size} voters? This action cannot be undone.`}
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowBulkDeleteConfirm(false)} className={`flex-1 px-4 py-2 rounded-lg transition ${
+                theme === 'light' ? 'bg-gray-200 hover:bg-gray-300 text-gray-700' : 'bg-gray-700 hover:bg-gray-600 text-white'
+              }`}>Cancel</button>
+              <button onClick={handleBulkDelete} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-white transition">Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Link Confirmation Modal */}
+      {showBulkLinkConfirm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className={`rounded-xl max-w-md w-full p-6 ${theme === 'light' ? 'bg-white' : 'bg-gray-800'}`}>
+            <h2 className={`text-2xl font-bold mb-4 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>Confirm Bulk Link</h2>
+            <p className={`mb-6 ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>
+              Are you sure you want to link {selectedVoters.size} voters to the selected election?
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowBulkLinkConfirm(false)} className={`flex-1 px-4 py-2 rounded-lg transition ${
+                theme === 'light' ? 'bg-gray-200 hover:bg-gray-300 text-gray-700' : 'bg-gray-700 hover:bg-gray-600 text-white'
+              }`}>Cancel</button>
+              <button onClick={handleBulkLink} className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition">Confirm Link</button>
             </div>
           </div>
         </div>
